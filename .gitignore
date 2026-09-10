@@ -1,0 +1,34 @@
+# Phụ thuộc
+node_modules/
+.pnp
+.pnp.js
+
+# Kết quả build
+web/dist/
+web/.vite/
+server/dist/
+
+# Biến môi trường — KHÔNG BAO GIỜ commit
+.env
+.env.*
+!.env.example
+
+# Dữ liệu chạy thật
+data/
+uploads/
+pgdata/
+*.dump
+*.sql.gz
+
+# Nhật ký & tạm
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.cache/
+
+# Công cụ cục bộ
+.vercel
+.claude
+.idea/
+.vscode/

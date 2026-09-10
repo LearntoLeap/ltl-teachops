@@ -1,0 +1,46 @@
+# Caddy — TLS tự động + reverse proxy tới API.
+# Điều kiện: bản ghi DNS A của {$API_DOMAIN} đã trỏ về IP VPS, cổng 80/443 mở.
+
+{
+	email {$ACME_EMAIL}
+	# Bỏ dòng dưới khi chạy thật; bật khi thử nghiệm để tránh chạm giới hạn Let's Encrypt.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# Tệp tải lên có thể tới 15MB — nới giới hạn body.
+	request_body {
+		max_size 20MB
+	}
+
+	# SSE cần tắt buffer để thông báo tới ngay.
+	@sse path /api/notifications/stream
+	handle @sse {
+		reverse_proxy api:3000 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy api:3000 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}

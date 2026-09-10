@@ -1,0 +1,6 @@
+# Chuẩn hoá xuống dòng: repo dùng LF; script shell BẮT BUỘC LF (chạy trên VPS Linux).
+* text=auto eol=lf
+*.sh text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

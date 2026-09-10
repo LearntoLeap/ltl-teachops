@@ -1,0 +1,53 @@
+# CI — kiểm tra mỗi lần push/PR: cú pháp server + build được web.
+# Deploy KHÔNG tự động: web do Vercel tự lo khi push; API cập nhật bằng infra/deploy.sh trên VPS.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    name: Kiểm tra API
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package.json
+      - name: Cài phụ thuộc
+        working-directory: server
+        run: npm install --no-audit --no-fund
+      - name: Kiểm tra cú pháp toàn bộ mã nguồn
+        working-directory: server
+        run: |
+          set -e
+          for f in $(find src -name '*.js'); do
+            node --check "$f"
+          done
+          echo "✓ Cú pháp hợp lệ"
+      - name: Build được image Docker
+        working-directory: server
+        run: docker build -t teachops-api:ci .
+
+  web:
+    name: Build giao diện
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package.json
+      - name: Cài phụ thuộc
+        working-directory: web
+        run: npm install --no-audit --no-fund
+      - name: Build production
+        working-directory: web
+        env:
+          VITE_API_URL: https://api.example.com
+        run: npm run build
