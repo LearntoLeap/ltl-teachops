@@ -35,9 +35,8 @@
 | `admin`     | Quản trị viên     | Toàn quyền, tạo tài khoản |
 | `manager`   | Phòng chuyên môn  | Phạm vi = các trường được gán trong `user_schools` |
 | `teacher`   | Giáo viên         | Phạm vi = lớp/buổi được phân công |
-| `assistant` | Trợ giảng         | Như `teacher` nhưng không đăng học liệu chuẩn, không sắp lịch |
+| `assistant` | Trợ giảng         | **Quyền ngang `teacher`** — hỗ trợ giáo viên tại lớp *(Ban lãnh đạo chốt 10/09/2026)* |
 
-> Vai trò `assistant` là bổ sung theo Mục 3 của bản yêu cầu — **cần Ban lãnh đạo xác nhận**.
 > Toàn bộ quyền của `assistant` được cấu hình tập trung tại `server/src/lib/rbac.js`,
 > đổi quyền chỉ sửa một chỗ.
 
@@ -134,9 +133,9 @@ Chỉ bật cho hai thao tác hiện trường: **chấm công** và **điểm d
 - Ảnh phục vụ qua route có kiểm quyền, không để nginx serve trực tiếp thư mục uploads.
 
 ## 9. Điểm cần Ban lãnh đạo xác nhận (Mục 17 bản yêu cầu)
-- [ ] Vai trò thứ 4 là `assistant` (Trợ giảng) với quyền như Mục 2 — mặc định đã cài đặt như trên.
+- [x] Vai trò thứ 4 là `assistant` (Trợ giảng), **quyền ngang Giáo viên** — hỗ trợ giáo viên tại lớp. *(Chốt 10/09/2026)*
 - [ ] Số trường/lớp dự kiến (ảnh hưởng chỉ mục & phân trang; hiện thiết kế cho ~200 trường, ~5.000 lớp).
-- [ ] Bán kính GPS mặc định — **hiện đặt 150m**, sửa được từng trường ở màn hình Trường.
-- [ ] Ngưỡng trễ (`grace_minutes`) — **hiện đặt 10 phút**, sửa được từng trường.
+- [x] Bán kính GPS mặc định — **1000m (1km)**, sửa được từng trường ở màn hình Trường. *(Chốt 10/09/2026)*
+- [x] Ngưỡng trễ (`grace_minutes`) — **10 phút**, sửa được từng trường. *(Chốt 10/09/2026)*
 - [ ] Số Admin song song & ai duyệt Admin đầu tiên — hiện seed 1 Admin từ biến môi trường.
 - [ ] Tích hợp phần mềm lương hay chỉ xuất Excel — **hiện chỉ xuất Excel** (`/api/reports/payroll.xlsx`).

@@ -19,7 +19,7 @@ const LIMIT = 50;
 
 const EMPTY_FORM = {
   code: '', name: '', address: '', province: '',
-  lat: '', lng: '', gps_radius_m: '150', grace_minutes: '10',
+  lat: '', lng: '', gps_radius_m: '1000', grace_minutes: '10',
   contact_name: '', contact_phone: '',
 };
 
@@ -106,7 +106,7 @@ function AddSchoolSheet({ open, onClose, onCreated }) {
         province: form.province.trim() || null,
         lat,
         lng,
-        gps_radius_m: radius == null ? 150 : radius,
+        gps_radius_m: radius == null ? 1000 : radius,
         grace_minutes: grace == null ? 10 : grace,
         contact_name: form.contact_name.trim() || null,
         contact_phone: form.contact_phone.trim() || null,
@@ -153,7 +153,7 @@ function AddSchoolSheet({ open, onClose, onCreated }) {
       </button>
 
       <div className="grid grid-cols-2 gap-x-3">
-        <Field label="Bán kính chấm công (m)" error={errors.gps_radius_m} hint="Mặc định 150 m">
+        <Field label="Bán kính chấm công (m)" error={errors.gps_radius_m} hint="Mặc định 1.000 m (1 km)">
           <input className="input" type="number" value={form.gps_radius_m} onChange={set('gps_radius_m')} />
         </Field>
         <Field label="Phút ân hạn trễ" error={errors.grace_minutes} hint="Mặc định 10 phút">

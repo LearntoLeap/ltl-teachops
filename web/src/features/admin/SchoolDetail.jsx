@@ -34,7 +34,7 @@ function fromSchool(s) {
     province: s.province || '',
     lat: s.lat != null ? String(s.lat) : '',
     lng: s.lng != null ? String(s.lng) : '',
-    gps_radius_m: s.gps_radius_m != null ? String(s.gps_radius_m) : '150',
+    gps_radius_m: s.gps_radius_m != null ? String(s.gps_radius_m) : '1000',
     grace_minutes: s.grace_minutes != null ? String(s.grace_minutes) : '10',
     contact_name: s.contact_name || '',
     contact_phone: s.contact_phone || '',
@@ -99,7 +99,7 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
         province: form.province.trim() || null,
         lat,
         lng,
-        gps_radius_m: radius == null ? 150 : radius,
+        gps_radius_m: radius == null ? 1000 : radius,
         grace_minutes: grace == null ? 10 : grace,
         contact_name: form.contact_name.trim() || null,
         contact_phone: form.contact_phone.trim() || null,
@@ -158,7 +158,7 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
       </button>
 
       <div className="grid grid-cols-2 gap-x-3">
-        <Field label="Bán kính chấm công (m)" error={errors.gps_radius_m} hint="Mặc định 150 m">
+        <Field label="Bán kính chấm công (m)" error={errors.gps_radius_m} hint="Mặc định 1.000 m (1 km)">
           <input className="input" type="number" value={form.gps_radius_m} onChange={set('gps_radius_m')} />
         </Field>
         <Field label="Phút ân hạn trễ" error={errors.grace_minutes} hint="Mặc định 10 phút">

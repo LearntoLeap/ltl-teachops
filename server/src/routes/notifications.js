@@ -7,8 +7,18 @@
  * đã được lib/auth.js extractToken hỗ trợ sẵn ở hook toàn cục.
  */
 import { rows, scalar } from '../db.js';
+import env from '../env.js';
 import { uuid, bool, paging } from '../lib/validate.js';
 import { addStream, removeStream, markRead, markAllRead } from '../lib/notify.js';
+
+/** Cùng luật với CORS ở app.js — route SSE hijack socket nên phải tự gắn header. */
+function corsOriginFor(req) {
+  const origin = req.headers.origin;
+  if (!origin) return null;
+  if (env.corsOrigins.includes(origin)) return origin;
+  if (/^https:\/\/ltl-teachops[a-z0-9-]*\.vercel\.app$/.test(origin)) return origin;
+  return null;
+}
 
 export default async function routes(app) {
   /* -------------------- Danh sách thông báo của tôi ----------------------- */
@@ -39,14 +49,22 @@ export default async function routes(app) {
 
   /* ------------------------------ SSE stream ------------------------------ */
   app.get('/api/notifications/stream', (req, reply) => {
-    // hijack: từ đây tự quản socket, Fastify không serialize/send gì nữa
+    // hijack: từ đây tự quản socket, Fastify không serialize/send gì nữa.
+    // LƯU Ý: hijack bỏ qua cả @fastify/cors nên phải tự gắn header CORS,
+    // nếu không trình duyệt sẽ chặn EventSource từ frontend.
     reply.hijack();
-    reply.raw.writeHead(200, {
+    const headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'X-Accel-Buffering': 'no',      // tắt buffering nếu có proxy đứng trước
-    });
+    };
+    const allowedOrigin = corsOriginFor(req);
+    if (allowedOrigin) {
+      headers['Access-Control-Allow-Origin'] = allowedOrigin;
+      headers['Vary'] = 'Origin';
+    }
+    reply.raw.writeHead(200, headers);
     reply.raw.write('retry: 5000\n\n');
     reply.raw.write(': connected\n\n');
 

@@ -89,7 +89,7 @@ create table schools (
   province          text,
   lat               double precision,
   lng               double precision,
-  gps_radius_m      integer not null default 150,       -- bán kính cho phép check-in
+  gps_radius_m      integer not null default 1000,      -- bán kính cho phép check-in (chốt: 1km)
   grace_minutes     integer not null default 10,        -- trễ bao nhiêu phút vẫn tính đúng giờ
   device_slots      device_slot[] not null default
                       '{morning_start,morning_end,afternoon_start,afternoon_end}',
