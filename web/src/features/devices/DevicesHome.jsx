@@ -250,7 +250,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
     setCatalogErr(null);
     try {
       const list = unwrap(await api.get('/api/devices/catalog', { room_id: roomId, limit: 200 }));
-      setRows(list.map((it) => ({ ...it, qty: String(it.expected_qty ?? 0), noteText: '' })));
+      setRows(list.map((it) => ({ ...it, qty: String(it.expected_qty ?? 0), noteText: '', cond: 'ok' })));
     } catch (e) { setCatalogErr(e); }
   }, [roomId]);
 
@@ -279,6 +279,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
       fd.append('items', JSON.stringify((rows || []).map((r) => ({
         catalog_id: r.id,
         qty: Number(r.qty || 0),
+        condition: r.cond || 'ok',
         note: r.noteText.trim(),
       }))));
       if (note.trim()) fd.append('note', note.trim());
@@ -309,9 +310,10 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
             <div className="mb-1">
               {rows.map((r, idx) => {
                 const diff = isDiff(r);
+                const bad = diff || (r.cond && r.cond !== 'ok');
                 return (
                   <div key={r.id}
-                    className={`rounded-xl border px-3 py-2.5 mb-2 transition ${diff ? 'border-rose-300 bg-rose-50/60' : 'border-line'}`}>
+                    className={`rounded-xl border px-3 py-2.5 mb-2 transition ${bad ? 'border-rose-300 bg-rose-50/60' : 'border-line'}`}>
                     <div className="flex items-center gap-2.5">
                       <div className="flex-1 min-w-0">
                         <div className={`text-[13.5px] font-semibold truncate ${diff ? 'text-rose-700' : 'text-ink'}`}>{r.name}</div>
@@ -325,6 +327,20 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
                         value={r.qty}
                         onChange={(e) => setRow(idx, { qty: e.target.value })}
                       />
+                    </div>
+                    {/* Tình trạng thiết bị: tốt / có hỏng / thiếu-mất */}
+                    <div className="flex gap-1.5 mt-2">
+                      {[['ok', '✅ Tốt'], ['damaged', '🛠️ Có hỏng'], ['missing', '❓ Thiếu / mất']].map(([v, l]) => (
+                        <button key={v} type="button" onClick={() => setRow(idx, { cond: v })}
+                          className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ring-1 ring-inset transition
+                            ${(r.cond || 'ok') === v
+                              ? v === 'ok' ? 'bg-emerald-500 text-white ring-transparent'
+                                : v === 'damaged' ? 'bg-amber-500 text-white ring-transparent'
+                                : 'bg-rose-500 text-white ring-transparent'
+                              : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
+                          {l}
+                        </button>
+                      ))}
                     </div>
                     <input
                       className="input !py-1.5 mt-2 text-[13px]"
@@ -765,7 +781,30 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
 
   return (
     <div>
-      <div className="flex justify-end mb-3">
+      <div className="flex justify-end gap-2 mb-3">
+        <button
+          className="btn-line !py-2"
+          title="Tạo nhanh: Bộ robot UGOT, Laptop, Chuột, Micro"
+          onClick={async () => {
+            const STANDARD = [
+              { name: 'Bộ robot UGOT', unit: 'bộ', expected_qty: 8, sort_order: 10 },
+              { name: 'Laptop', unit: 'chiếc', expected_qty: 8, sort_order: 20 },
+              { name: 'Chuột máy tính', unit: 'chiếc', expected_qty: 8, sort_order: 30 },
+              { name: 'Micro', unit: 'chiếc', expected_qty: 2, sort_order: 40 },
+            ];
+            const existed = new Set((items || []).map((x) => String(x.name || '').toLowerCase()));
+            const todo = STANDARD.filter((x) => !existed.has(x.name.toLowerCase()));
+            if (!todo.length) { toast.info('Bộ danh mục chuẩn đã có đủ trong phòng này.'); return; }
+            try {
+              for (const it of todo) {
+                await api.post('/api/devices/catalog', { ...it, room_id: roomId });
+              }
+              toast.ok(`Đã thêm ${todo.length} thiết bị chuẩn LtL.`);
+              load();
+            } catch (e) { toast.fromError(e); }
+          }}>
+          ⚡ Bộ chuẩn LtL
+        </button>
         <button className="btn-primary !py-2" onClick={() => setEditing({})}>+ Thêm thiết bị</button>
       </div>
 

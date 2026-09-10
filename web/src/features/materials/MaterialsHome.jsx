@@ -115,6 +115,11 @@ function MaterialCard({ m, area }) {
               Khối {m.grade}
             </span>
           )}
+          {m.solution_name && (
+            <span className="rounded-md bg-emerald-50 text-emerald-700 px-1.5 py-[1px] text-[10.5px] font-bold truncate max-w-[160px]">
+              🧩 {m.solution_name}
+            </span>
+          )}
           {m.is_new && <Badge tone="new">Mới</Badge>}
           {area === 'teacher' && m.approval_status && m.approval_status !== 'approved' && (
             <Badge tone={m.approval_status}>{LABEL.approval[m.approval_status] || m.approval_status}</Badge>
@@ -140,7 +145,7 @@ function MaterialCard({ m, area }) {
 }
 
 /* --------------------------- Sheet đăng tài liệu --------------------------- */
-function UploadSheet({ open, onClose, area, defaultLevel, types, onTypesChanged, onDone }) {
+function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = '', types, onTypesChanged, onDone }) {
   const auth = useAuth();
   const toast = useToast();
 
@@ -171,6 +176,8 @@ function UploadSheet({ open, onClose, area, defaultLevel, types, onTypesChanged,
   const [newType, setNewType] = useState('');
 
   useEffect(() => { if (open) setLevel(defaultLevel || 'primary'); }, [open, defaultLevel]);
+  // Mở form từ trong một giải pháp ⇒ tài liệu mới mặc định thuộc giải pháp đó.
+  useEffect(() => { if (open && initialSolutionId) setSolutionId(initialSolutionId); }, [open, initialSolutionId]);
 
   useEffect(() => {
     if (!open || solutions !== null) return;
@@ -404,6 +411,8 @@ export default function MaterialsHome() {
   const [page, setPage] = useState(1);
 
   const [types, setTypes] = useState([]);
+  const [solutionId, setSolutionId] = useState('');
+  const [solutions, setSolutions] = useState([]);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -420,12 +429,20 @@ export default function MaterialsHome() {
   }, []);
   useEffect(() => { loadTypes(); }, [loadTypes]);
 
+  // Danh mục giải pháp (UGOT, uKIT, Stick'em…) — trục duyệt chính của kho học liệu.
+  useEffect(() => {
+    api.get('/api/solutions')
+      .then((d) => setSolutions(flattenSolutions(Array.isArray(d) ? d : d?.items || [])))
+      .catch(() => setSolutions([]));
+  }, []);
+
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
       const d = await api.get('/api/materials', {
         area,
+        solution_id: solutionId || undefined,
         grade: grade || undefined,
         type_id: typeId || undefined,
         level: level || undefined,
@@ -439,7 +456,7 @@ export default function MaterialsHome() {
     } finally {
       setLoading(false);
     }
-  }, [area, grade, typeId, level, q, page]);
+  }, [area, solutionId, grade, typeId, level, q, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -449,14 +466,29 @@ export default function MaterialsHome() {
     <div>
       <PageHeader
         title="Học liệu"
-        sub="Thư viện giáo án, giáo trình, slide, video theo khối lớp"
+        sub="Duyệt theo giải pháp giảng dạy — trong mỗi giải pháp có giáo án, giáo trình, slide theo khối"
         actions={canWrite && (
           <button className="btn-primary" onClick={() => setFormOpen(true)}>+ Đăng tài liệu</button>
         )}
       />
 
-      {/* Bộ lọc */}
+      {/* Bộ lọc — GIẢI PHÁP là trục chính, khối & loại nằm bên trong */}
       <div className="flex flex-col gap-2.5 mb-4">
+        <ChipRow
+          label="Giải pháp"
+          value={solutionId}
+          onChange={(v) => { setSolutionId(v); setPage(1); }}
+          options={[{ value: '', label: 'Tất cả' },
+            ...solutions.map((so) => ({ value: so.id, label: `🧩 ${so.label}` }))]}
+          trailing={auth.isAdmin ? (
+            <Link
+              to="/giai-phap"
+              className="shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-semibold text-brand-700
+                         ring-1 ring-inset ring-brand-300 border border-dashed border-brand-300 hover:bg-brand-50">
+              + Thêm giải pháp
+            </Link>
+          ) : null}
+        />
         <div className="flex flex-wrap items-center gap-2.5">
           <Segmented
             options={AREA_OPTIONS}
@@ -493,6 +525,21 @@ export default function MaterialsHome() {
         />
       </div>
 
+      {solutionId && (
+        <div className="card px-4 py-3 mb-3 flex items-center gap-3 !bg-brand-50/60 !border-brand-100">
+          <span className="text-[22px]">📦</span>
+          <div className="min-w-0 flex-1">
+            <div className="font-bold text-[14.5px] text-brand-900 truncate">
+              {solutions.find((so) => so.id === solutionId)?.label || 'Giải pháp'}
+            </div>
+            <div className="text-[12px] text-ink-muted">
+              Toàn bộ học liệu của giải pháp này — chọn khối & loại phía trên để thu hẹp.
+            </div>
+          </div>
+          <Link to="/giai-phap" className="btn-line !px-3 !py-1.5 shrink-0 text-[12.5px]">Chi tiết giải pháp</Link>
+        </div>
+      )}
+
       {error && <ErrorBox error={error} onRetry={load} />}
       {!error && data === null && <PageLoading />}
 
@@ -522,6 +569,7 @@ export default function MaterialsHome() {
         onClose={() => setFormOpen(false)}
         area={area}
         defaultLevel={level || 'primary'}
+        initialSolutionId={solutionId}
         types={types}
         onTypesChanged={loadTypes}
         onDone={() => { setFormOpen(false); setPage(1); load(); }}

@@ -275,7 +275,8 @@ export default async function routes(app) {
       throw unprocessable(`Trường này không cấu hình mốc kiểm kê "${SLOT_LABEL[slot]}".`);
     }
 
-    // items: [{catalog_id, qty, note?}] — ép kiểu từng phần tử
+    // items: [{catalog_id, qty, condition?, note?}] — ép kiểu từng phần tử.
+    // condition: ok (tốt) | damaged (có hỏng) | missing (thiếu/mất).
     const rawItems = json(fields.items, 'items', { required: true });
     if (!Array.isArray(rawItems) || !rawItems.length) {
       throw badRequest('items phải là mảng có ít nhất một thiết bị.');
@@ -283,6 +284,7 @@ export default async function routes(app) {
     const items = rawItems.map((it, i) => ({
       catalog_id: uuid(it?.catalog_id, `items[${i}].catalog_id`, { required: true }),
       qty: int(it?.qty, `items[${i}].qty`, { required: true, min: 0, max: 1_000_000 }),
+      condition: enumOf(it?.condition, `items[${i}].condition`, ['ok', 'damaged', 'missing'], { def: 'ok' }),
       note: str(it?.note, `items[${i}].note`, { max: 500 }),
     }));
     if (new Set(items.map((it) => it.catalog_id)).size !== items.length) {
@@ -309,12 +311,13 @@ export default async function routes(app) {
     );
     if (dup) throw conflict('Mốc này đã được kiểm kê hôm nay.');
 
-    // Thiếu = đếm ít hơn expected_qty, hoặc bỏ sót mục đang kỳ vọng > 0
+    // Thiếu = đếm ít hơn expected_qty, bỏ sót mục kỳ vọng > 0,
+    // hoặc người kiểm đánh dấu tình trạng khác "tốt".
     const qtyById = new Map(items.map((it) => [it.catalog_id, it.qty]));
     const hasShortage = catalog.some((c) => {
       const qty = qtyById.get(c.id);
       return qty === undefined ? c.expected_qty > 0 : qty < c.expected_qty;
-    });
+    }) || items.some((it) => it.condition !== 'ok');
 
     const check = await tx(async (c) => {
       const r = await c.query(
