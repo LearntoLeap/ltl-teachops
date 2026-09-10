@@ -58,8 +58,11 @@ export function AuthProvider({ children }) {
     cachedUser.set(data.user);
     setUser(data.user);
     setNeedPasswordChange(!!data.must_change_password);
+    // Phản hồi /login gọn (không kèm schools) — nạp hồ sơ đầy đủ từ /me ngay,
+    // trừ khi đang bị chặn đổi mật khẩu (khi đó /me cũng bị 428).
+    if (!data.must_change_password) await reload();
     return data;
-  }, []);
+  }, [reload]);
 
   const signOut = useCallback(async () => {
     try { await api.post('/api/auth/logout', { refresh_token: tokens.refresh }); } catch { /* vẫn đăng xuất cục bộ */ }

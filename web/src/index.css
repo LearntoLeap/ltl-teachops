@@ -48,6 +48,70 @@
 
   .th { @apply px-3 py-2.5 text-left text-[12.5px] font-bold text-brand-900 bg-brand-50/70 whitespace-nowrap; }
   .td { @apply px-3 py-2.5 text-[13.5px] border-t border-line align-middle; }
+
+  /* ---------- Ngôn ngữ "bảng điều độ" (dashboard v2) ---------- */
+
+  /* Nhãn mắt (eyebrow): chữ hoa nhỏ + vạch màu mã hoá LOẠI khu vực.
+     amber = cần hành động · brand = giám sát · slate = tham khảo */
+  .eyebrow {
+    @apply flex items-center gap-2 text-[11px] font-bold uppercase text-ink-muted;
+    letter-spacing: .08em;
+  }
+  .eyebrow::before { content: ''; @apply block h-3.5 w-1 rounded-full; }
+  .eyebrow-act::before   { @apply bg-amber-400; }
+  .eyebrow-watch::before { @apply bg-brand-500; }
+  .eyebrow-ref::before   { @apply bg-slate-300; }
+
+  /* Ô số liệu có chip biểu tượng */
+  .tile { @apply card px-3.5 py-3 flex items-center gap-3 min-w-0; }
+  .tile-num { @apply text-[24px] font-extrabold leading-none tracking-tight; font-variant-numeric: tabular-nums; }
+  .tile-chip { @apply h-9 w-9 rounded-xl grid place-items-center text-[16px] shrink-0; }
+
+  /* Hàng trong hàng đợi xử lý */
+  .queue-row {
+    @apply flex items-center gap-3 px-3.5 py-2.5 bg-white transition
+           hover:bg-brand-50/50 text-left w-full;
+  }
+
+  /* Ô hành động nhanh */
+  .qa {
+    @apply card flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 text-center
+           text-[12px] font-semibold text-ink-soft transition
+           hover:border-brand-300 hover:text-brand-800 hover:-translate-y-px;
+  }
+  .qa-ic { @apply h-9 w-9 rounded-xl grid place-items-center text-[17px] bg-brand-50; }
+
+  /* Vé buổi dạy (giáo viên): mép đục lỗ giữa khối giờ và nội dung */
+  .ticket { @apply card overflow-hidden flex; }
+  .ticket-perf {
+    @apply relative shrink-0;
+    width: 0;
+    border-left: 2px dashed rgba(138, 63, 151, .25);
+  }
+  .ticket-perf::before, .ticket-perf::after {
+    content: '';
+    @apply absolute h-3.5 w-3.5 rounded-full bg-canvas;
+    left: -8px;
+  }
+  .ticket-perf::before { top: -7px; box-shadow: inset 0 -2px 3px rgba(99, 40, 117, .08); }
+  .ticket-perf::after  { bottom: -7px; box-shadow: inset 0 2px 3px rgba(99, 40, 117, .08); }
+
+  /* Thanh nhịp vận hành (manager): các đoạn tỉ lệ */
+  .pulse { @apply flex h-2.5 w-full overflow-hidden rounded-full bg-line/70; }
+  .pulse > span { @apply h-full; min-width: 0; transition: width .5s ease; }
+}
+
+/* Hiệu ứng vào trang: nổi dần theo bậc (tôn trọng reduced-motion) */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise { animation: rise-in .32s cubic-bezier(.22,.8,.36,1) both; }
+.rise-1 { animation-delay: .04s; } .rise-2 { animation-delay: .09s; }
+.rise-3 { animation-delay: .14s; } .rise-4 { animation-delay: .19s; }
+.rise-5 { animation-delay: .24s; } .rise-6 { animation-delay: .29s; }
+@media (prefers-reduced-motion: reduce) {
+  .rise, .rise-1, .rise-2, .rise-3, .rise-4, .rise-5, .rise-6 { animation: none; }
 }
 
 /* Che nội dung khi in để chỉ in bảng chính (dự phòng) */

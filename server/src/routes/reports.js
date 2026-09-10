@@ -8,7 +8,7 @@
  *   - Mọi endpoint .xlsx ghi audit với action='export'.
  */
 import { rows, one } from '../db.js';
-import { requirePerm, assertPerm, isFieldStaff } from '../lib/rbac.js';
+import { requirePerm, requireRole, assertPerm, isFieldStaff } from '../lib/rbac.js';
 import { schoolFilter, scheduleFilter } from '../lib/scope.js';
 import { uuid, dateRange } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
@@ -112,6 +112,77 @@ async function fetchTimesheetDetail(user, { from, to, schoolId, classId, userId 
 /* --------------------------------- Routes ---------------------------------- */
 
 export default async function routes(app) {
+  /* ======================================================================== *
+   * GET /api/reports/admin-overview — CHỈ admin: sức khoẻ toàn hệ thống.
+   * Trả: quy mô tổ chức, nhân sự theo vai trò, hàng đợi cần xử lý,
+   * nhật ký & tài khoản mới nhất — dữ liệu cho dashboard Quản trị viên.
+   * ======================================================================== */
+  app.get('/api/reports/admin-overview', { preHandler: requireRole('admin') }, async () => {
+    const today = vnToday();
+
+    const [org, staff, flagged, issueCounts, fbNew, matPending, recentAudit, recentUsers] =
+      await Promise.all([
+        one(
+          `select
+             (select count(*)::int from schools where is_active) as schools,
+             (select count(*)::int from classes where is_active) as classes,
+             (select count(*)::int from stem_rooms where is_active) as rooms,
+             (select count(*)::int from schedules
+               where status <> 'cancelled'
+                 and session_date between date_trunc('week', $1::date)::date
+                 and (date_trunc('week', $1::date) + interval '6 days')::date) as week_sessions,
+             (select count(*)::int from schedules
+               where status <> 'cancelled' and session_date = $1::date) as today_sessions`,
+          [today]
+        ),
+        rows(`select role, count(*)::int as cnt from users where is_active group by role`),
+        one(`select count(*)::int as cnt from timesheets where approval_status = 'pending'`),
+        rows(`select status, count(*)::int as cnt from device_issues
+               where status <> 'resolved' group by status`),
+        one(`select count(*)::int as cnt from feedback where status = 'new'`),
+        one(`select count(*)::int as cnt from materials
+              where approval_status = 'pending' and area = 'teacher' and not is_archived`),
+        rows(
+          `select a.id, a.action, a.entity, a.summary, a.created_at,
+                  coalesce(u.full_name, a.actor_email) as actor_name
+             from audit_log a
+             left join users u on u.id = a.actor_id
+            order by a.created_at desc
+            limit 6`
+        ),
+        rows(
+          `select id, full_name, role, created_at, last_login_at
+             from users where is_active
+            order by created_at desc
+            limit 5`
+        ),
+      ]);
+
+    const staffByRole = { admin: 0, manager: 0, teacher: 0, assistant: 0 };
+    for (const r of staff) staffByRole[r.role] = r.cnt;
+    const openIssues = { new: 0, in_progress: 0 };
+    for (const r of issueCounts) openIssues[r.status] = r.cnt;
+
+    return {
+      org: {
+        schools: org?.schools ?? 0,
+        classes: org?.classes ?? 0,
+        rooms: org?.rooms ?? 0,
+        week_sessions: org?.week_sessions ?? 0,
+        today_sessions: org?.today_sessions ?? 0,
+      },
+      staff: staffByRole,
+      queues: {
+        flagged_timesheets: flagged?.cnt ?? 0,
+        open_issues: openIssues,
+        feedback_new: fbNew?.cnt ?? 0,
+        materials_pending: matPending?.cnt ?? 0,
+      },
+      recent_audit: recentAudit,
+      recent_users: recentUsers,
+    };
+  });
+
   /* ======================================================================== *
    * GET /api/reports/dashboard — admin, manager (report.view)
    * ======================================================================== */

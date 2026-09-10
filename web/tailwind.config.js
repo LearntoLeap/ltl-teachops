@@ -18,6 +18,7 @@ export default {
           950: '#311a48',
         },
         ink: { DEFAULT: '#1e1b2e', soft: '#4b4565', muted: '#857e9e' },
+        night: { DEFAULT: '#241335', deep: '#1a0e28', line: '#3a2452' },
         line: '#efe7f0',
         canvas: '#f9f5fb',
       },

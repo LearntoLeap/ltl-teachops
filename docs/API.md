@@ -163,6 +163,7 @@ mục **cấp gốc** mới cần admin) · `GET/POST /:id/items`, `PATCH/DELETE
 
 | Path | Quyền | Nội dung |
 |---|---|---|
+| `GET /admin-overview` | **chỉ admin** | Quy mô tổ chức (`org`), nhân sự theo vai trò (`staff`), hàng đợi (`queues`), nhật ký + tài khoản mới (`recent_audit`, `recent_users`) |
 | `GET /dashboard` | admin, manager | Số buổi hôm nay, tỉ lệ điểm danh, chấm công trễ, thiết bị hỏng mở, góp ý mới |
 | `GET /my-dashboard` | teacher, assistant | Lịch hôm nay + việc cần làm |
 | `GET /timesheets.xlsx` | admin, manager · `teacher/assistant` chỉ dữ liệu của mình | Bảng chấm công theo tháng |
