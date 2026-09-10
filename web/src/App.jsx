@@ -35,6 +35,7 @@ const UsersAdmin     = lazy(() => import('./features/admin/UsersAdmin.jsx'));
 const AuditLog       = lazy(() => import('./features/admin/AuditLog.jsx'));
 const OutboxScreen   = lazy(() => import('./features/outbox/OutboxScreen.jsx'));
 const MoreScreen     = lazy(() => import('./features/more/MoreScreen.jsx'));
+const SearchScreen   = lazy(() => import('./features/search/SearchScreen.jsx'));
 
 /** Chặn route theo quyền. */
 function Guard({ perm, children }) {
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/nhat-ky" element={<Guard perm="audit.view"><AuditLog /></Guard>} />
           <Route path="/cho-dong-bo" element={<OutboxScreen />} />
           <Route path="/doi-mat-khau" element={<ChangePassword />} />
+          <Route path="/tim-kiem" element={<SearchScreen />} />
           <Route path="/khac" element={<MoreScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

@@ -142,13 +142,116 @@ function ScheduleCard({ s, onOpen }) {
   );
 }
 
+/* --------------------------- Lưới lịch tháng trực quan ---------------------- */
+/**
+ * MonthGrid — bảng tháng 7 cột: mỗi ô ngày hiện tối đa 3 buổi dạng chip
+ * (giờ · lớp · trường · GV). Bấm chip → chi tiết; bấm vùng trống của ô
+ * (nếu có quyền sắp lịch) → thêm buổi cho đúng ngày đó.
+ */
+function MonthGrid({ anchor, items, onOpen, onAddDay }) {
+  const todayIso = today();
+  const y = anchor.getFullYear();
+  const m = anchor.getMonth();
+
+  const cells = useMemo(() => {
+    const first = new Date(y, m, 1);
+    const start = new Date(first);
+    start.setDate(first.getDate() - ((first.getDay() + 6) % 7)); // lùi về Thứ Hai
+    const out = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      out.push({ date: isoOf(d), inMonth: d.getMonth() === m, dayNum: d.getDate() });
+    }
+    // Bỏ tuần cuối nếu toàn ngày tháng sau
+    return out.slice(35).every((c) => !c.inMonth) ? out.slice(0, 35) : out;
+  }, [y, m]);
+
+  const byDay = useMemo(() => {
+    const map = new Map();
+    for (const s of items || []) {
+      const d = String(s.session_date || s.date || '').slice(0, 10);
+      if (!map.has(d)) map.set(d, []);
+      map.get(d).push(s);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+    }
+    return map;
+  }, [items]);
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="grid grid-cols-7 border-b border-line bg-brand-50/60">
+        {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) => (
+          <div key={w} className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-brand-900">
+            {w}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((c) => {
+          const list = byDay.get(c.date) || [];
+          const extra = list.length - 3;
+          const isToday = c.date === todayIso;
+          return (
+            <div
+              key={c.date}
+              onClick={() => { if (onAddDay && !list.length) onAddDay(c.date); }}
+              className={`min-h-[92px] lg:min-h-[104px] border-b border-r border-line/70 p-1 lg:p-1.5 align-top
+                ${c.inMonth ? 'bg-white' : 'bg-canvas/70'}
+                ${onAddDay ? 'cursor-pointer hover:bg-brand-50/40' : ''}`}>
+              <div className="flex items-center justify-between px-0.5">
+                <span className={`text-[11.5px] font-bold h-5 w-5 grid place-items-center rounded-full
+                  ${isToday ? 'bg-brand-grad text-white' : c.inMonth ? 'text-ink-soft' : 'text-ink-muted/50'}`}>
+                  {c.dayNum}
+                </span>
+                {onAddDay && list.length > 0 && (
+                  <button
+                    className="text-[12px] text-brand-500 hover:text-brand-800 leading-none px-1"
+                    title="Thêm buổi ngày này"
+                    onClick={(e) => { e.stopPropagation(); onAddDay(c.date); }}>+</button>
+                )}
+              </div>
+              <div className="mt-0.5 grid gap-[3px]">
+                {list.slice(0, 3).map((sItem) => (
+                  <button
+                    key={sItem.id}
+                    onClick={(e) => { e.stopPropagation(); onOpen(sItem); }}
+                    title={`${fmtTime(sItem.start_time)} · Lớp ${classNameOf(sItem)} — ${schoolNameOf(sItem)}${teacherNameOf(sItem) ? ' · GV ' + teacherNameOf(sItem) : ''}`}
+                    className={`w-full text-left rounded-md px-1.5 py-[3px] text-[10.5px] leading-tight font-semibold truncate transition
+                      ${sItem.status === 'cancelled'
+                        ? 'bg-slate-100 text-slate-400 line-through'
+                        : 'bg-brand-50 text-brand-900 hover:bg-brand-100 ring-1 ring-inset ring-brand-100'}`}>
+                    {fmtTime(sItem.start_time)} {classNameOf(sItem)}
+                    <span className="font-normal text-brand-700/80"> · {schoolNameOf(sItem)}</span>
+                    {teacherNameOf(sItem) && (
+                      <span className="font-normal text-ink-muted"> · {teacherNameOf(sItem).split(' ').slice(-2).join(' ')}</span>
+                    )}
+                  </button>
+                ))}
+                {extra > 0 && (
+                  <div className="text-[10px] text-ink-muted px-1">+{extra} buổi khác</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+        Bấm vào buổi để xem chi tiết · bấm ô ngày trống để thêm buổi mới
+      </div>
+    </div>
+  );
+}
+
 /* ----------------------- Form thêm / sửa / lịch lặp tuần -------------------- */
 /**
  * bulk=false + schedule=null  → thêm một buổi (POST /api/schedules)
  * bulk=false + schedule       → sửa buổi (PATCH /api/schedules/:id)
  * bulk=true                   → lịch lặp tuần (POST /api/schedules/bulk)
  */
-function ScheduleForm({ bulk = false, schedule = null, schools, onSaved, onClose }) {
+function ScheduleForm({ bulk = false, schedule = null, initialDate = null, schools, onSaved, onClose }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState(null);
@@ -158,7 +261,7 @@ function ScheduleForm({ bulk = false, schedule = null, schools, onSaved, onClose
     room_id: schedule?.room_id || '',
     teacher_id: schedule?.teacher_id || '',
     assistant_id: schedule?.assistant_id || '',
-    date: schedule?.session_date ? String(schedule.session_date).slice(0, 10) : today(),
+    date: schedule?.session_date ? String(schedule.session_date).slice(0, 10) : (initialDate || today()),
     start_time: schedule ? fmtTime(schedule.start_time) : '',
     end_time: schedule ? fmtTime(schedule.end_time) : '',
     subject: schedule?.subject || '',
@@ -381,6 +484,9 @@ export default function ScheduleList() {
   const showSchoolFilter = auth.isAdmin || auth.isManager;
 
   const [mode, setMode] = useState('week');       // week | next | month
+  const [view, setView] = useState('list');       // list | grid (lịch tháng trực quan)
+  const [sortBy, setSortBy] = useState('time');   // time | school | teacher
+  const [monthAnchor, setMonthAnchor] = useState(() => new Date());
   const [schoolId, setSchoolId] = useState('');
   const [schools, setSchools] = useState([]);
 
@@ -396,10 +502,10 @@ export default function ScheduleList() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
 
-  const range = useMemo(
-    () => (mode === 'month' ? monthRange() : weekRange(mode === 'next' ? 1 : 0)),
-    [mode],
-  );
+  const range = useMemo(() => {
+    if (view === 'grid') return monthRange(monthAnchor);
+    return mode === 'month' ? monthRange() : weekRange(mode === 'next' ? 1 : 0);
+  }, [mode, view, monthAnchor]);
 
   /* Danh sách trường cho bộ lọc + form (chỉ admin/manager cần gọi). */
   useEffect(() => {
@@ -426,8 +532,15 @@ export default function ScheduleList() {
 
   useEffect(() => { load(); }, [load]);
 
-  /* Nhóm theo ngày; trong ngày xếp theo giờ bắt đầu. */
+  /* Nhóm theo ngày; trong ngày xếp theo lựa chọn "Sắp xếp". */
   const groups = useMemo(() => {
+    const byTime = (x, y) => String(x.start_time).localeCompare(String(y.start_time));
+    const cmp = {
+      time: byTime,
+      school: (x, y) => (schoolNameOf(x) || '').localeCompare(schoolNameOf(y) || '', 'vi') || byTime(x, y),
+      teacher: (x, y) => (teacherNameOf(x) || '').localeCompare(teacherNameOf(y) || '', 'vi') || byTime(x, y),
+    }[sortBy] || byTime;
+
     const m = new Map();
     for (const s of items || []) {
       const d = String(s.session_date || s.date || '').slice(0, 10);
@@ -436,11 +549,8 @@ export default function ScheduleList() {
     }
     return [...m.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, list]) => [
-        date,
-        list.sort((x, y) => String(x.start_time).localeCompare(String(y.start_time))),
-      ]);
-  }, [items]);
+      .map(([date, list]) => [date, list.sort(cmp)]);
+  }, [items, sortBy]);
 
   const openForm = (cfg) => { setFormSeq((n) => n + 1); setFormCfg(cfg); };
 
@@ -480,14 +590,47 @@ export default function ScheduleList() {
       {/* Bộ lọc */}
       <div className="flex flex-wrap items-center gap-2.5 mb-4">
         <Segmented
-          value={mode}
-          onChange={setMode}
+          value={view}
+          onChange={setView}
           options={[
-            { value: 'week', label: 'Tuần này' },
-            { value: 'next', label: 'Tuần sau' },
-            { value: 'month', label: 'Tháng này' },
+            { value: 'list', label: 'Danh sách' },
+            { value: 'grid', label: '🗓️ Lịch tháng' },
           ]}
         />
+        {view === 'list' && (
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'week', label: 'Tuần này' },
+              { value: 'next', label: 'Tuần sau' },
+              { value: 'month', label: 'Tháng này' },
+            ]}
+          />
+        )}
+        {view === 'list' && (
+          <select
+            className="input !w-auto !py-2"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sắp xếp trong ngày">
+            <option value="time">Sắp xếp: theo giờ</option>
+            <option value="school">Sắp xếp: theo trường</option>
+            <option value="teacher">Sắp xếp: theo giáo viên</option>
+          </select>
+        )}
+        {view === 'grid' && (
+          <div className="flex items-center gap-1.5">
+            <button className="btn-line !px-3 !py-2" aria-label="Tháng trước"
+              onClick={() => setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
+            <span className="font-bold text-[14px] text-brand-900 min-w-[110px] text-center">
+              Tháng {monthAnchor.getMonth() + 1}/{monthAnchor.getFullYear()}
+            </span>
+            <button className="btn-line !px-3 !py-2" aria-label="Tháng sau"
+              onClick={() => setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}>›</button>
+            <button className="btn-ghost !px-3 !py-2" onClick={() => setMonthAnchor(new Date())}>Hôm nay</button>
+          </div>
+        )}
         {showSchoolFilter && (
           <select
             className="input !w-auto !py-2"
@@ -503,7 +646,16 @@ export default function ScheduleList() {
       {loading && !items && <PageLoading />}
       {!loading && error && <ErrorBox error={error} onRetry={load} />}
 
-      {items && !error && (
+      {items && !error && view === 'grid' && (
+        <MonthGrid
+          anchor={monthAnchor}
+          items={items}
+          onOpen={(sItem) => setDetail(sItem)}
+          onAddDay={canManage ? (d) => openForm({ date: d }) : null}
+        />
+      )}
+
+      {items && !error && view === 'list' && (
         <>
           {loading && <div className="flex justify-center py-1.5"><Spinner /></div>}
 
@@ -600,6 +752,7 @@ export default function ScheduleList() {
             key={formSeq}
             bulk={!!formCfg.bulk}
             schedule={formCfg.schedule || null}
+            initialDate={formCfg.date || null}
             schools={schools}
             onSaved={(close) => { load(); if (close) setFormCfg(null); }}
             onClose={() => setFormCfg(null)}

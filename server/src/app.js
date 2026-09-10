@@ -101,6 +101,7 @@ export async function buildApp() {
     import('./routes/reports.js'),
     import('./routes/files.js'),
     import('./routes/audit.js'),
+    import('./routes/search.js'),
   ]);
   for (const m of modules) {
     await app.register(m.default);

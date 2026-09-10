@@ -130,7 +130,7 @@ function GpsBlock({ pos, setPos, required, error }) {
 }
 
 /* --------------------------------- Form CHECK-IN -------------------------------- */
-function CheckInForm({ scheduleId, schedule, onDone }) {
+function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
   const toast = useToast();
   const navigate = useNavigate();
   const noteRef = useRef(null);
@@ -145,8 +145,8 @@ function CheckInForm({ scheduleId, schedule, onDone }) {
   const submit = async () => {
     if (sending) return;
     const errs = {};
-    if (!pos) errs.pos = 'Vui lòng bấm "Lấy vị trí" trước khi check-in.';
-    if (!photos.length) errs.photos = 'Cần ít nhất 1 ảnh thiết bị đầu buổi.';
+    if (!linked && !pos) errs.pos = 'Vui lòng bấm "Lấy vị trí" trước khi check-in.';
+    if (!linked && !photos.length) errs.photos = 'Cần ít nhất 1 ảnh thiết bị đầu buổi.';
     if (deviceCount === '' || Number(deviceCount) < 0 || !Number.isFinite(Number(deviceCount))) {
       errs.device = 'Vui lòng nhập số thiết bị đếm được.';
     }
@@ -155,20 +155,18 @@ function CheckInForm({ scheduleId, schedule, onDone }) {
 
     const fields = {
       schedule_id: scheduleId,
-      lat: pos.lat,
-      lng: pos.lng,
-      accuracy: pos.accuracy,
       device_count: Number(deviceCount),
       note: note.trim(),
       client_time: new Date().toISOString(),
     };
-    const photo = photos[0];
+    if (pos) { fields.lat = pos.lat; fields.lng = pos.lng; fields.accuracy = pos.accuracy; }
+    const photo = photos[0] || null;
 
     const saveOffline = async () => {
       await enqueue({
         endpoint: '/api/timesheets/check-in',
         fields,
-        files: [{ field: 'photo', blob: photo.blob, name: photo.name }],
+        files: photo ? [{ field: 'photo', blob: photo.blob, name: photo.name }] : [],
         label: `Check-in ${schedule ? clsName(schedule) : 'buổi dạy'} ${schedule ? fmtTime(schedule.start_time) : ''}`.trim(),
         kind: 'checkin',
       });
@@ -185,8 +183,8 @@ function CheckInForm({ scheduleId, schedule, onDone }) {
         if (v === undefined || v === null || v === '') continue;
         fd.append(k, String(v));
       }
-      // API nhận đúng 1 ảnh ở field 'photo' — chỉ gửi ảnh đầu tiên.
-      fd.append('photo', photo.blob, photo.name || 'anh-dau-buoi.jpg');
+      // API nhận đúng 1 ảnh ở field 'photo' — chỉ gửi ảnh đầu tiên (tiết nối tiếp có thể bỏ trống).
+      if (photo) fd.append('photo', photo.blob, photo.name || 'anh-dau-buoi.jpg');
 
       const res = await api.upload('/api/timesheets/check-in', fd);
 
@@ -222,14 +220,22 @@ function CheckInForm({ scheduleId, schedule, onDone }) {
       <SessionCard schedule={schedule} scheduleId={scheduleId} />
 
       <div className="card p-4">
-        <GpsBlock pos={pos} setPos={(p) => { setPos(p); if (p) setErrors((x) => ({ ...x, pos: '' })); }}
-          required error={errors.pos} />
+        {linked && (
+          <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
+            🔁 <b>Tiết nối tiếp trong buổi</b> — vị trí đã xác minh ở tiết đầu.
+            Chỉ cần cập nhật số thiết bị; GPS và ảnh không bắt buộc.
+          </div>
+        )}
+        {!linked && (
+          <GpsBlock pos={pos} setPos={(p) => { setPos(p); if (p) setErrors((x) => ({ ...x, pos: '' })); }}
+            required error={errors.pos} />
+        )}
 
         <PhotoInput
           value={photos}
           onChange={(v) => { setPhotos(v); if (v.length) setErrors((x) => ({ ...x, photos: '' })); }}
           max={3}
-          required
+          required={!linked}
           label="Ảnh thiết bị đầu buổi"
           hint="Chụp rõ khu vực thiết bị. Ảnh đầu tiên sẽ được dùng làm minh chứng." />
         {errors.photos && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.photos}</div>}
@@ -527,6 +533,7 @@ export default function CheckInOut() {
   const [loading, setLoading] = useState(true);
   const [loadErr, setLoadErr] = useState(null);
   const [forcedStep, setForcedStep] = useState(null); // 'in' | 'out' — khi mất mạng không tải được trạng thái
+  const [blockDone, setBlockDone] = useState(false);   // đã check-in tiết khác cùng buổi (sáng/chiều)
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -542,6 +549,7 @@ export default function CheckInOut() {
       setSchedule(sch);
       // Server trả {item: bản ghi | null} — bóc lớp bọc (giữ tương thích nếu trả thẳng).
       setTs(mine && 'item' in mine ? mine.item : (mine || null));
+      setBlockDone(!!mine?.block_checked_in);
       setForcedStep(null);
     } catch (e) {
       setLoadErr(e);
@@ -591,7 +599,7 @@ export default function CheckInOut() {
           : 'Buổi dạy đã hoàn tất chấm công.'} />
 
       {step === 'in' && (
-        <CheckInForm scheduleId={scheduleId} schedule={schedule} onDone={load} />
+        <CheckInForm scheduleId={scheduleId} schedule={schedule} linked={blockDone} onDone={load} />
       )}
       {step === 'out' && (
         <CheckOutForm scheduleId={scheduleId} schedule={schedule} ts={ts} onDone={load} />

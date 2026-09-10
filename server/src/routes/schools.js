@@ -9,7 +9,7 @@ import { rows, one, scalar, tx } from '../db.js';
 import { requirePerm, requireRole } from '../lib/rbac.js';
 import { schoolFilter, combine, assertSchoolAccess } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
-import { conflict, badRequest, notFound } from '../lib/errors.js';
+import { conflict, badRequest, notFound, forbidden } from '../lib/errors.js';
 import { str, num, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
 
 // Khớp enum device_slot trong 001_init.sql
@@ -88,14 +88,14 @@ export default async function routes(app) {
 
     // Manager tạo trường ⇒ tự đưa trường vào phạm vi phụ trách của chính họ,
     // nếu không họ sẽ không nhìn thấy trường vừa tạo (phạm vi đọc từ user_schools).
-    // Các giá trị coalesce khớp default của 001_init.sql (150m / 10 phút / đủ 4 mốc).
+    // Các giá trị coalesce khớp default schema (1000m / 10 phút / đủ 4 mốc).
     const school = await tx(async (c) => {
       const r = await c.query(
         `insert into schools
            (code, name, address, province, lat, lng, gps_radius_m, grace_minutes, device_slots,
             contact_name, contact_phone)
          values ($1, $2, $3, $4, $5, $6,
-                 coalesce($7, 150), coalesce($8, 10),
+                 coalesce($7, 1000), coalesce($8, 10),
                  coalesce($9::device_slot[],
                           '{morning_start,morning_end,afternoon_start,afternoon_end}'::device_slot[]),
                  $10, $11)
@@ -176,6 +176,14 @@ export default async function routes(app) {
     }
     if ('contact_name' in b) set('contact_name', str(b.contact_name, 'contact_name', { max: 200 }));
     if ('contact_phone' in b) set('contact_phone', str(b.contact_phone, 'contact_phone', { max: 30 }));
+    if ('checkout_grace_minutes' in b) {
+      // Khung giờ check-out là tham số tính công ⇒ CHỈ Quản trị viên chỉnh.
+      if (req.user.role !== 'admin') {
+        throw forbidden('Chỉ Quản trị viên được chỉnh khung giờ check-out.');
+      }
+      set('checkout_grace_minutes',
+        int(b.checkout_grace_minutes, 'checkout_grace_minutes', { required: true, min: 5, max: 240 }));
+    }
 
     if (!sets.length) throw badRequest('Không có thông tin nào để cập nhật.');
 

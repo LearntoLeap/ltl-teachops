@@ -169,6 +169,8 @@ export default function MaterialDetail() {
         <Link to="/hoc-lieu" className="text-[13px] text-brand-700 font-semibold">‹ Kho học liệu</Link>
         <div className="card p-4 mt-2">
           <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+            {mat.type_name && <Badge tone="neutral">{mat.type_icon} {mat.type_name}</Badge>}
+            {mat.grade && <Badge tone="new">Khối {mat.grade}</Badge>}
             {mat.level && <Badge tone="neutral">{LABEL.level[mat.level] || mat.level}</Badge>}
             {mat.area && <Badge tone="neutral">{LABEL.area[mat.area] || mat.area}</Badge>}
             {mat.area === 'teacher' && mat.approval_status && (
@@ -181,8 +183,19 @@ export default function MaterialDetail() {
             {ownerName && <>Đăng bởi <span className="font-semibold text-ink-soft">{ownerName}</span></>}
             {(mat.updated_at || mat.created_at) && <> · {fmtAgo(mat.updated_at || mat.created_at)}</>}
           </div>
+          {(mat.lesson_no || mat.lesson_title || mat.curriculum) && (
+            <div className="mt-2.5 rounded-xl bg-brand-50/70 border border-brand-100 px-3.5 py-2.5 text-[13.5px] font-medium text-brand-900">
+              📖 {[mat.lesson_no ? `Tiết ${mat.lesson_no}` : null, mat.lesson_title, mat.curriculum]
+                .filter(Boolean).join(' — ')}
+            </div>
+          )}
           {mat.description && (
             <p className="text-[14px] text-ink-soft mt-2.5 whitespace-pre-line">{mat.description}</p>
+          )}
+          {mat.body && (
+            <div className="mt-3 rounded-xl border border-line bg-canvas/60 px-4 py-3.5 text-[14px] leading-relaxed whitespace-pre-line">
+              {mat.body}
+            </div>
           )}
 
           {latest && (

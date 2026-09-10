@@ -8,10 +8,10 @@
  * Mỗi lần tải tệp tạo một material_versions mới — giữ trọn lịch sử phiên bản.
  */
 import { rows, one, scalar, tx, query } from '../db.js';
-import { badRequest, notFound, forbidden } from '../lib/errors.js';
-import { assertPerm } from '../lib/rbac.js';
+import { badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
+import { assertPerm, requirePerm } from '../lib/rbac.js';
 import { visibleSchoolIds, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
-import { str, uuid, bool, enumOf, paging } from '../lib/validate.js';
+import { str, int, uuid, bool, enumOf, paging } from '../lib/validate.js';
 import { consumeMultipart, deleteFile } from '../lib/storage.js';
 import { notify, notifySchoolManagers, notifyFieldStaff } from '../lib/notify.js';
 import { audit } from '../lib/audit.js';
@@ -56,10 +56,12 @@ async function materialVisibility(user, next, alias = 'm') {
 /** Lấy học liệu + kiểm tra quyền xem. Ngoài phạm vi ⇒ 404 (không lộ sự tồn tại). */
 async function getMaterialForUser(user, id) {
   const m = await one(
-    `select m.*, ow.full_name as owner_name, so.name as solution_name
+    `select m.*, ow.full_name as owner_name, so.name as solution_name,
+            mt.name as type_name, mt.icon as type_icon
        from materials m
        join users ow on ow.id = m.owner_id
        left join solutions so on so.id = m.solution_id
+       left join material_types mt on mt.id = m.type_id
       where m.id = $1`,
     [id]
   );
@@ -110,10 +112,15 @@ export default async function routes(app) {
     if (classId) conds.push(`m.class_id = ${p(classId)}`);
     const solutionId = uuid(req.query.solution_id, 'solution_id');
     if (solutionId) conds.push(`m.solution_id = ${p(solutionId)}`);
+    const grade = int(req.query.grade, 'grade', { min: 1, max: 12 });
+    if (grade !== null) conds.push(`m.grade = ${p(grade)}`);
+    const typeId = uuid(req.query.type_id, 'type_id');
+    if (typeId) conds.push(`m.type_id = ${p(typeId)}`);
     const search = str(req.query.q, 'q', { max: 200 });
     if (search) {
       const like = p(`%${search}%`);
-      conds.push(`(m.title ilike ${like} or m.description ilike ${like})`);
+      conds.push(`(m.title ilike ${like} or m.description ilike ${like}
+                   or m.lesson_title ilike ${like} or m.curriculum ilike ${like})`);
     }
     if (bool(req.query.mine, 'mine', { def: false })) conds.push(`m.owner_id = ${p(me.id)}`);
 
@@ -131,6 +138,7 @@ export default async function routes(app) {
       `select m.*,
               ow.full_name as owner_name,
               so.name as solution_name,
+              mt.name as type_name, mt.icon as type_icon,
               lv.id as lv_id, lv.version as lv_version, lv.file_id as lv_file_id,
               f.file_name as lv_file_name, f.size_bytes as lv_size_bytes,
               (select count(*)::int from material_comments mc where mc.material_id = m.id) as comment_count,
@@ -138,6 +146,7 @@ export default async function routes(app) {
          from materials m
          join users ow on ow.id = m.owner_id
          left join solutions so on so.id = m.solution_id
+         left join material_types mt on mt.id = m.type_id
          left join lateral (
            select v.id, v.version, v.file_id
              from material_versions v
@@ -187,12 +196,27 @@ export default async function routes(app) {
       const schoolId = uuid(fields.school_id, 'school_id');
       const classId = uuid(fields.class_id, 'class_id');
       const solutionId = uuid(fields.solution_id, 'solution_id');
+      // Gắn bài giảng: khối 1-12 · loại tài liệu · tiết - tên bài - chương trình học.
+      const grade = int(fields.grade, 'grade', { min: 1, max: 12 });
+      const typeId = uuid(fields.type_id, 'type_id');
+      const lessonNo = int(fields.lesson_no, 'lesson_no', { min: 1, max: 500 });
+      const lessonTitle = str(fields.lesson_title, 'lesson_title', { max: 300 });
+      const curriculum = str(fields.curriculum, 'curriculum', { max: 300 });
+      const body = str(fields.body, 'body', { max: 50_000 });          // nội dung tự do
       if (schoolId) await assertSchoolAccess(req.user, schoolId);
       if (classId) await assertClassAccess(req.user, classId);
       if (solutionId) await checkSolution(solutionId);
+      if (typeId) {
+        const t = await one('select id from material_types where id = $1 and is_active', [typeId]);
+        if (!t) throw badRequest('Loại tài liệu được chọn không tồn tại.');
+      }
 
       file = files.file && files.file[0];
-      if (!file) throw badRequest('Cần đính kèm đúng một tệp học liệu (trường "file").');
+      const cover = files.cover && files.cover[0];   // ảnh minh hoạ (tuỳ chọn)
+      // Có nội dung tự do thì tệp không bắt buộc — "đăng tài liệu, thêm nội dung bất kỳ".
+      if (!file && !body) {
+        throw badRequest('Cần đính kèm tệp học liệu (trường "file") hoặc nhập nội dung.');
+      }
 
       // official: duyệt sẵn · teacher: chờ Phòng chuyên môn duyệt.
       const isOfficial = area === 'official';
@@ -200,21 +224,30 @@ export default async function routes(app) {
         const { rows: [m] } = await c.query(
           `insert into materials
              (level, area, title, subject, description, school_id, class_id, solution_id,
-              owner_id, approval_status, approved_by, approved_at)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+              owner_id, approval_status, approved_by, approved_at,
+              grade, type_id, lesson_no, lesson_title, curriculum, body, cover_file_id)
+           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            returning *`,
           [level, area, title, subject, description, schoolId, classId, solutionId,
            req.user.id, isOfficial ? 'approved' : 'pending',
-           isOfficial ? req.user.id : null, isOfficial ? new Date() : null]
+           isOfficial ? req.user.id : null, isOfficial ? new Date() : null,
+           grade, typeId, lessonNo, lessonTitle, curriculum, body, cover?.id ?? null]
         );
-        const { rows: [v] } = await c.query(
-          `insert into material_versions (material_id, version, file_id, uploaded_by)
-           values ($1, 1, $2, $3) returning *`,
-          [m.id, file.id, req.user.id]
-        );
-        await c.query('update materials set version_count = 1 where id = $1', [m.id]);
-        if (schoolId) await c.query('update files set school_id = $1 where id = $2', [schoolId, file.id]);
-        m.version_count = 1;
+        let v = null;
+        if (file) {
+          ({ rows: [v] } = await c.query(
+            `insert into material_versions (material_id, version, file_id, uploaded_by)
+             values ($1, 1, $2, $3) returning *`,
+            [m.id, file.id, req.user.id]
+          ));
+          await c.query('update materials set version_count = 1 where id = $1', [m.id]);
+          m.version_count = 1;
+        }
+        if (schoolId) {
+          for (const f of [file, cover].filter(Boolean)) {
+            await c.query('update files set school_id = $1 where id = $2', [schoolId, f.id]);
+          }
+        }
         return { m, v };
       });
       material = res.m;
@@ -244,11 +277,42 @@ export default async function routes(app) {
 
     return reply.code(201).send({
       ...material,
-      latest_version: {
-        id: version.id, version: 1, file_id: file.id, file_name: file.file_name, size: file.size_bytes,
-      },
+      latest_version: version && file
+        ? { id: version.id, version: 1, file_id: file.id, file_name: file.file_name, size: file.size_bytes }
+        : null,
     });
   });
+
+  /* ------------------------------------------------------------------------
+   * Loại tài liệu (giáo án / giáo trình / slide / … + mục tự thêm).
+   * GET: mọi vai trò · POST: admin, manager (material.official.write).
+   * ---------------------------------------------------------------------- */
+  app.get('/api/materials/types', async () => {
+    const items = await rows(
+      'select id, name, icon, sort_order from material_types where is_active order by sort_order, name'
+    );
+    return { items };
+  });
+
+  app.post('/api/materials/types',
+    { preHandler: requirePerm('material.official.write') },
+    async (req, reply) => {
+      const name = str(req.body?.name, 'name', { required: true, max: 100 });
+      const icon = str(req.body?.icon, 'icon', { max: 8 }) || '📄';
+      const dup = await one('select id from material_types where lower(name) = lower($1)', [name]);
+      if (dup) throw conflict(`Loại tài liệu "${name}" đã tồn tại.`);
+      const t = await one(
+        `insert into material_types (name, icon, sort_order, created_by)
+         values ($1, $2, (select coalesce(max(sort_order), 0) + 10 from material_types), $3)
+         returning id, name, icon, sort_order`,
+        [name, icon, req.user.id]
+      );
+      audit(req, {
+        action: 'create', entity: 'material_types', entityId: t.id,
+        summary: `Thêm loại tài liệu "${t.name}"`,
+      });
+      return reply.code(201).send(t);
+    });
 
   /* ------------------------------------------------------------------------
    * GET /api/materials/:id — chi tiết kèm versions[] + comments[].
@@ -306,6 +370,19 @@ export default async function routes(app) {
       if (updates.solution_id) await checkSolution(updates.solution_id);
     }
     if (has(b, 'is_archived')) updates.is_archived = bool(b.is_archived, 'is_archived', { required: true });
+    // Trường gắn bài giảng (002): khối, loại, tiết - tên bài - chương trình, nội dung.
+    if (has(b, 'grade')) updates.grade = int(b.grade, 'grade', { min: 1, max: 12 });
+    if (has(b, 'type_id')) {
+      updates.type_id = uuid(b.type_id, 'type_id');
+      if (updates.type_id) {
+        const t = await one('select id from material_types where id = $1 and is_active', [updates.type_id]);
+        if (!t) throw badRequest('Loại tài liệu được chọn không tồn tại.');
+      }
+    }
+    if (has(b, 'lesson_no')) updates.lesson_no = int(b.lesson_no, 'lesson_no', { min: 1, max: 500 });
+    if (has(b, 'lesson_title')) updates.lesson_title = str(b.lesson_title, 'lesson_title', { max: 300 });
+    if (has(b, 'curriculum')) updates.curriculum = str(b.curriculum, 'curriculum', { max: 300 });
+    if (has(b, 'body')) updates.body = str(b.body, 'body', { max: 50_000 });
 
     const keys = Object.keys(updates);
     if (!keys.length) throw badRequest('Không có thông tin nào để cập nhật.');

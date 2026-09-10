@@ -13,6 +13,7 @@ import { useAuth } from '../lib/auth.jsx';
 import { onOutboxChange, pendingCount, startSync } from '../lib/offline.js';
 import { initials, fmtDateLong, today } from '../lib/format.js';
 import NotificationBell from '../components/NotificationBell.jsx';
+import GlobalSearch from '../components/GlobalSearch.jsx';
 import { Sheet } from '../components/ui.jsx';
 
 /** Màu chip vai trò trên nền tối. */
@@ -185,6 +186,11 @@ export default function AppLayout() {
                 ⏳ {queued}
               </button>
             )}
+            <button onClick={() => navigate('/tim-kiem')}
+              className="h-9 w-9 rounded-full bg-white/20 grid place-items-center text-[16px]"
+              aria-label="Tìm kiếm">
+              🔍
+            </button>
             <NotificationBell />
             <button onClick={() => setAccountOpen(true)}
               className="h-9 w-9 rounded-full bg-white/20 grid place-items-center font-bold"
@@ -197,8 +203,9 @@ export default function AppLayout() {
         {/* Topbar desktop — ngày + trạng thái + chuông */}
         <header className="hidden lg:flex sticky top-0 z-40 items-center gap-3 bg-canvas/85 backdrop-blur
                            px-6 py-2.5 border-b border-line">
-          <span className="text-[13px] font-semibold text-ink-soft">{fmtDateLong(today())}</span>
+          <span className="text-[13px] font-semibold text-ink-soft whitespace-nowrap">{fmtDateLong(today())}</span>
           <span className="flex-1" />
+          <GlobalSearch />
           {!online && <span className="text-[12px] bg-amber-100 text-amber-800 rounded-full px-3 py-1 font-semibold">⚡ Đang offline</span>}
           {queued > 0 && (
             <button onClick={() => navigate('/cho-dong-bo')}

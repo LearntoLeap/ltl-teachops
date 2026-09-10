@@ -167,7 +167,21 @@ export default async function routes(app) {
       'select * from timesheets where schedule_id = $1 and user_id = $2',
       [sch.id, req.user.id]
     );
-    return { item }; // item = null nếu chưa chấm công
+
+    // Tiết nối tiếp? — đã check-in một tiết khác CÙNG buổi (sáng/chiều) cùng
+    // trường hôm đó ⇒ client hiện form rút gọn (không GPS/ảnh bắt buộc).
+    const block = String(sch.start_time) < '12:00:00' ? 'morning' : 'afternoon';
+    const first = await one(
+      `select t.id from timesheets t
+         join schedules s2 on s2.id = t.schedule_id
+        where t.user_id = $1 and t.check_in_at is not null
+          and s2.school_id = $2 and s2.session_date = $3 and s2.id <> $4
+          and (case when s2.start_time < '12:00:00' then 'morning' else 'afternoon' end) = $5
+        limit 1`,
+      [req.user.id, sch.school_id, sch.session_date, sch.id, block]
+    );
+
+    return { item, block_checked_in: !!first }; // item = null nếu chưa chấm công
   });
 
   /* =========================================================================
@@ -197,17 +211,32 @@ export default async function routes(app) {
     );
     if (existing?.check_in_at) throw conflict('Bạn đã check-in buổi này rồi.');
 
-    // 5. Toạ độ GPS bắt buộc và phải hợp lệ (isValidCoord chặn cả 0,0 khi GPS lỗi).
+    // 4b. TIẾT NỐI TIẾP: đã check-in một tiết TRƯỚC ĐÓ trong cùng buổi
+    //     (sáng/chiều) cùng trường cùng ngày ⇒ các tiết sau chỉ cần cập nhật
+    //     số thiết bị (GPS + ảnh không bắt buộc) — theo quy trình vận hành LtL.
+    const block = String(sch.start_time) < '12:00:00' ? 'morning' : 'afternoon';
+    const linkedFirst = await one(
+      `select t.id, t.check_in_at from timesheets t
+         join schedules s2 on s2.id = t.schedule_id
+        where t.user_id = $1 and t.check_in_at is not null
+          and s2.school_id = $2 and s2.session_date = $3 and s2.id <> $4
+          and (case when s2.start_time < '12:00:00' then 'morning' else 'afternoon' end) = $5
+        order by t.check_in_at asc limit 1`,
+      [user.id, sch.school_id, sch.session_date, sch.id, block]
+    );
+
+    // 5. Toạ độ GPS: bắt buộc với tiết ĐẦU buổi; tiết nối tiếp thì tuỳ chọn.
     const lat = num(fields.lat, 'lat', { min: -90, max: 90 });
     const lng = num(fields.lng, 'lng', { min: -180, max: 180 });
     const accuracy = num(fields.accuracy, 'accuracy', { min: 0, max: 1_000_000 });
-    if (!isValidCoord(lat, lng)) {
+    const hasCoord = isValidCoord(lat, lng);
+    if (!hasCoord && !linkedFirst) {
       throw badRequest('Không nhận được toạ độ GPS hợp lệ. Vui lòng bật định vị rồi thử lại.');
     }
 
-    // 6. Ảnh thiết bị đầu buổi + số thiết bị đếm tay là bắt buộc.
+    // 6. Ảnh thiết bị + số thiết bị: ảnh bắt buộc với tiết đầu buổi.
     const photo = files.photo?.[0];
-    if (!photo) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
+    if (!photo && !linkedFirst) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
     const deviceCount = int(fields.device_count, 'device_count', { required: true, min: 0, max: 100_000 });
     const note = str(fields.note, 'note', { max: 2000 });
 
@@ -217,10 +246,13 @@ export default async function routes(app) {
     let approvalStatus = 'approved';
     let autoNote = null;
 
-    if (isValidCoord(sch.school_lat, sch.school_lng)) {
+    if (hasCoord && isValidCoord(sch.school_lat, sch.school_lng)) {
       distance = distanceMeters(lat, lng, sch.school_lat, sch.school_lng);
     }
-    if (distance === null) {
+    if (linkedFirst) {
+      // Tiết nối tiếp: đã xác minh vị trí ở tiết đầu buổi — không đối chiếu lại.
+      autoNote = '[Hệ thống] Tiết nối tiếp trong buổi — vị trí đã xác minh ở tiết đầu.';
+    } else if (distance === null) {
       // Trường chưa cấu hình toạ độ ⇒ không đối chiếu được, KHÔNG gắn cờ —
       // chỉ ghi chú tự động để Phòng chuyên môn/kế toán biết.
       autoNote = '[Hệ thống] Trường chưa cấu hình toạ độ GPS.';
@@ -250,8 +282,9 @@ export default async function routes(app) {
       `insert into timesheets
          (schedule_id, user_id, role, check_in_at, check_in_lat, check_in_lng, check_in_accuracy,
           check_in_distance_m, check_in_photo_id, check_in_device_count, check_in_note,
-          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late,
+          linked_from)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        on conflict (schedule_id, user_id) do update set
          role                  = excluded.role,
          check_in_at           = excluded.check_in_at,
@@ -268,12 +301,15 @@ export default async function routes(app) {
          approval_status       = excluded.approval_status,
          client_time           = excluded.client_time,
          queued_at             = excluded.queued_at,
-         synced_late           = excluded.synced_late
+         synced_late           = excluded.synced_late,
+         linked_from           = excluded.linked_from
        where timesheets.check_in_at is null
        returning *`,
-      [sch.id, user.id, role, checkInAt, lat, lng, accuracy,
-       distance, photo.id, deviceCount, checkInNote,
-       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate]
+      [sch.id, user.id, role, checkInAt,
+       hasCoord ? lat : null, hasCoord ? lng : null, hasCoord ? accuracy : null,
+       distance, photo?.id ?? null, deviceCount, checkInNote,
+       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate,
+       linkedFirst?.id ?? null]
     );
     if (!saved) throw conflict('Bạn đã check-in buổi này rồi.');
 
@@ -300,7 +336,7 @@ export default async function routes(app) {
     }
 
     reply.code(201);
-    return { ...saved, distance_m: saved.check_in_distance_m };
+    return { ...saved, distance_m: saved.check_in_distance_m, linked: !!linkedFirst };
   });
 
   /* =========================================================================

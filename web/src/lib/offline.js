@@ -227,9 +227,16 @@ export async function retry(id) {
 /* ------------------------------ Vòng đồng bộ ------------------------------ */
 let timer = null;
 
+function flushIfVisible() {
+  if (document.visibilityState === 'visible') flush();
+}
+
 export function startSync() {
   if (timer) return;
   window.addEventListener('online', flush);
+  // Đồng bộ liên tục: mở lại tab / quay lại app là đẩy hàng đợi ngay.
+  window.addEventListener('focus', flush);
+  document.addEventListener('visibilitychange', flushIfVisible);
   timer = setInterval(() => { if (navigator.onLine) flush(); }, 30_000);
   purgeDone().catch(() => {});
   flush();
@@ -237,6 +244,8 @@ export function startSync() {
 
 export function stopSync() {
   window.removeEventListener('online', flush);
+  window.removeEventListener('focus', flush);
+  document.removeEventListener('visibilitychange', flushIfVisible);
   if (timer) clearInterval(timer);
   timer = null;
 }

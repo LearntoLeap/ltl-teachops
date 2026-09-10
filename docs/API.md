@@ -99,6 +99,11 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 
 Server tính `distance_m`, `late_minutes`, `label`, `gps_flagged`. Đã check-in rồi → `409`.
 
+> **Tiết nối tiếp trong buổi**: nếu người dạy ĐÃ check-in một tiết khác cùng buổi
+> (sáng < 12:00 ≤ chiều) cùng trường cùng ngày, thì GPS và ảnh **không bắt buộc** —
+> chỉ cần `device_count`; bản ghi lưu `linked_from` trỏ về tiết đầu, không gắn cờ GPS.
+> `GET /my/:schedule_id` trả thêm `block_checked_in: boolean` để client hiện form rút gọn.
+
 **`POST /check-out`** — `multipart/form-data`
 
 `schedule_id`, `lat`, `lng`, `device_ok` (bool), `photo` (tuỳ chọn), `damage_note` + `damage_photo` (**bắt buộc nếu `device_ok=false`**, thiếu → `422`), `note`.
@@ -142,6 +147,20 @@ Server tự suy `class_id`, `school_id`, `roster_size`, `marked_by` từ `schedu
 | POST | `/:id/read` | mọi vai trò — đánh dấu đã đọc |
 
 Tải xuống qua `GET /api/files/:id` (route kiểm quyền).
+
+**Trường mở rộng (002)**: `grade` (1-12) · `type_id` (loại tài liệu) · `lesson_no` – `lesson_title` –
+`curriculum` (tiết – tên bài – chương trình học) · `body` (nội dung tự do — có body thì `file` không bắt buộc)
+· `cover` (multipart, ảnh minh hoạ). Lọc thêm: `?grade=&type_id=`.
+
+| Method | Path | Quyền |
+|---|---|---|
+| GET | `/api/materials/types` | mọi vai trò — danh sách loại (Giáo án, Giáo trình, Slide, Nghiên cứu, Video…) |
+| POST | `/api/materials/types` | admin, manager — thêm loại mới `{name, icon?}` |
+
+## 8b. Tìm kiếm nhanh — `/api/search`
+
+`GET /api/search?q=` (≥2 ký tự) → `{schools, classes, users, materials, solutions, schedules}` —
+mỗi nhóm tối đa 5 dòng, đã lọc theo phạm vi vai trò; `users` chỉ trả cho admin/manager.
 
 ## 9. Giải pháp — `/api/solutions`
 

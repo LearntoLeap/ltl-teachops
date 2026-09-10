@@ -90,7 +90,8 @@ export async function remindAttendance() {
 }
 
 /* ---------------------------------------------------------------------------
- * 3. Nhắc check-out: đã check-in nhưng quá giờ kết thúc 45 phút mà chưa check-out.
+ * 3. Nhắc check-out: đã check-in nhưng quá giờ kết thúc + khung cho phép
+ *    (checkout_grace_minutes cấu hình THEO TỪNG TRƯỜNG, chỉ Admin chỉnh).
  * ------------------------------------------------------------------------- */
 export async function remindCheckout() {
   const pending = await rows(
@@ -101,7 +102,9 @@ export async function remindCheckout() {
        join schools sc on sc.id = s.school_id
       where t.check_in_at is not null
         and t.check_out_at is null
-        and (s.session_date + s.end_time) < (now() at time zone 'Asia/Ho_Chi_Minh') - interval '45 minutes'
+        and (s.session_date + s.end_time)
+            < (now() at time zone 'Asia/Ho_Chi_Minh')
+              - make_interval(mins => coalesce(sc.checkout_grace_minutes, 45))
         and s.session_date >= current_date - interval '2 days'
         and not exists (
           select 1 from notifications n where n.ref_id = t.id and n.kind = 'checkout_missing'
@@ -120,6 +123,45 @@ export async function remindCheckout() {
   }
   if (pending.length) log.info?.(`[jobs] Đã nhắc check-out ${pending.length} lượt.`);
   return pending.length;
+}
+
+/* ---------------------------------------------------------------------------
+ * 3b. Nhắc buổi dạy KẾ TIẾP: 60 phút trước giờ vào lớp, báo GV + TG một lần.
+ * ------------------------------------------------------------------------- */
+export async function remindUpcoming() {
+  const upcoming = await rows(
+    `select s.id, s.teacher_id, s.assistant_id, s.start_time,
+            c.name as class_name, sc.name as school_name, r.name as room_name
+       from schedules s
+       join classes c on c.id = s.class_id
+       join schools sc on sc.id = s.school_id
+       left join stem_rooms r on r.id = s.room_id
+      where s.status = 'scheduled'
+        and s.session_date = ((now() at time zone 'Asia/Ho_Chi_Minh'))::date
+        and (s.session_date + s.start_time)
+            between (now() at time zone 'Asia/Ho_Chi_Minh')
+                and (now() at time zone 'Asia/Ho_Chi_Minh') + interval '60 minutes'
+        and not exists (
+          select 1 from notifications n
+           where n.ref_id = s.id and n.kind = 'schedule_reminder'
+        )
+      limit 200`
+  );
+
+  for (const s of upcoming) {
+    const targets = [s.teacher_id, s.assistant_id].filter(Boolean);
+    if (!targets.length) continue;
+    await notify(targets, {
+      kind: 'schedule_reminder',
+      title: 'Sắp tới giờ dạy',
+      body: `${String(s.start_time).slice(0, 5)} hôm nay — lớp ${s.class_name}, ${s.school_name}` +
+            `${s.room_name ? ` (${s.room_name})` : ''}. Nhớ check-in đầu buổi nhé!`,
+      link: `/cham-cong/${s.id}`,
+      refId: s.id,
+    });
+  }
+  if (upcoming.length) log.info?.(`[jobs] Đã nhắc ${upcoming.length} buổi sắp bắt đầu.`);
+  return upcoming.length;
 }
 
 /* ---------------------------------------------------------------------------
@@ -153,6 +195,9 @@ async function safe(name, fn) {
 
 export function startJobs(logger) {
   log = logger || console;
+
+  // Mỗi 10 phút: nhắc buổi sắp dạy (60 phút trước giờ vào lớp).
+  timers.push(setInterval(() => safe('remindUpcoming', remindUpcoming), 10 * MINUTE));
 
   // Mỗi 15 phút: nhắc điểm danh & check-out.
   timers.push(setInterval(() => {
