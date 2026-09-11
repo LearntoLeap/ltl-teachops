@@ -36,6 +36,7 @@ function tsPhotos(ts) {
   return [
     { id: ts?.check_in_photo_id || ts?.checkin_photo_id, label: 'Ảnh đầu buổi' },
     { id: ts?.check_out_photo_id || ts?.checkout_photo_id, label: 'Ảnh cuối buổi' },
+    { id: ts?.check_in_selfie_id, label: 'Ảnh selfie đầu buổi' },
     { id: ts?.damage_photo_id, label: 'Ảnh thiết bị hỏng' },
   ].filter((p) => p.id);
 }
@@ -137,6 +138,7 @@ function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
 
   const [pos, setPos] = useState(null);
   const [photos, setPhotos] = useState([]);
+  const [selfies, setSelfies] = useState([]);        // ảnh chân dung xác minh có mặt
   const [deviceCount, setDeviceCount] = useState('');
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
@@ -147,6 +149,7 @@ function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
     const errs = {};
     if (!linked && !pos) errs.pos = 'Vui lòng bấm "Lấy vị trí" trước khi check-in.';
     if (!linked && !photos.length) errs.photos = 'Cần ít nhất 1 ảnh thiết bị đầu buổi.';
+    if (!linked && !selfies.length) errs.selfie = 'Cần chụp 1 ảnh selfie tại lớp để xác minh.';
     if (deviceCount === '' || Number(deviceCount) < 0 || !Number.isFinite(Number(deviceCount))) {
       errs.device = 'Vui lòng nhập số thiết bị đếm được.';
     }
@@ -161,12 +164,16 @@ function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
     };
     if (pos) { fields.lat = pos.lat; fields.lng = pos.lng; fields.accuracy = pos.accuracy; }
     const photo = photos[0] || null;
+    const selfie = selfies[0] || null;
 
     const saveOffline = async () => {
       await enqueue({
         endpoint: '/api/timesheets/check-in',
         fields,
-        files: photo ? [{ field: 'photo', blob: photo.blob, name: photo.name }] : [],
+        files: [
+          ...(photo ? [{ field: 'photo', blob: photo.blob, name: photo.name }] : []),
+          ...(selfie ? [{ field: 'selfie', blob: selfie.blob, name: selfie.name }] : []),
+        ],
         label: `Check-in ${schedule ? clsName(schedule) : 'buổi dạy'} ${schedule ? fmtTime(schedule.start_time) : ''}`.trim(),
         kind: 'checkin',
       });
@@ -185,6 +192,7 @@ function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
       }
       // API nhận đúng 1 ảnh ở field 'photo' — chỉ gửi ảnh đầu tiên (tiết nối tiếp có thể bỏ trống).
       if (photo) fd.append('photo', photo.blob, photo.name || 'anh-dau-buoi.jpg');
+      if (selfie) fd.append('selfie', selfie.blob, selfie.name || 'selfie.jpg');
 
       const res = await api.upload('/api/timesheets/check-in', fd);
 
@@ -230,6 +238,16 @@ function CheckInForm({ scheduleId, schedule, linked = false, onDone }) {
           <GpsBlock pos={pos} setPos={(p) => { setPos(p); if (p) setErrors((x) => ({ ...x, pos: '' })); }}
             required error={errors.pos} />
         )}
+
+        <PhotoInput
+          value={selfies}
+          onChange={(v) => { setSelfies(v); if (v.length) setErrors((x) => ({ ...x, selfie: '' })); }}
+          max={1}
+          required={!linked}
+          capture="user"
+          label="Ảnh selfie tại lớp"
+          hint="Chụp bằng camera trước, thấy rõ mặt bạn và khung cảnh lớp học." />
+        {errors.selfie && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.selfie}</div>}
 
         <PhotoInput
           value={photos}

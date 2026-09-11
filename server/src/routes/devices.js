@@ -6,7 +6,7 @@
  */
 import { rows, one, query, scalar, tx } from '../db.js';
 import { badRequest, notFound, conflict, unprocessable } from '../lib/errors.js';
-import { requirePerm, isFieldStaff } from '../lib/rbac.js';
+import { requirePerm, requireRole, isFieldStaff } from '../lib/rbac.js';
 import {
   schoolFilter, combine, visibleSchoolIds, assertSchoolAccess, assertRoomAccess,
 } from '../lib/scope.js';
@@ -102,6 +102,110 @@ export default async function routes(app) {
   });
 
   // POST /api/devices/catalog — thêm thiết bị vào danh mục (admin/manager)
+  /* ------------------------------------------------------------------------
+   * GET /api/devices/suggestions — danh mục thiết bị ĐỀ XUẤT dùng chung.
+   * Dùng để gợi ý khi khai báo danh mục cho một phòng (uKIT, UGOT, laptop,
+   * tablet, loa, mic…), mỗi mục kèm số lượng gợi ý sẵn để sửa lại.
+   * ---------------------------------------------------------------------- */
+  app.get('/api/devices/suggestions', async () => ({
+    items: await rows(
+      `select id, name, category, unit, default_qty, icon, sort_order
+         from device_suggestions where is_active
+        order by sort_order, name`
+    ),
+  }));
+
+  /* POST /api/devices/suggestions — Admin bổ sung mục gợi ý mới. */
+  app.post('/api/devices/suggestions', { preHandler: requireRole('admin') }, async (req, reply) => {
+    const b = req.body || {};
+    const name = str(b.name, 'Tên thiết bị', { required: true, max: 200 });
+    const category = enumOf(b.category, 'category', ['robotics', 'computer', 'av', 'other'], { def: 'other' });
+    const unit = str(b.unit, 'unit', { max: 30 }) || 'bộ';
+    const defaultQty = int(b.default_qty, 'default_qty', { min: 0, max: 100_000, def: 1 });
+    const icon = str(b.icon, 'icon', { max: 8 }) || '📦';
+
+    const dup = await one('select id from device_suggestions where lower(name) = lower($1)', [name]);
+    if (dup) throw conflict(`Thiết bị "${name}" đã có trong danh mục đề xuất.`);
+
+    const row = await one(
+      `insert into device_suggestions (name, category, unit, default_qty, icon, sort_order, created_by)
+       values ($1, $2, $3, $4, $5,
+               (select coalesce(max(sort_order), 0) + 10 from device_suggestions), $6)
+       returning id, name, category, unit, default_qty, icon, sort_order`,
+      [name, category, unit, defaultQty, icon, req.user.id]
+    );
+    audit(req, {
+      action: 'create', entity: 'device_suggestions', entityId: row.id,
+      summary: `Thêm thiết bị đề xuất "${row.name}"`,
+    });
+    return reply.code(201).send(row);
+  });
+
+  /* ------------------------------------------------------------------------
+   * POST /api/devices/catalog/bulk — khai báo NHIỀU thiết bị một lượt cho phòng.
+   * body: { school_id, room_id?, items: [{name, unit?, expected_qty, sku?}] }
+   * Tên đã có trong phòng ⇒ CẬP NHẬT số lượng chuẩn thay vì tạo trùng.
+   * ---------------------------------------------------------------------- */
+  app.post('/api/devices/catalog/bulk', { preHandler: requirePerm('device.catalog') }, async (req, reply) => {
+    const b = req.body || {};
+    const schoolId = uuid(b.school_id, 'school_id', { required: true });
+    const roomId = uuid(b.room_id, 'room_id');
+    if (!Array.isArray(b.items) || !b.items.length) {
+      throw badRequest('Cần chọn ít nhất một thiết bị.');
+    }
+    if (b.items.length > 100) throw badRequest('Mỗi lượt khai báo tối đa 100 thiết bị.');
+
+    await assertSchoolAccess(req.user, schoolId);
+    if (roomId) {
+      const room = await one('select id, school_id from stem_rooms where id = $1', [roomId]);
+      if (!room) throw notFound('Không tìm thấy phòng STEM.');
+      if (room.school_id !== schoolId) throw unprocessable('Phòng STEM không thuộc trường đã chọn.');
+    }
+
+    const items = b.items.map((it, i) => ({
+      name: str(it?.name, `items[${i}].name`, { required: true, max: 200 }),
+      unit: str(it?.unit, `items[${i}].unit`, { max: 30 }) || 'bộ',
+      qty: int(it?.expected_qty, `items[${i}].expected_qty`, { min: 0, max: 1_000_000, def: 0 }),
+      sku: str(it?.sku, `items[${i}].sku`, { max: 100 }),
+      sort: int(it?.sort_order, `items[${i}].sort_order`, { min: 0, max: 1_000_000, def: (i + 1) * 10 }),
+    }));
+
+    const result = await tx(async (c) => {
+      let created = 0;
+      let updated = 0;
+      for (const it of items) {
+        const existing = await c.query(
+          `select id from device_catalog
+            where school_id = $1 and name = $2 and is_active
+              and (room_id is not distinct from $3)`,
+          [schoolId, it.name, roomId]
+        );
+        if (existing.rows.length) {
+          await c.query(
+            'update device_catalog set expected_qty = $2, unit = $3 where id = $1',
+            [existing.rows[0].id, it.qty, it.unit]
+          );
+          updated += 1;
+        } else {
+          await c.query(
+            `insert into device_catalog (school_id, room_id, name, sku, unit, expected_qty, sort_order)
+             values ($1, $2, $3, $4, $5, $6, $7)`,
+            [schoolId, roomId, it.name, it.sku, it.unit, it.qty, it.sort]
+          );
+          created += 1;
+        }
+      }
+      return { created, updated };
+    });
+
+    audit(req, {
+      action: 'create', entity: 'device_catalog',
+      summary: `Khai báo danh mục thiết bị: thêm ${result.created}, cập nhật ${result.updated} mục`,
+      after: { school_id: schoolId, room_id: roomId, count: items.length },
+    });
+    return reply.code(201).send(result);
+  });
+
   app.post('/api/devices/catalog', { preHandler: requirePerm('device.catalog') }, async (req, reply) => {
     const b = req.body || {};
     const schoolId = uuid(b.school_id, 'school_id', { required: true });

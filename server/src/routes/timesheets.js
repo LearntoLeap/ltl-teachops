@@ -237,6 +237,9 @@ export default async function routes(app) {
     // 6. Ảnh thiết bị + số thiết bị: ảnh bắt buộc với tiết đầu buổi.
     const photo = files.photo?.[0];
     if (!photo && !linkedFirst) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
+    // Ảnh selfie xác minh đúng người dạy có mặt — bắt buộc ở tiết đầu buổi.
+    const selfie = files.selfie?.[0];
+    if (!selfie && !linkedFirst) throw unprocessable('Bắt buộc chụp ảnh selfie tại lớp để xác minh.');
     const deviceCount = int(fields.device_count, 'device_count', { required: true, min: 0, max: 100_000 });
     const note = str(fields.note, 'note', { max: 2000 });
 
@@ -283,8 +286,8 @@ export default async function routes(app) {
          (schedule_id, user_id, role, check_in_at, check_in_lat, check_in_lng, check_in_accuracy,
           check_in_distance_m, check_in_photo_id, check_in_device_count, check_in_note,
           gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late,
-          linked_from)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+          linked_from, check_in_selfie_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
        on conflict (schedule_id, user_id) do update set
          role                  = excluded.role,
          check_in_at           = excluded.check_in_at,
@@ -302,14 +305,15 @@ export default async function routes(app) {
          client_time           = excluded.client_time,
          queued_at             = excluded.queued_at,
          synced_late           = excluded.synced_late,
-         linked_from           = excluded.linked_from
+         linked_from           = excluded.linked_from,
+         check_in_selfie_id    = excluded.check_in_selfie_id
        where timesheets.check_in_at is null
        returning *`,
       [sch.id, user.id, role, checkInAt,
        hasCoord ? lat : null, hasCoord ? lng : null, hasCoord ? accuracy : null,
        distance, photo?.id ?? null, deviceCount, checkInNote,
        gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate,
-       linkedFirst?.id ?? null]
+       linkedFirst?.id ?? null, selfie?.id ?? null]
     );
     if (!saved) throw conflict('Bạn đã check-in buổi này rồi.');
 

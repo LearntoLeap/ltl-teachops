@@ -143,6 +143,117 @@ function ScheduleCard({ s, onOpen }) {
   );
 }
 
+/* ------------------------- Thời khoá biểu tuần (bảng) ----------------------- */
+/**
+ * WeekTimetable — bảng thời khoá biểu quen thuộc với nhà trường:
+ * cột = Thứ Hai…Chủ nhật, hàng = khung giờ (tự sinh từ các buổi thực tế trong tuần).
+ * Mỗi ô hiện lớp · trường · GV. Ô trống bấm được để thêm buổi vào đúng ngày+giờ.
+ */
+function WeekTimetable({ from, items, onOpen, onAddSlot }) {
+  const todayIso = today();
+
+  // 7 ngày của tuần, bắt đầu từ Thứ Hai.
+  const days = useMemo(() => {
+    const base = new Date(`${from}T00:00:00`);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(base.getDate() + i);
+      return { iso: isoOf(d), label: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][i], dayNum: d.getDate() };
+    });
+  }, [from]);
+
+  // Khung giờ = tập hợp giờ bắt đầu xuất hiện trong tuần (sắp xếp tăng dần).
+  const slots = useMemo(() => {
+    const set = new Set();
+    for (const s of items || []) {
+      if (s.status === 'cancelled') continue;
+      set.add(String(s.start_time).slice(0, 5));
+    }
+    // Chưa có buổi nào ⇒ dựng khung giờ mặc định để vẫn xếp được lịch.
+    if (!set.size) ['07:30', '09:00', '14:00', '15:30'].forEach((t) => set.add(t));
+    return [...set].sort();
+  }, [items]);
+
+  // Tra cứu nhanh: 'ngày|giờ' → danh sách buổi.
+  const cellMap = useMemo(() => {
+    const m = new Map();
+    for (const s of items || []) {
+      const k = `${String(s.session_date || s.date || '').slice(0, 10)}|${String(s.start_time).slice(0, 5)}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(s);
+    }
+    return m;
+  }, [items]);
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[780px] border-collapse">
+          <thead>
+            <tr>
+              <th className="th !w-[86px] sticky left-0 z-10 bg-brand-50">Khung giờ</th>
+              {days.map((d) => (
+                <th key={d.iso}
+                  className={`th text-center ${d.iso === todayIso ? '!bg-brand-100 !text-brand-900' : ''}`}>
+                  {d.label}
+                  <span className="block font-normal text-[11px] opacity-70">{fmtDate(d.iso).slice(0, 5)}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {slots.map((t) => (
+              <tr key={t}>
+                <td className="td !py-2 sticky left-0 z-10 bg-white font-bold text-brand-800 text-center whitespace-nowrap">
+                  {t}
+                </td>
+                {days.map((d) => {
+                  const list = cellMap.get(`${d.iso}|${t}`) || [];
+                  return (
+                    <td key={d.iso + t}
+                      onClick={() => { if (onAddSlot && !list.length) onAddSlot(d.iso, t); }}
+                      className={`td !p-1 align-top ${d.iso === todayIso ? 'bg-brand-50/40' : ''}
+                        ${onAddSlot && !list.length ? 'cursor-pointer hover:bg-brand-50/70' : ''}`}>
+                      {list.length === 0 ? (
+                        <span className="block text-center text-[11px] text-ink-muted/50 py-2">
+                          {onAddSlot ? '+' : '–'}
+                        </span>
+                      ) : list.map((sItem) => (
+                        <button
+                          key={sItem.id}
+                          onClick={(e) => { e.stopPropagation(); onOpen(sItem); }}
+                          className={`w-full text-left rounded-lg px-2 py-1.5 mb-1 last:mb-0 transition
+                            ${sItem.status === 'cancelled'
+                              ? 'bg-slate-100 text-slate-400 line-through'
+                              : 'bg-brand-50 ring-1 ring-inset ring-brand-200 hover:bg-brand-100'}`}>
+                          <span className="block text-[12px] font-bold text-brand-900 truncate">
+                            {classNameOf(sItem)}
+                          </span>
+                          <span className="block text-[10.5px] text-ink-muted truncate">
+                            {schoolNameOf(sItem)}
+                          </span>
+                          {teacherNameOf(sItem) && (
+                            <span className="block text-[10px] text-ink-muted truncate">
+                              {teacherNameOf(sItem)}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+        Bấm buổi để xem chi tiết{onAddSlot ? ' · bấm ô trống để xếp buổi vào đúng ngày và khung giờ đó' : ''}
+      </div>
+    </div>
+  );
+}
+
 /* --------------------------- Lưới lịch tháng trực quan ---------------------- */
 /**
  * MonthGrid — bảng tháng 7 cột: mỗi ô ngày hiện tối đa 3 buổi dạng chip
@@ -252,7 +363,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
  * bulk=false + schedule       → sửa buổi (PATCH /api/schedules/:id)
  * bulk=true                   → lịch lặp tuần (POST /api/schedules/bulk)
  */
-function ScheduleForm({ bulk = false, schedule = null, initialDate = null, selfOnly = false, schools, onSaved, onClose }) {
+function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initialStart = null, selfOnly = false, schools, onSaved, onClose }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState(null);
@@ -263,7 +374,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, selfO
     teacher_id: schedule?.teacher_id || '',
     assistant_id: schedule?.assistant_id || '',
     date: schedule?.session_date ? String(schedule.session_date).slice(0, 10) : (initialDate || today()),
-    start_time: schedule ? fmtTime(schedule.start_time) : '',
+    start_time: schedule ? fmtTime(schedule.start_time) : (initialStart || ''),
     end_time: schedule ? fmtTime(schedule.end_time) : '',
     subject: schedule?.subject || '',
     note: schedule?.note || '',
@@ -384,7 +495,13 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, selfO
         <Field label="Lớp" required>
           <select className="input" value={f.class_id} onChange={setField('class_id')} disabled={!f.school_id || res.loading}>
             <option value="">{res.loading ? 'Đang tải…' : '— Chọn lớp —'}</option>
-            {res.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {res.classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.grade ? ` — Khối ${c.grade}` : ''}
+                {c.roster_size ? ` (${c.roster_size} HS)` : ''}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Phòng">
@@ -401,17 +518,46 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, selfO
         </div>
       )}
 
+      {/* Danh sách của trường đang chọn — để người sắp lịch nắm ngay nguồn lực */}
+      {!selfOnly && f.school_id && !res.loading && (
+        <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5 grid gap-1.5">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+            Nguồn lực của trường này
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
+            <span>🎓 <b>{res.classes.length}</b> lớp</span>
+            <span>🤖 <b>{res.rooms.length}</b> phòng STEM</span>
+            <span>🧑‍🏫 <b>{res.teachers.length}</b> giáo viên</span>
+            <span>🤝 <b>{res.assistants.length}</b> trợ giảng</span>
+          </div>
+          {res.classes.length > 0 && (
+            <div className="text-[11.5px] text-ink-muted">
+              Lớp: {res.classes.slice(0, 8).map((c) => c.name).join(', ')}
+              {res.classes.length > 8 ? ` … +${res.classes.length - 8}` : ''}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-3 ${selfOnly ? 'hidden' : ''}`}>
         <Field label="Giáo viên" required={!selfOnly}>
           <select className="input" value={f.teacher_id} onChange={setField('teacher_id')} disabled={!f.school_id || res.loading}>
             <option value="">{res.loading ? 'Đang tải…' : '— Chọn giáo viên —'}</option>
-            {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name || u.name}</option>)}
+            {res.teachers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name || u.name}{u.region_name ? ` — ${u.region_name}` : ''}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Trợ giảng">
           <select className="input" value={f.assistant_id} onChange={setField('assistant_id')} disabled={!f.school_id || res.loading}>
             <option value="">— Không chọn —</option>
-            {res.assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name || u.name}</option>)}
+            {res.assistants.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.full_name || u.name}{u.region_name ? ` — ${u.region_name}` : ''}
+              </option>
+            ))}
           </select>
         </Field>
       </div>
@@ -491,9 +637,10 @@ export default function ScheduleList() {
   const showSchoolFilter = auth.isAdmin || auth.isManager;
 
   const [mode, setMode] = useState('week');       // week | next | month
-  const [view, setView] = useState('list');       // list | grid (lịch tháng trực quan)
+  const [view, setView] = useState('list');       // list | tkb (thời khoá biểu tuần) | grid (lịch tháng)
   const [sortBy, setSortBy] = useState('time');   // time | school | teacher
   const [monthAnchor, setMonthAnchor] = useState(() => new Date());
+  const [weekOffset, setWeekOffset] = useState(0);   // 0 = tuần này, ±n tuần
   const [schoolId, setSchoolId] = useState('');
   const [schools, setSchools] = useState([]);
 
@@ -511,8 +658,9 @@ export default function ScheduleList() {
 
   const range = useMemo(() => {
     if (view === 'grid') return monthRange(monthAnchor);
+    if (view === 'tkb') return weekRange(weekOffset);
     return mode === 'month' ? monthRange() : weekRange(mode === 'next' ? 1 : 0);
-  }, [mode, view, monthAnchor]);
+  }, [mode, view, monthAnchor, weekOffset]);
 
   /* Danh sách trường cho bộ lọc + form (chỉ admin/manager cần gọi). */
   const canSelfAdd = auth.can('schedule.selfCreate');
@@ -604,9 +752,24 @@ export default function ScheduleList() {
           onChange={setView}
           options={[
             { value: 'list', label: 'Danh sách' },
+            { value: 'tkb', label: '📅 Thời khoá biểu' },
             { value: 'grid', label: '🗓️ Lịch tháng' },
           ]}
         />
+        {view === 'tkb' && (
+          <div className="flex items-center gap-1.5">
+            <button className="btn-line !px-3 !py-2" aria-label="Tuần trước"
+              onClick={() => setWeekOffset((w) => w - 1)}>‹</button>
+            <span className="font-bold text-[13px] text-brand-900 min-w-[150px] text-center">
+              {fmtDate(range.from)} – {fmtDate(range.to)}
+            </span>
+            <button className="btn-line !px-3 !py-2" aria-label="Tuần sau"
+              onClick={() => setWeekOffset((w) => w + 1)}>›</button>
+            {weekOffset !== 0 && (
+              <button className="btn-ghost !px-3 !py-2" onClick={() => setWeekOffset(0)}>Tuần này</button>
+            )}
+          </div>
+        )}
         {view === 'list' && (
           <Segmented
             value={mode}
@@ -648,13 +811,26 @@ export default function ScheduleList() {
             onChange={(e) => setSchoolId(e.target.value)}
             aria-label="Lọc theo trường">
             <option value="">Tất cả trường</option>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {schools.map((sc) => (
+              <option key={sc.id} value={sc.id}>
+                {sc.name}{sc.classes_count ? ` (${sc.classes_count} lớp)` : ''}
+              </option>
+            ))}
           </select>
         )}
       </div>
 
       {loading && !items && <PageLoading />}
       {!loading && error && <ErrorBox error={error} onRetry={load} />}
+
+      {items && !error && view === 'tkb' && (
+        <WeekTimetable
+          from={range.from}
+          items={items}
+          onOpen={(sItem) => setDetail(sItem)}
+          onAddSlot={(canManage || canSelfAdd) ? (d, t) => openForm({ date: d, start: t }) : null}
+        />
+      )}
 
       {items && !error && view === 'grid' && (
         <MonthGrid
@@ -763,6 +939,7 @@ export default function ScheduleList() {
             bulk={!!formCfg.bulk}
             schedule={formCfg.schedule || null}
             initialDate={formCfg.date || null}
+            initialStart={formCfg.start || null}
             selfOnly={!canManage}
             schools={schools}
             onSaved={(close) => { load(); if (close) setFormCfg(null); }}

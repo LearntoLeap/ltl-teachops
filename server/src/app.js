@@ -82,32 +82,11 @@ export async function buildApp() {
     time: new Date().toISOString(),
   }));
 
-  /* ------------------------------ Routes --------------------------------- */
-  // Mỗi module tự đăng ký prefix của mình.
-  const modules = await Promise.all([
-    import('./routes/auth.js'),
-    import('./routes/users.js'),
-    import('./routes/schools.js'),
-    import('./routes/classes.js'),
-    import('./routes/rooms.js'),
-    import('./routes/schedules.js'),
-    import('./routes/timesheets.js'),
-    import('./routes/attendance.js'),
-    import('./routes/devices.js'),
-    import('./routes/materials.js'),
-    import('./routes/solutions.js'),
-    import('./routes/feedback.js'),
-    import('./routes/notifications.js'),
-    import('./routes/reports.js'),
-    import('./routes/files.js'),
-    import('./routes/audit.js'),
-    import('./routes/search.js'),
-  ]);
-  for (const m of modules) {
-    await app.register(m.default);
-  }
-
-  /* --------------------------- Xử lý lỗi tập trung ------------------------ */
+  /* --------------------------- Xử lý lỗi tập trung ------------------------
+   * PHẢI đăng ký TRƯỚC app.register(route): mỗi register tạo một context con,
+   * context chỉ kế thừa error handler đã tồn tại lúc nó được tạo. Gắn sau ⇒
+   * lỗi trả về theo định dạng mặc định của Fastify và client mất message tiếng Việt.
+   * ---------------------------------------------------------------------- */
   app.setNotFoundHandler((req, reply) => {
     reply.code(404).send({
       error: { code: 'NOT_FOUND', message: `Không có đường dẫn ${req.method} ${req.url}.` },
@@ -171,6 +150,31 @@ export async function buildApp() {
       },
     });
   });
+
+  /* ------------------------------ Routes --------------------------------- */
+  // Mỗi module tự đăng ký prefix của mình.
+  const modules = await Promise.all([
+    import('./routes/auth.js'),
+    import('./routes/users.js'),
+    import('./routes/schools.js'),
+    import('./routes/classes.js'),
+    import('./routes/rooms.js'),
+    import('./routes/schedules.js'),
+    import('./routes/timesheets.js'),
+    import('./routes/attendance.js'),
+    import('./routes/devices.js'),
+    import('./routes/materials.js'),
+    import('./routes/solutions.js'),
+    import('./routes/feedback.js'),
+    import('./routes/notifications.js'),
+    import('./routes/reports.js'),
+    import('./routes/files.js'),
+    import('./routes/audit.js'),
+    import('./routes/search.js'),
+  ]);
+  for (const m of modules) {
+    await app.register(m.default);
+  }
 
   void notFoundErr;
   return app;

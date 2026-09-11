@@ -237,16 +237,91 @@ function SessionRow({ s }) {
   );
 }
 
+/** Bảng lịch tuần rút gọn: 7 cột, mỗi ô liệt kê các tiết của ngày đó. */
+function MyWeekBoard({ from, items }) {
+  const todayIso = today();
+  const days = [];
+  const base = new Date(`${from}T00:00:00`);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    const p = (x) => String(x).padStart(2, '0');
+    days.push({
+      iso: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+      label: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'][i],
+      dayNum: d.getDate(),
+    });
+  }
+
+  const byDay = new Map();
+  for (const s of items || []) {
+    const k = String(s.session_date || '').slice(0, 10);
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(s);
+  }
+  for (const list of byDay.values()) {
+    list.sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+  }
+
+  return (
+    <div className="rise rise-4 card overflow-hidden">
+      <div className="grid grid-cols-7">
+        {days.map((d) => {
+          const list = byDay.get(d.iso) || [];
+          const isToday = d.iso === todayIso;
+          return (
+            <div key={d.iso}
+              className={`min-h-[92px] border-r border-b border-line/70 last:border-r-0 p-1.5
+                ${isToday ? 'bg-brand-50/50' : ''}`}>
+              <div className="text-center mb-1">
+                <span className={`inline-grid place-items-center h-6 w-6 rounded-full text-[11px] font-extrabold
+                  ${isToday ? 'bg-brand-grad text-white' : 'text-ink-soft'}`}>
+                  {d.dayNum}
+                </span>
+                <span className="block text-[10px] font-bold uppercase text-ink-muted">{d.label}</span>
+              </div>
+              <div className="grid gap-1">
+                {list.slice(0, 3).map((s) => (
+                  <Link key={s.id} to={`/cham-cong/${s.id}`}
+                    title={`${fmtTime(s.start_time)} · Lớp ${s.class_name} — ${s.school_name}`}
+                    className="block rounded-md bg-white ring-1 ring-inset ring-brand-100 px-1 py-[3px]
+                               text-[10px] font-bold text-brand-900 text-center truncate hover:bg-brand-100">
+                    {fmtTime(s.start_time)}
+                    <span className="block font-semibold text-ink-muted truncate">{s.class_name}</span>
+                  </Link>
+                ))}
+                {list.length > 3 && (
+                  <span className="block text-[9.5px] text-ink-muted text-center">+{list.length - 3}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+        Tổng <b>{(items || []).length}</b> tiết trong tuần · bấm một tiết để chấm công
+      </div>
+    </div>
+  );
+}
+
 function FieldDashboard({ data }) {
   const [week, setWeek] = useState([]);
+  const [weekRange, setWeekRange] = useState(null);
   const [queued, setQueued] = useState(0);
 
-  // Lịch 7 ngày tới (không tính hôm nay) + số mục chờ đồng bộ.
+  // Lịch TUẦN NÀY (Thứ Hai → Chủ nhật) + số mục chờ đồng bộ.
   useEffect(() => {
-    const d0 = new Date(); d0.setDate(d0.getDate() + 1);
-    const d6 = new Date(); d6.setDate(d6.getDate() + 7);
     const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    api.get('/api/schedules', { from: iso(d0), to: iso(d6), limit: 30 })
+    const base = new Date();
+    const mon = new Date(base);
+    mon.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+    const sun = new Date(mon);
+    sun.setDate(mon.getDate() + 6);
+    const from = iso(mon);
+    const to = iso(sun);
+    setWeekRange({ from, to });
+    api.get('/api/schedules', { from, to, limit: 100 })
       .then((r) => setWeek((r?.items || []).filter((x) => x.status !== 'cancelled')))
       .catch(() => {});
     pendingCount().then(setQueued).catch(() => {});
@@ -297,11 +372,48 @@ function FieldDashboard({ data }) {
           <SessionTicket s={focus} />
         </>
       )}
-      {rest.length > 0 && (
+      {sessions.length > 0 && (
         <>
-          <Section kind="watch" title="Các buổi khác hôm nay" />
-          <div className="rise rise-2 grid gap-2 sm:grid-cols-2">
-            {rest.map((s) => <SessionRow key={s.id || s.schedule_id} s={s} />)}
+          <Section kind="watch" title={`Các tiết hôm nay (${sessions.length} tiết)`} to="/lich" />
+          <div className="rise rise-2 card divide-y divide-line overflow-hidden">
+            {sessions.map((s, i) => {
+              const st = sessionSteps(s);
+              const isFocus = focus && (s.id || s.schedule_id) === (focus.id || focus.schedule_id);
+              return (
+                <Link
+                  key={s.id || s.schedule_id}
+                  to={st.current?.to === 'diem-danh'
+                    ? `/diem-danh/${s.id || s.schedule_id}`
+                    : `/cham-cong/${s.id || s.schedule_id}`}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 transition hover:bg-brand-50/50
+                    ${isFocus ? 'bg-brand-50/60' : ''}`}>
+                  <span className={`h-7 w-7 rounded-lg grid place-items-center text-[12px] font-extrabold shrink-0
+                    ${st.complete ? 'bg-emerald-500 text-white'
+                      : isFocus ? 'bg-brand-grad text-white' : 'bg-brand-50 text-brand-800'}`}>
+                    {st.complete ? '✓' : i + 1}
+                  </span>
+                  <span className="w-[86px] shrink-0">
+                    <span className="block text-[13.5px] font-extrabold text-brand-800 leading-none">
+                      {fmtTime(s.start_time)}
+                    </span>
+                    <span className="block text-[10.5px] text-ink-muted mt-0.5">
+                      đến {fmtTime(s.end_time)}
+                    </span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13.5px] font-semibold truncate">
+                      Tiết {i + 1} · Lớp {s.class_name}
+                    </span>
+                    <span className="block text-[11.5px] text-ink-muted truncate">
+                      {s.school_name}{s.room_name ? ` · ${s.room_name}` : ''}{s.subject ? ` · ${s.subject}` : ''}
+                    </span>
+                  </span>
+                  {st.complete
+                    ? <Badge tone="approved">Xong</Badge>
+                    : <Badge tone={st.current?.key === 'in' ? 'pending' : 'new'}>{st.current?.label}</Badge>}
+                </Link>
+              );
+            })}
           </div>
         </>
       )}
@@ -321,20 +433,11 @@ function FieldDashboard({ data }) {
         { icon: '📨', label: 'Gửi góp ý', to: '/gop-y' },
       ]} />
 
-      {/* Tuần tới */}
-      {week.length > 0 && (
+      {/* Lịch tuần này — bảng 7 cột để bao quát cả tuần */}
+      {weekRange && (
         <>
-          <Section kind="ref" title="Lịch 7 ngày tới" to="/lich" />
-          <div className="rise rise-4 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x">
-            {week.slice(0, 10).map((s) => (
-              <div key={s.id} className="card shrink-0 w-[136px] px-3 py-2.5 snap-start">
-                <div className="text-[10.5px] font-bold text-brand-700 uppercase">{fmtDateLong(s.session_date).split(',')[0]} · {fmtDate(s.session_date).slice(0, 5)}</div>
-                <div className="text-[14px] font-extrabold mt-0.5">{fmtTime(s.start_time)}</div>
-                <div className="text-[12px] font-semibold truncate">Lớp {s.class_name}</div>
-                <div className="text-[10.5px] text-ink-muted truncate">{s.school_name}</div>
-              </div>
-            ))}
-          </div>
+          <Section kind="ref" title="Lịch dạy tuần này" to="/lich" toLabel="Thời khoá biểu ›" />
+          <MyWeekBoard from={weekRange.from} items={week} />
         </>
       )}
 

@@ -107,8 +107,14 @@ async function refreshTokens() {
 async function parseError(res) {
   let body = null;
   try { body = await res.json(); } catch { /* phản hồi không phải JSON */ }
-  const e = body?.error || {};
-  return new ApiError(res.status, e.code || 'HTTP_' + res.status, e.message, e.details);
+
+  // Định dạng của app: { error: { code, message, details } }.
+  // Dự phòng định dạng mặc định Fastify: { statusCode, code, error: 'Bad Request', message }
+  // — khi đó `error` là chuỗi, message nằm ở cấp ngoài.
+  const nested = body?.error && typeof body.error === 'object' ? body.error : null;
+  const code = nested?.code || body?.code || 'HTTP_' + res.status;
+  const message = nested?.message || body?.message;
+  return new ApiError(res.status, code, message, nested?.details);
 }
 
 /**

@@ -739,7 +739,8 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
   const toast = useToast();
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
-  const [editing, setEditing] = useState(null);   // null | {} (thêm mới) | item (sửa)
+  const [editing, setEditing] = useState(null);
+  const [suggestOpen, setSuggestOpen] = useState(false);   // sheet chọn từ danh mục đề xuất
   const [deleting, setDeleting] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -782,28 +783,8 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
   return (
     <div>
       <div className="flex justify-end gap-2 mb-3">
-        <button
-          className="btn-line !py-2"
-          title="Tạo nhanh: Bộ robot UGOT, Laptop, Chuột, Micro"
-          onClick={async () => {
-            const STANDARD = [
-              { name: 'Bộ robot UGOT', unit: 'bộ', expected_qty: 8, sort_order: 10 },
-              { name: 'Laptop', unit: 'chiếc', expected_qty: 8, sort_order: 20 },
-              { name: 'Chuột máy tính', unit: 'chiếc', expected_qty: 8, sort_order: 30 },
-              { name: 'Micro', unit: 'chiếc', expected_qty: 2, sort_order: 40 },
-            ];
-            const existed = new Set((items || []).map((x) => String(x.name || '').toLowerCase()));
-            const todo = STANDARD.filter((x) => !existed.has(x.name.toLowerCase()));
-            if (!todo.length) { toast.info('Bộ danh mục chuẩn đã có đủ trong phòng này.'); return; }
-            try {
-              for (const it of todo) {
-                await api.post('/api/devices/catalog', { ...it, room_id: roomId });
-              }
-              toast.ok(`Đã thêm ${todo.length} thiết bị chuẩn LtL.`);
-              load();
-            } catch (e) { toast.fromError(e); }
-          }}>
-          ⚡ Bộ chuẩn LtL
+        <button className="btn-line !py-2" onClick={() => setSuggestOpen(true)}>
+          📋 Chọn từ danh mục đề xuất
         </button>
         <button className="btn-primary !py-2" onClick={() => setEditing({})}>+ Thêm thiết bị</button>
       </div>
@@ -864,7 +845,204 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
         confirmLabel="Xoá"
         busy={deleteBusy}
       />
+
+      <SuggestionSheet
+        open={suggestOpen}
+        roomId={roomId}
+        existing={items || []}
+        onClose={() => setSuggestOpen(false)}
+        onDone={() => { setSuggestOpen(false); load(); }}
+      />
     </div>
+  );
+}
+
+/* ------------------- Sheet: chọn thiết bị từ danh mục đề xuất ----------------- */
+/**
+ * Hiện danh mục đề xuất theo nhóm (Robotics / Máy tính / Nghe nhìn / Khác).
+ * Mỗi dòng: bật/tắt + ô nhập SỐ LƯỢNG riêng (uKIT bao nhiêu, UGOT bao nhiêu,
+ * laptop/tablet/loa/mic bao nhiêu…). Thiết bị đã có trong phòng hiện sẵn số
+ * lượng hiện tại và sẽ được CẬP NHẬT thay vì tạo trùng.
+ * Admin còn thêm được mục gợi ý mới cho toàn hệ thống.
+ */
+const CAT_LABEL = {
+  robotics: '🤖 Robotics & bộ kit',
+  computer: '💻 Máy tính & thiết bị học tập',
+  av: '🔊 Nghe nhìn',
+  other: '📦 Khác',
+};
+
+function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
+  const auth = useAuth();
+  const toast = useToast();
+  const [list, setList] = useState(null);
+  const [picked, setPicked] = useState({});          // name -> qty (chuỗi)
+  const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newCat, setNewCat] = useState('other');
+  const [newUnit, setNewUnit] = useState('chiếc');
+
+  const loadList = useCallback(() => {
+    api.get('/api/devices/suggestions')
+      .then((d) => setList(d?.items || []))
+      .catch(() => setList([]));
+  }, []);
+
+  useEffect(() => { if (open && list === null) loadList(); }, [open, list, loadList]);
+
+  // Mở sheet: tick sẵn những thiết bị phòng đã có, kèm số lượng hiện tại.
+  useEffect(() => {
+    if (!open) return;
+    const cur = {};
+    for (const it of existing || []) cur[String(it.name).toLowerCase()] = String(it.expected_qty ?? 0);
+    setPicked(cur);
+  }, [open, existing]);
+
+  const keyOf = (sg) => String(sg.name).toLowerCase();
+  const isOn = (sg) => picked[keyOf(sg)] !== undefined;
+
+  const toggle = (sg) => setPicked((p) => {
+    const k = keyOf(sg);
+    const next = { ...p };
+    if (k in next) delete next[k];
+    else next[k] = String(sg.default_qty ?? 1);
+    return next;
+  });
+
+  const setQty = (sg, v) => setPicked((p) => ({ ...p, [keyOf(sg)]: v }));
+
+  const addSuggestion = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    try {
+      const sg = await api.post('/api/devices/suggestions', {
+        name, category: newCat, unit: newUnit.trim() || 'chiếc',
+      });
+      toast.ok(`Đã thêm "${sg.name}" vào danh mục đề xuất.`);
+      setNewName(''); setAdding(false);
+      loadList();
+      setPicked((p) => ({ ...p, [name.toLowerCase()]: String(sg.default_qty ?? 1) }));
+    } catch (e) { toast.fromError(e); }
+  };
+
+  const submit = async () => {
+    const chosen = (list || []).filter(isOn);
+    if (!chosen.length) { toast.err('Chưa chọn thiết bị nào.'); return; }
+    setBusy(true);
+    try {
+      const res = await api.post('/api/devices/catalog/bulk', {
+        school_id: (existing[0] || {}).school_id || undefined,
+        room_id: roomId,
+        items: chosen.map((sg, i) => ({
+          name: sg.name,
+          unit: sg.unit,
+          expected_qty: Number(picked[keyOf(sg)] || 0),
+          sort_order: sg.sort_order || (i + 1) * 10,
+        })),
+      });
+      toast.ok(`Đã thêm ${res.created} · cập nhật ${res.updated} thiết bị.`);
+      onDone();
+    } catch (e) {
+      toast.fromError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const groups = ['robotics', 'computer', 'av', 'other']
+    .map((c) => [c, (list || []).filter((x) => x.category === c)])
+    .filter(([, arr]) => arr.length);
+
+  const count = Object.keys(picked).length;
+
+  return (
+    <Sheet open={open} onClose={busy ? undefined : onClose} wide title="Danh mục thiết bị đề xuất">
+      {list === null ? (
+        <PageLoading label="Đang tải danh mục đề xuất…" />
+      ) : (
+        <>
+          <div className="text-[13px] text-ink-muted mb-3">
+            Bật thiết bị có trong phòng rồi nhập số lượng thực tế. Thiết bị phòng đã khai báo
+            được tick sẵn — sửa số là cập nhật lại.
+          </div>
+
+          {groups.map(([cat, arr]) => (
+            <div key={cat} className="mb-3">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">
+                {CAT_LABEL[cat]}
+              </div>
+              <div className="grid gap-1.5">
+                {arr.map((sg) => {
+                  const on = isOn(sg);
+                  return (
+                    <div key={sg.id}
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition
+                        ${on ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
+                      <button type="button" onClick={() => toggle(sg)}
+                        className={`h-5 w-5 rounded-md grid place-items-center text-[12px] font-bold shrink-0 transition
+                          ${on ? 'bg-brand-grad text-white' : 'bg-white ring-1 ring-inset ring-line'}`}
+                        aria-label={on ? 'Bỏ chọn' : 'Chọn'}>
+                        {on ? '✓' : ''}
+                      </button>
+                      <span className="text-[16px] w-6 text-center shrink-0">{sg.icon}</span>
+                      <button type="button" onClick={() => toggle(sg)}
+                        className="flex-1 min-w-0 text-left text-[13.5px] font-semibold truncate">
+                        {sg.name}
+                      </button>
+                      {on ? (
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number" min="0" inputMode="numeric"
+                            className="input !w-20 !py-1.5 text-center font-bold"
+                            value={picked[keyOf(sg)]}
+                            onChange={(e) => setQty(sg, e.target.value)} />
+                          <span className="text-[12px] text-ink-muted w-10">{sg.unit}</span>
+                        </span>
+                      ) : (
+                        <span className="text-[12px] text-ink-muted shrink-0 w-[122px] text-right">
+                          gợi ý {sg.default_qty} {sg.unit}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {auth.isAdmin && (
+            adding ? (
+              <div className="rounded-xl border border-dashed border-brand-300 p-3 mb-3 grid gap-2">
+                <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Tên thiết bị mới, ví dụ: Máy tính bảng Android" autoFocus />
+                <div className="flex gap-2">
+                  <select className="input flex-1" value={newCat} onChange={(e) => setNewCat(e.target.value)}>
+                    {Object.entries(CAT_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input className="input !w-28" value={newUnit} onChange={(e) => setNewUnit(e.target.value)}
+                    placeholder="đơn vị" />
+                  <button type="button" className="btn-primary !px-3" onClick={addSuggestion}>Thêm</button>
+                  <button type="button" className="btn-line !px-3" onClick={() => setAdding(false)}>Huỷ</button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn-line w-full mb-3" onClick={() => setAdding(true)}>
+                + Thêm thiết bị vào danh mục đề xuất
+              </button>
+            )
+          )}
+
+          <div className="flex gap-2.5 justify-end items-center mt-2">
+            <span className="text-[12.5px] text-ink-muted mr-auto">Đã chọn <b>{count}</b> thiết bị</span>
+            <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
+            <button type="button" className="btn-primary" onClick={submit} disabled={busy || !count}>
+              {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu danh mục'}
+            </button>
+          </div>
+        </>
+      )}
+    </Sheet>
   );
 }
 
