@@ -58,24 +58,46 @@ export async function runMigrations() {
     }
   }
 
+  // Mã lỗi Postgres nghĩa là "thứ này đã có sẵn" — dấu hiệu migration từng chạy
+  // rồi (qua initdb) chứ không phải câu lệnh sai.
+  const DA_TON_TAI = new Set([
+    '42710', // duplicate_object   — constraint, type, trigger…
+    '42P07', // duplicate_table    — bảng, chỉ mục
+    '42701', // duplicate_column
+    '42P16', // invalid_table_definition (thêm khoá chính trùng)
+  ]);
+
   let applied = 0;
+  let daCo = 0;
   for (const file of files) {
     if (done.has(file)) continue;
 
     const sqlText = await fs.readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
     console.log(`[migrate] Đang chạy ${file}…`);
-    await tx(async (c) => {
-      await c.query(sqlText);
-      await c.query('insert into schema_migrations (file_name) values ($1)', [file]);
-    });
-    applied++;
-    console.log(`[migrate] Hoàn tất ${file}.`);
+    try {
+      await tx(async (c) => {
+        await c.query(sqlText);
+        await c.query('insert into schema_migrations (file_name) values ($1)', [file]);
+      });
+      applied++;
+      console.log(`[migrate] Hoàn tất ${file}.`);
+    } catch (e) {
+      if (!DA_TON_TAI.has(e.code)) throw e;   // lỗi thật ⇒ dừng, không nuốt
+      // Thay đổi đã nằm sẵn trong CSDL ⇒ chỉ ghi nhận, không coi là hỏng.
+      await query(
+        'insert into schema_migrations (file_name) values ($1) on conflict do nothing',
+        [file]
+      );
+      daCo++;
+      console.log(`[migrate] ${file}: thay đổi đã có sẵn trong CSDL (${e.message}) — ghi nhận đã chạy.`);
+    }
   }
 
-  if (applied === 0) {
+  if (applied === 0 && daCo === 0) {
     console.log('[migrate] Không có migration mới — cơ sở dữ liệu đã ở phiên bản mới nhất.');
   } else {
-    console.log(`[migrate] Đã áp dụng ${applied} migration mới.`);
+    console.log(`[migrate] Đã áp dụng ${applied} migration mới` +
+      `${daCo ? `, ${daCo} migration đã có sẵn từ trước` : ''}.`);
   }
   return applied;
 }
