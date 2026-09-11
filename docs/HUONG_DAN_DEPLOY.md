@@ -1,153 +1,182 @@
-# Hướng dẫn triển khai LtL TeachOps
+# Hướng dẫn triển khai LtL TeachOps lên VPS
 
-Hệ thống gồm 2 nửa, triển khai độc lập:
+Dành cho VPS đã cài sẵn **aaPanel** (hoặc bt-panel). Tổng thời gian khoảng 20 phút.
 
-| Thành phần | Chạy ở đâu | Deploy thế nào |
-|---|---|---|
-| **API + PostgreSQL + ảnh** | VPS (≥ 2GB RAM, khuyến nghị 4GB) | Docker Compose, hướng dẫn dưới |
-| **Giao diện web (PWA)** | Vercel | Tự động khi push GitHub |
+**Kiến trúc sau khi xong:**
 
-Cần chuẩn bị trước:
-- 1 VPS Ubuntu 22.04/24.04, có IP public, mở cổng 22/80/443.
-- 1 tên miền con trỏ về VPS, ví dụ `api.teachops.learntoleap.vn` (bản ghi DNS **A** → IP VPS).
-- Tài khoản GitHub (repo private `ltl-teachops`) và tài khoản Vercel.
+```
+Điện thoại / máy tính giáo viên
+        │
+        ├─ https://teacher.learntoleap.vn ──► Vercel (giao diện React)
+        │                                        │ gọi API
+        └────────────────────────────────────────┘
+                                                 ▼
+                        https://teachops-api.learntoleap.vn
+                                                 │
+                                    VPS: Nginx (aaPanel) + SSL
+                                                 │ chuyển tiếp
+                                    http://127.0.0.1:3000
+                                                 │
+                              Docker: api (Fastify) ──► db (PostgreSQL)
+                                                 │
+                                    /opt/ltl-teachops/data/uploads (ảnh)
+```
+
+> Nginx và SSL do aaPanel lo, nên **không cần** container Caddy. Cổng 3000 chỉ mở
+> trên `127.0.0.1` — Internet không truy cập thẳng vào được, mọi kết nối phải qua Nginx.
 
 ---
 
-## PHẦN A — VPS (API + cơ sở dữ liệu)
+## Bước 0 — Trỏ tên miền về VPS (làm trước, DNS cần thời gian lan truyền)
 
-### A1. Cài Docker (một lần)
+Vào nơi quản lý DNS của `learntoleap.vn`, thêm một bản ghi:
 
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Đăng xuất SSH rồi vào lại để nhóm docker có hiệu lực.
-docker --version && docker compose version
-```
+| Loại | Tên (Host) | Giá trị | TTL |
+|---|---|---|---|
+| `A` | `teachops-api` | `14.225.206.251` | Auto / 300 |
 
-### A2. Lấy mã nguồn
+Kiểm tra đã trỏ đúng chưa (chạy ở Terminal của aaPanel):
 
 ```bash
-sudo mkdir -p /opt/ltl-teachops && sudo chown $USER /opt/ltl-teachops
-cd /opt/ltl-teachops
-git clone git@github.com:<TAI_KHOAN>/ltl-teachops.git .
+ping -c 2 teachops-api.learntoleap.vn
 ```
 
-> Repo private: tạo **Deploy key** — `ssh-keygen -t ed25519 -f ~/.ssh/teachops_deploy` trên VPS,
-> dán public key vào GitHub → repo → Settings → Deploy keys (chỉ cần Read).
+Thấy IP `14.225.206.251` là được. Chưa thấy thì chờ 5–15 phút rồi thử lại.
 
-### A3. Cấu hình biến môi trường
+## Bước 1 — Cài Docker (bỏ qua nếu đã có)
+
+Trong aaPanel, sidebar trái có mục **Docker** — bấm vào, nếu hiện nút *Install* thì
+bấm và chờ. Hoặc chạy ở **Terminal**:
 
 ```bash
-cp .env.example .env
-nano .env
+command -v docker && docker compose version || curl -fsSL https://get.docker.com | sh
 ```
 
-Bắt buộc sửa các dòng sau:
+## Bước 2 — Tải mã nguồn về VPS
 
-| Biến | Ghi chú |
+Mở **Terminal** trong aaPanel, chạy:
+
+```bash
+mkdir -p /opt && cd /opt && git clone https://github.com/LearntoLeap/ltl-teachops.git && cd ltl-teachops
+```
+
+Repo đang để **Private** thì Git sẽ hỏi tài khoản. Cách gọn nhất là tạo
+**Personal Access Token** (GitHub → Settings → Developer settings → Personal access
+tokens → Tokens (classic) → Generate, tích quyền `repo`), rồi clone bằng:
+
+```bash
+cd /opt && git clone https://<TOKEN>@github.com/LearntoLeap/ltl-teachops.git && cd ltl-teachops
+```
+
+## Bước 3 — Chạy script cài đặt
+
+```bash
+cd /opt/ltl-teachops && bash infra/setup-vps.sh
+```
+
+Script tự làm: sinh mật khẩu ngẫu nhiên → tạo `.env` → build → khởi động → kiểm tra.
+Lần đầu mất 2–4 phút vì phải tải image và build.
+
+Xong, màn hình in ra **email + mật khẩu Quản trị viên** — chép lại ngay.
+
+> Chạy lại script nhiều lần vẫn an toàn: `.env` đã có thì giữ nguyên, dữ liệu
+> trong `data/` không bị đụng tới.
+
+## Bước 4 — Tạo Proxy Project trong aaPanel
+
+Vào **Website** → tab **Proxy Project** → **Add site**:
+
+| Ô | Điền |
 |---|---|
-| `POSTGRES_PASSWORD` | Sinh bằng `openssl rand -base64 32` |
-| `JWT_SECRET` | Sinh bằng `openssl rand -base64 48` |
-| `CORS_ORIGINS` | Tên miền web thật, ví dụ `https://ltl-teachops.vercel.app` (thêm domain riêng nếu có, phân tách phẩy) |
-| `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` | Tài khoản Admin đầu tiên — **bắt buộc đổi mật khẩu ở lần đăng nhập đầu** |
-| `API_DOMAIN` | `api.teachops.learntoleap.vn` (đúng tên miền đã trỏ DNS) |
-| `ACME_EMAIL` | Email nhận thông báo chứng chỉ TLS |
-| `APP_PUBLIC_URL` | Địa chỉ web, dùng trong email gửi người dùng |
-| `SMTP_*` | Bỏ trống được — khi đó mật khẩu tạm hiện trên màn hình Admin thay vì gửi email |
+| Domain name | `teachops-api.learntoleap.vn` |
+| Target URL / Proxy | `http://127.0.0.1:3000` |
+| Send domain | `$host` (để mặc định nếu có) |
+| Apply for SSL | ✅ tích |
 
-### A4. Khởi động
+Bấm **Confirm**. aaPanel tự xin chứng chỉ Let's Encrypt.
+
+Kiểm tra:
 
 ```bash
-docker compose up -d
-docker compose logs -f api      # chờ thấy "[boot] API đang lắng nghe tại cổng 3000"
+curl https://teachops-api.learntoleap.vn/api/health
 ```
 
-Lần đầu khởi động, Postgres tự chạy `server/db/migrations/001_init.sql` (tạo bảng)
-và API tự tạo tài khoản Admin từ `SEED_ADMIN_*`.
+Phải nhận được: `{"ok":true,"service":"teachops-api","time":"..."}`
 
-Kiểm tra từ máy bất kỳ:
+### Chỉnh thêm cho API (quan trọng)
 
-```bash
-curl https://api.teachops.learntoleap.vn/api/health
+API có tải ảnh lên (tối đa 15MB) và có luồng thông báo thời gian thực (SSE).
+Nginx mặc định sẽ chặn/đệm hai thứ này. Vào **Website** → site vừa tạo →
+**Conf** (hoặc **Config File**), thêm vào trong khối `server { ... }`:
+
+```nginx
+# Ảnh minh chứng tối đa 15MB — nới giới hạn mặc định 1MB của Nginx
+client_max_body_size 20m;
+
+# Thông báo thời gian thực (SSE): tắt đệm để tin nhắn tới ngay
+location /api/notifications/stream {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 24h;
+    proxy_set_header Host $host;
+}
 ```
 
-Trả `{"ok":true,...}` là xong phần VPS. Nếu lỗi TLS: kiểm tra DNS đã trỏ đúng chưa
-(`dig +short api.teachops.learntoleap.vn`) rồi `docker compose restart caddy`.
+Lưu lại, aaPanel tự nạp lại Nginx.
 
-### A5. Cập nhật phiên bản mới về sau
+## Bước 5 — Nối giao diện Vercel với API
 
-```bash
-cd /opt/ltl-teachops && bash infra/deploy.sh
-```
+1. Vào project `ltl-teachops` trên Vercel → **Settings** → **Environment Variables**
+2. Thêm biến:
 
-Script tự: kéo code → build lại API → khởi động lại → chạy migration mới → kiểm tra sức khoẻ.
-Postgres/Caddy không bị động chạm.
+   | Key | Value | Environment |
+   |---|---|---|
+   | `VITE_API_URL` | `https://teachops-api.learntoleap.vn` | Production, Preview, Development |
 
-### A6. Sao lưu hằng đêm (rất nên bật)
+3. Sang tab **Deployments** → bản mới nhất → dấu `...` → **Redeploy**
+   (nhớ **bỏ tích** "Use existing Build Cache")
 
-```bash
-crontab -e
-# thêm dòng:
-30 2 * * * cd /opt/ltl-teachops && bash infra/backup.sh >> backups/backup.log 2>&1
-```
-
-Sao lưu CSDL + toàn bộ ảnh vào `backups/`, giữ 14 bản gần nhất. Lệnh khôi phục in sẵn ở cuối mỗi lần chạy.
+Xong. Mở `https://teacher.learntoleap.vn`, hộp cảnh báo vàng biến mất và bạn
+đăng nhập được bằng tài khoản Quản trị viên ở Bước 3.
 
 ---
 
-## PHẦN B — Vercel (giao diện web)
+## Vận hành hằng ngày
 
-### B1. Đẩy code lên GitHub (làm ở máy cá nhân)
+| Việc | Lệnh (chạy trong `/opt/ltl-teachops`) |
+|---|---|
+| Cập nhật code mới từ GitHub | `bash infra/deploy.sh` |
+| Xem log API | `docker compose logs -f api` |
+| Xem trạng thái | `docker compose ps` |
+| Khởi động lại API | `docker compose restart api` |
+| Sao lưu CSDL | `bash infra/backup.sh` |
+| Đổi cấu hình (CORS, email…) | sửa `.env` rồi `docker compose up -d --force-recreate api` |
 
-```bash
-cd C:\Users\admin\ltl-teachops
-git remote add origin git@github.com:<TAI_KHOAN>/ltl-teachops.git
-git push -u origin main
-```
-
-### B2. Tạo project Vercel
-
-1. vercel.com → **Add New → Project** → chọn repo `ltl-teachops`.
-2. **Root Directory**: chọn `web` (quan trọng — repo chứa cả server).
-3. Framework: Vite (tự nhận). Build command `npm run build`, output `dist` (mặc định).
-4. **Environment Variables** thêm:
-   - `VITE_API_URL` = `https://api.teachops.learntoleap.vn`
-5. Deploy. Xong sẽ có địa chỉ `https://ltl-teachops.vercel.app`.
-
-### B3. Nối hai đầu
-
-Quay lại VPS, đảm bảo `.env` có đúng domain web trong `CORS_ORIGINS`
-(và `APP_PUBLIC_URL`), rồi:
+**Nên đặt lịch sao lưu tự động**: aaPanel → **Cron** → Add task, loại *Shell Script*,
+chạy hằng ngày lúc 2:00 sáng, nội dung:
 
 ```bash
-docker compose up -d api
+cd /opt/ltl-teachops && bash infra/backup.sh
 ```
 
-Từ đó về sau: **push GitHub = web tự deploy**; API cập nhật bằng `bash infra/deploy.sh`.
-
----
-
-## PHẦN C — Kiểm tra đầu-cuối sau khi triển khai
-
-1. Mở địa chỉ web → màn đăng nhập hiện logo LtL nền tím.
-2. Đăng nhập bằng `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` → hệ thống **bắt buộc đổi mật khẩu**.
-3. Vào **Trường & Lớp** → tạo trường đầu tiên (điền toạ độ GPS: mở Google Maps,
-   bấm giữ vị trí cổng trường, sao chép 2 số toạ độ).
-4. Tạo lớp + phòng STEM + danh mục thiết bị cho trường.
-5. Vào **Tài khoản** → tạo 1 Giáo viên thử → nhận mật khẩu tạm (trên màn hình nếu chưa cấu hình SMTP).
-6. Vào **Lịch dạy** → phân công giáo viên đó 1 buổi hôm nay.
-7. Mở điện thoại, đăng nhập giáo viên → đổi mật khẩu → Trang chủ hiện buổi dạy →
-   **Check-in** (cấp quyền Vị trí + chụp ảnh) → **Điểm danh** (chụp ảnh lớp) → **Check-out**.
-8. Quay lại tài khoản quản lý → **Báo cáo** → xuất thử `Bảng chấm công.xlsx`.
-
-## Sự cố thường gặp
+## Xử lý sự cố
 
 | Hiện tượng | Nguyên nhân & cách xử lý |
 |---|---|
-| Web báo "Không kết nối được máy chủ" | `VITE_API_URL` sai, hoặc API chưa chạy (`docker compose ps`), hoặc thiếu domain trong `CORS_ORIGINS` |
-| Đăng nhập báo lỗi CORS trong Console | Thêm chính xác origin của web (kể cả `https://`) vào `CORS_ORIGINS`, restart api |
-| TLS không cấp được | DNS chưa trỏ đúng IP, hoặc cổng 80/443 bị firewall chặn (`ufw allow 80,443/tcp`) |
-| Check-in báo "ngoài bán kính" dù đứng trong trường | Trường chưa nhập đúng toạ độ, hoặc bán kính nhỏ — sửa ở Trường & Lớp → Thông tin (`gps_radius_m`) |
-| Email không gửi | Chưa khai `SMTP_*`; hệ thống vẫn chạy, mật khẩu tạm hiện trên màn hình Admin |
-| VPS đầy ổ | Ảnh nằm ở `data/uploads`, backup ở `backups/` — gắn thêm volume hoặc giảm số bản backup giữ lại |
+| `curl .../api/health` không phản hồi | API chưa chạy. Xem `docker compose logs --tail 60 api` |
+| Trang web báo lỗi CORS | `CORS_ORIGINS` trong `.env` thiếu tên miền web. Thêm vào rồi `docker compose up -d --force-recreate api` |
+| Tải ảnh báo lỗi 413 | Thiếu `client_max_body_size 20m;` trong cấu hình Nginx (Bước 4) |
+| Chuông thông báo không tự cập nhật | Thiếu khối `location /api/notifications/stream` (Bước 4) |
+| aaPanel xin SSL thất bại | DNS chưa trỏ đúng về IP VPS, hoặc cổng 80 đang bị chặn. Kiểm tra Bước 0 |
+| Quên mật khẩu Admin | `grep SEED_ADMIN /opt/ltl-teachops/.env` — chỉ dùng được nếu chưa từng đổi mật khẩu; đã đổi rồi thì dùng chức năng Quên mật khẩu |
+| Hết dung lượng đĩa | Dọn image cũ: `docker image prune -af` |
+
+## Bảo mật
+
+- `.env` chứa mật khẩu CSDL và `JWT_SECRET` — đặt quyền `600`, đã bị `.gitignore` chặn.
+- Postgres **không mở cổng ra ngoài**, chỉ container `api` gọi được.
+- Cổng 3000 chỉ lắng nghe trên `127.0.0.1`, bắt buộc đi qua Nginx + SSL.
+- Ảnh minh chứng phục vụ qua route có kiểm tra quyền, không để Nginx đọc thẳng thư mục.

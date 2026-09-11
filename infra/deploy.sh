@@ -3,7 +3,8 @@
 # deploy.sh — Cập nhật LtL TeachOps API trên VPS.
 # Chạy tại thư mục dự án trên VPS:  bash infra/deploy.sh
 # Làm gì: kéo code mới → build lại image api → khởi động lại → chạy migration →
-#         kiểm tra sức khoẻ. Postgres và Caddy KHÔNG bị động chạm (không mất kết nối TLS).
+#         kiểm tra sức khoẻ.
+# Postgres KHÔNG bị động chạm — dữ liệu an toàn, không mất kết nối.
 # =============================================================================
 set -euo pipefail
 
@@ -15,7 +16,7 @@ git pull --ff-only
 echo "==> [2/5] Build lại image API…"
 docker compose build api
 
-echo "==> [3/5] Khởi động lại API (db & caddy giữ nguyên)…"
+echo "==> [3/5] Khởi động lại API (db giữ nguyên — dữ liệu an toàn)…"
 docker compose up -d api
 
 echo "==> [4/5] Chạy migration cơ sở dữ liệu (nếu có file mới)…"

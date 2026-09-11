@@ -1,9 +1,19 @@
 # =============================================================================
-# LtL TeachOps — hạ tầng VPS (3 container, chạy tốt trong 4GB RAM)
-#   caddy  : TLS tự động (Let's Encrypt) + reverse proxy về api
+# LtL TeachOps — hạ tầng VPS (chạy tốt trong 4GB RAM)
 #   api    : Fastify — REST + tải tệp + SSE
 #   db     : PostgreSQL 16
-# Chạy:  docker compose up -d
+#   caddy  : TLS tự động (Let's Encrypt) + reverse proxy — TUỲ CHỌN, xem dưới
+#
+# api luôn công bố cổng 3000 CHỈ trên 127.0.0.1 (không lộ ra Internet) — dùng
+# để một reverse proxy chạy trên HOST (Nginx của aaPanel/bt-panel, hoặc Caddy
+# bên dưới) trỏ vào.
+#
+# Hai cách chạy:
+#   1) VPS đã có panel quản trị (aaPanel...) với Nginx + xin SSL sẵn:
+#        docker compose up -d          # chỉ chạy db + api
+#      rồi tạo site "Proxy Project" trong panel trỏ về http://127.0.0.1:3000
+#   2) VPS trần, chưa có panel nào — dùng Caddy đi kèm để tự lo TLS:
+#        docker compose --profile caddy up -d
 # =============================================================================
 services:
   db:
@@ -79,12 +89,17 @@ services:
       resources:
         limits:
           memory: 800M
-    expose:
-      - "3000"
+    # 127.0.0.1 = chỉ tiến trình khác TRÊN CHÍNH VPS này gọi được (Nginx của
+    # panel, hoặc Caddy ở dưới) — Internet không truy cập trực tiếp cổng này.
+    ports:
+      - "127.0.0.1:3000:3000"
 
+  # Chỉ khởi động khi chạy: docker compose --profile caddy up -d
+  # (bỏ qua hoàn toàn nếu VPS đã có panel tự lo Nginx + SSL, ví dụ aaPanel)
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    profiles: ["caddy"]
     depends_on:
       - api
     ports:
