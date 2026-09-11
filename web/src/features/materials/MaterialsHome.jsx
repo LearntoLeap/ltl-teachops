@@ -144,6 +144,74 @@ function MaterialCard({ m, area }) {
   );
 }
 
+/* --------------------------- Bảng danh sách tài liệu ------------------------ */
+/**
+ * MaterialTable — chế độ xem danh sách: mỗi tài liệu một dòng, thấy được
+ * nhiều mục cùng lúc và so sánh nhanh theo khối / tiết / loại.
+ */
+function MaterialTable({ items, area }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[820px]">
+          <thead>
+            <tr>
+              <th className="th !w-[52px]">Khối</th>
+              <th className="th !w-[64px]">Tiết</th>
+              <th className="th">Tên tài liệu</th>
+              <th className="th">Tên bài / Chương trình</th>
+              <th className="th !w-[130px]">Loại</th>
+              <th className="th !w-[150px]">Giải pháp</th>
+              <th className="th !w-[130px]">Người đăng</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((m) => (
+              <tr key={m.id} className="hover:bg-brand-50/40 transition">
+                <td className="td text-center font-bold text-sky-700">{m.grade || '—'}</td>
+                <td className="td text-center text-ink-soft">{m.lesson_no || '—'}</td>
+                <td className="td">
+                  <Link to={`/hoc-lieu/${m.id}`}
+                    className="font-semibold text-ink hover:text-brand-800 hover:underline">
+                    {m.title}
+                  </Link>
+                  <span className="ml-1.5 inline-flex gap-1 align-middle">
+                    {m.is_new && <Badge tone="new">Mới</Badge>}
+                    {area === 'teacher' && m.approval_status && m.approval_status !== 'approved' && (
+                      <Badge tone={m.approval_status}>
+                        {LABEL.approval[m.approval_status] || m.approval_status}
+                      </Badge>
+                    )}
+                  </span>
+                </td>
+                <td className="td text-[13px] text-ink-soft">
+                  {m.lesson_title || '—'}
+                  {m.curriculum && (
+                    <span className="block text-[11.5px] text-ink-muted">{m.curriculum}</span>
+                  )}
+                </td>
+                <td className="td text-[12.5px]">
+                  {m.type_name ? `${m.type_icon || ''} ${m.type_name}` : '—'}
+                </td>
+                <td className="td text-[12.5px] text-emerald-700 truncate">{m.solution_name || '—'}</td>
+                <td className="td text-[12.5px] text-ink-muted">
+                  {m.owner_name || '—'}
+                  {(m.updated_at || m.created_at) && (
+                    <span className="block text-[11px]">{fmtAgo(m.updated_at || m.created_at)}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
+        {items.length} tài liệu — bấm tên để mở chi tiết
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------ Sheet thêm giải pháp (Admin) ---------------------- */
 const SOLUTION_GROUPS = [
   ['ubtech', 'UBTECH'], ['stickem', "Stick'em"], ['weeemake', 'Weeemake'], ['other', 'Khác'],
@@ -473,6 +541,8 @@ export default function MaterialsHome() {
   const [solutionId, setSolutionId] = useState('');
   const [solutions, setSolutions] = useState([]);
   const [solutionFormOpen, setSolutionFormOpen] = useState(false);
+  // Nhớ kiểu xem người dùng đã chọn để lần sau vào không phải đổi lại
+  const [view, setView] = useState(() => localStorage.getItem('teachops.mat-view') || 'list');
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -571,6 +641,14 @@ export default function MaterialsHome() {
             onChange={(v) => { setQ(v); setPage(1); }}
             placeholder="Tìm tiêu đề, tên bài, chương trình…"
           />
+          <Segmented
+            value={view}
+            onChange={(v) => { setView(v); localStorage.setItem('teachops.mat-view', v); }}
+            options={[
+              { value: 'list', label: '☰ Danh sách' },
+              { value: 'card', label: '▦ Thẻ' },
+            ]}
+          />
         </div>
 
         <ChipRow
@@ -618,8 +696,14 @@ export default function MaterialsHome() {
             )}
           />
         ) : (
-          <div className={`grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3 ${loading ? 'opacity-60 pointer-events-none' : ''}`}>
-            {items.map((m) => <MaterialCard key={m.id} m={m} area={area} />)}
+          <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
+            {view === 'list' ? (
+              <MaterialTable items={items} area={area} />
+            ) : (
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                {items.map((m) => <MaterialCard key={m.id} m={m} area={area} />)}
+              </div>
+            )}
           </div>
         )
       )}

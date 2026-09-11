@@ -615,6 +615,68 @@ function ManagerDashboard({ data }) {
   );
 }
 
+/**
+ * TodayScheduleTable — lịch dạy hôm nay toàn hệ thống, dạng bảng gọn.
+ * Mỗi dòng kèm 2 chấm trạng thái để Admin/Phòng chuyên môn nhìn phát biết
+ * buổi nào đã chấm công / đã điểm danh mà không phải mở từng buổi.
+ */
+function TodayScheduleTable({ items }) {
+  if (!items?.length) {
+    return (
+      <div className="rise rise-4 card px-4 py-3 text-[13.5px] text-ink-muted">
+        Hôm nay chưa có buổi dạy nào được xếp lịch.
+      </div>
+    );
+  }
+  return (
+    <div className="rise rise-4 card overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[620px]">
+          <thead>
+            <tr>
+              <th className="th !w-[96px]">Giờ</th>
+              <th className="th">Lớp</th>
+              <th className="th">Trường</th>
+              <th className="th">Giáo viên</th>
+              <th className="th !w-[150px]">Trạng thái</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((s) => (
+              <tr key={s.id}>
+                <td className="td whitespace-nowrap font-bold text-brand-800">
+                  {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
+                </td>
+                <td className="td font-semibold">{s.class_name}</td>
+                <td className="td text-ink-soft">{s.school_name}</td>
+                <td className="td text-ink-soft">
+                  {s.teacher_name || '—'}
+                  {s.assistant_name && (
+                    <span className="block text-[11.5px] text-ink-muted">TG: {s.assistant_name}</span>
+                  )}
+                </td>
+                <td className="td">
+                  <span className="flex flex-col gap-0.5 text-[11.5px]">
+                    <span className={s.has_timesheet ? 'text-emerald-600 font-semibold' : 'text-ink-muted'}>
+                      {s.has_timesheet ? '✓' : '○'} Chấm công
+                    </span>
+                    <span className={s.has_attendance ? 'text-emerald-600 font-semibold' : 'text-ink-muted'}>
+                      {s.has_attendance ? '✓' : '○'} Điểm danh
+                    </span>
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
+        Tổng <b>{items.length}</b> buổi hôm nay
+      </div>
+    </div>
+  );
+}
+
 /* ===================== 3) QUẢN TRỊ VIÊN ===================== */
 
 const AUDIT_ICON = {
@@ -644,6 +706,9 @@ function AdminDashboard({ data }) {
         <Tile icon="🗓️" chipCls="bg-amber-50" numCls="text-amber-600" num={org.week_sessions}
           label="Buổi dạy tuần này" sub={`hôm nay ${org.today_sessions ?? 0} buổi`} />
       </div>
+
+      <Section kind="watch" title="Lịch dạy hôm nay" to="/lich" toLabel="Xem lịch đầy đủ ›" />
+      <TodayScheduleTable items={data.today_schedule} />
 
       <div className="grid lg:grid-cols-2 gap-x-4 items-start">
         {/* Nhân sự */}

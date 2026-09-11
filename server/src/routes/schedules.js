@@ -258,11 +258,13 @@ export default async function routes(app) {
     const created = await one(
       `insert into schedules
          (school_id, class_id, room_id, teacher_id, assistant_id,
-          session_date, start_time, end_time, subject, note, created_by)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          session_date, start_time, end_time, subject, note, created_by, self_added)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        returning *`,
       [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
-        sessionDate, core.startTime, core.endTime, core.subject, note, req.user.id]
+        sessionDate, core.startTime, core.endTime, core.subject, note, req.user.id,
+        // GV/TG tự thêm buổi bị thiếu ⇒ đánh dấu để Phòng chuyên môn rà soát
+        selfOnly]
     );
 
     audit(req, {
@@ -276,6 +278,71 @@ export default async function routes(app) {
 
     reply.code(201);
     return scheduleDetail(created.id);
+  });
+
+  /* ------------------------------------------------------------------------
+   * POST /api/schedules/batch — nhập NHIỀU buổi KHÁC NHAU một lượt (dạng bảng).
+   *
+   * Khác /bulk: /bulk lặp CÙNG một buổi theo thứ trong tuần; ở đây mỗi dòng là
+   * một buổi độc lập (khác lớp, khác giờ, khác giáo viên) — dùng cho màn hình
+   * nhập bảng hoặc dán dữ liệu từ Excel.
+   *
+   * body: { rows: [{ session_date, start_time, end_time, school_id, class_id,
+   *                  teacher_id?, assistant_id?, room_id?, subject? }] }
+   *
+   * Dòng lỗi KHÔNG làm hỏng cả lượt: bỏ qua và trả về trong `skipped` kèm số
+   * dòng + lý do, để người nhập biết sửa đúng chỗ nào.
+   * ---------------------------------------------------------------------- */
+  app.post('/api/schedules/batch', { preHandler: requirePerm('schedule.manage') }, async (req) => {
+    const rowsIn = req.body?.rows;
+    if (!Array.isArray(rowsIn) || !rowsIn.length) throw badRequest('Chưa có dòng nào để tạo.');
+    if (rowsIn.length > MAX_BULK_SESSIONS) {
+      throw badRequest(`Mỗi lượt nhập tối đa ${MAX_BULK_SESSIONS} dòng (đang có ${rowsIn.length}).`);
+    }
+
+    const skipped = [];
+    let created = 0;
+
+    for (let i = 0; i < rowsIn.length; i++) {
+      const row = rowsIn[i] || {};
+      try {
+        const core = await validateSessionCore(req.user, row);
+        const sessionDate = dateStr(row.session_date, 'session_date', { required: true });
+
+        await tx(async (c) => {
+          const q = (t, p) => c.query(t, p);
+          // Trùng giờ của chính giáo viên/trợ giảng ⇒ bỏ qua dòng này
+          for (const person of [core.teacher, core.assistant].filter(Boolean)) {
+            const hit = await findOverlap(q, {
+              userId: person.id, date: sessionDate,
+              start: core.startTime, end: core.endTime,
+            });
+            if (hit) throw conflict(overlapMessage(hit, sessionDate));
+          }
+          await c.query(
+            `insert into schedules
+               (school_id, class_id, room_id, teacher_id, assistant_id,
+                session_date, start_time, end_time, subject, created_by)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
+             sessionDate, core.startTime, core.endTime, core.subject, req.user.id]
+          );
+        });
+        created++;
+      } catch (e) {
+        skipped.push({ row: i + 1, reason: e.message || 'Dòng không hợp lệ.' });
+      }
+    }
+
+    if (created) {
+      audit(req, {
+        action: 'create', entity: 'schedules',
+        summary: `Nhập bảng lịch dạy: tạo ${created} buổi` +
+          `${skipped.length ? `, bỏ qua ${skipped.length} dòng` : ''}.`,
+        after: { created, skipped },
+      });
+    }
+    return { created, skipped };
   });
 
   /* ------------------------------------------------------------------------

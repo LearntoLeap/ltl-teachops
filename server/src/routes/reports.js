@@ -136,7 +136,7 @@ export default async function routes(app) {
   app.get('/api/reports/admin-overview', { preHandler: requireRole('admin') }, async () => {
     const today = vnToday();
 
-    const [org, staff, flagged, issueCounts, fbNew, matPending, recentAudit, recentUsers] =
+    const [org, staff, flagged, issueCounts, fbNew, matPending, recentAudit, todaySchedule, recentUsers] =
       await Promise.all([
         one(
           `select
@@ -165,6 +165,28 @@ export default async function routes(app) {
              left join users u on u.id = a.actor_id
             order by a.created_at desc
             limit 6`
+        ),
+        // Lịch dạy HÔM NAY toàn hệ thống — hiện ngay trên trang chủ Quản trị
+        rows(
+          `select s.id, s.start_time, s.end_time, s.subject,
+                  c.name as class_name, sc.name as school_name, r.name as room_name,
+                  t.full_name as teacher_name, a.full_name as assistant_name,
+                  (ts.id is not null) as has_timesheet,
+                  (att.id is not null) as has_attendance
+             from schedules s
+             join classes c on c.id = s.class_id
+             join schools sc on sc.id = s.school_id
+             left join stem_rooms r on r.id = s.room_id
+             left join users t on t.id = s.teacher_id
+             left join users a on a.id = s.assistant_id
+             left join lateral (
+               select id from timesheets where schedule_id = s.id limit 1
+             ) ts on true
+             left join attendance att on att.schedule_id = s.id
+            where s.session_date = $1::date and s.status <> 'cancelled'
+            order by s.start_time, sc.name
+            limit 30`,
+          [today]
         ),
         rows(
           `select id, full_name, role, created_at, last_login_at
@@ -195,6 +217,7 @@ export default async function routes(app) {
         materials_pending: matPending?.cnt ?? 0,
       },
       recent_audit: recentAudit,
+      today_schedule: todaySchedule,
       recent_users: recentUsers,
     };
   });

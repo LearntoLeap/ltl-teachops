@@ -13,6 +13,7 @@ import {
   PageHeader, PageLoading, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
+import BatchEntry from './BatchEntry.jsx';
 
 /* -------------------------------- Tiện ích -------------------------------- */
 
@@ -122,9 +123,16 @@ function ScheduleCard({ s, onOpen }) {
         <span className={`font-bold text-[15px] ${cancelled ? 'line-through text-ink-muted' : 'text-brand-800'}`}>
           {fmtRange(s.start_time, s.end_time)}
         </span>
-        <Badge tone={STATUS_TONE[s.status] || 'neutral'}>
-          {LABEL.scheduleStatus[s.status] || s.status || '—'}
-        </Badge>
+        <span className="flex items-center gap-1.5">
+          {s.self_added && (
+            <Badge tone="pending" title="Giáo viên tự thêm buổi bị thiếu — nên rà soát">
+              ✋ GV tự thêm
+            </Badge>
+          )}
+          <Badge tone={STATUS_TONE[s.status] || 'neutral'}>
+            {LABEL.scheduleStatus[s.status] || s.status || '—'}
+          </Badge>
+        </span>
       </div>
       <div className="font-semibold text-[14px] mt-1 truncate">
         {classNameOf(s) || 'Lớp ?'}{schoolNameOf(s) ? ` · ${schoolNameOf(s)}` : ''}
@@ -641,6 +649,7 @@ export default function ScheduleList() {
   const [sortBy, setSortBy] = useState('time');   // time | school | teacher
   const [monthAnchor, setMonthAnchor] = useState(() => new Date());
   const [weekOffset, setWeekOffset] = useState(0);   // 0 = tuần này, ±n tuần
+  const [batchOpen, setBatchOpen] = useState(false);  // màn nhập bảng nhiều buổi
   const [schoolId, setSchoolId] = useState('');
   const [schools, setSchools] = useState([]);
 
@@ -737,6 +746,7 @@ export default function ScheduleList() {
         sub={`${fmtDate(range.from)} – ${fmtDate(range.to)}${items ? ` · ${items.length} buổi` : ''}`}
         actions={canManage ? (
           <>
+            <button className="btn-line" onClick={() => setBatchOpen(true)}>📋 Nhập bảng</button>
             <button className="btn-line" onClick={() => openForm({ bulk: true })}>+ Lịch lặp tuần</button>
             <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi</button>
           </>
@@ -877,6 +887,13 @@ export default function ScheduleList() {
         </>
       )}
 
+      <BatchEntry
+        open={batchOpen}
+        onClose={() => setBatchOpen(false)}
+        schools={schools}
+        onDone={(close) => { load(); if (close) setBatchOpen(false); }}
+      />
+
       {/* ------------------------- Chi tiết buổi dạy ------------------------- */}
       <Sheet open={!!detail} onClose={() => setDetail(null)} title="Chi tiết buổi dạy">
         {detail && (
@@ -892,6 +909,11 @@ export default function ScheduleList() {
             <div className="text-[13px] text-ink-muted mb-3">{fmtDateLong(detail.session_date || detail.date)}</div>
 
             <div className="card p-3.5 mb-4">
+              <Row label="Nguồn">
+                {detail.self_added
+                  ? <span className="text-amber-700">✋ Giáo viên tự thêm</span>
+                  : <span className="text-ink-muted">Phòng chuyên môn xếp lịch</span>}
+              </Row>
               <Row label="Lớp">{classNameOf(detail) || '—'}</Row>
               <Row label="Trường">{schoolNameOf(detail) || '—'}</Row>
               <Row label="Phòng">{roomNameOf(detail) || '—'}</Row>
