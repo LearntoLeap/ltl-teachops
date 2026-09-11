@@ -410,6 +410,54 @@ export default async function routes(app) {
     );
     if (!before) throw notFound('Không tìm thấy người dùng.');
 
+    // ?hard=1 — xoá hẳn khỏi hệ thống, CHỈ khi tài khoản chưa phát sinh dữ liệu
+    // nghiệp vụ nào. Dùng cho trường hợp tạo nhầm (sai email, sai vai trò):
+    // xoá mềm sẽ giữ email lại và không tạo lại được vì trùng.
+    const hard = bool(req.query.hard, 'hard', { def: false });
+
+    if (hard) {
+      // Đếm dữ liệu đang tham chiếu tới người này. Nếu có thì KHÔNG xoá cứng —
+      // xoá sẽ làm mất vết chấm công/điểm danh, hỏng số liệu tính lương.
+      const refs = await one(
+        `select
+           (select count(*) from timesheets      where user_id     = $1)::int as cham_cong,
+           (select count(*) from attendance      where marked_by   = $1)::int as diem_danh,
+           (select count(*) from device_checks   where user_id     = $1)::int as kiem_ke,
+           (select count(*) from device_issues   where reported_by = $1)::int as bao_hong,
+           (select count(*) from materials       where owner_id    = $1)::int as hoc_lieu,
+           (select count(*) from feedback        where created_by  = $1)::int as gop_y,
+           (select count(*) from schedules
+             where teacher_id = $1 or assistant_id = $1)::int                 as lich_day`,
+        [id]
+      );
+      const busy = Object.entries(refs).filter(([, v]) => v > 0);
+
+      if (busy.length) {
+        const LABEL = {
+          cham_cong: 'lượt chấm công', diem_danh: 'buổi điểm danh',
+          kiem_ke: 'lượt kiểm kê thiết bị', bao_hong: 'phiếu báo hỏng',
+          hoc_lieu: 'học liệu', gop_y: 'góp ý', lich_day: 'buổi trong lịch dạy',
+        };
+        const chiTiet = busy.map(([k, v]) => `${v} ${LABEL[k]}`).join(', ');
+        throw unprocessable(
+          `Không xoá hẳn được vì tài khoản này đã phát sinh dữ liệu: ${chiTiet}. ` +
+          'Xoá sẽ làm mất số liệu chấm công/lương. Hãy dùng "Khoá tài khoản" thay thế.'
+        );
+      }
+
+      // Sạch dữ liệu — xoá hẳn. Các bảng phụ (user_schools, class_assignments,
+      // refresh_tokens, notifications) đã khai on delete cascade nên tự dọn theo.
+      await query('delete from users where id = $1', [id]);
+      audit(req, {
+        action: 'delete',
+        entity: 'users',
+        entityId: id,
+        summary: `Xoá hẳn tài khoản ${before.email} (chưa phát sinh dữ liệu)`,
+        before,
+      });
+      return { ok: true, hard_deleted: true };
+    }
+
     await query('update users set is_active = false where id = $1', [id]);
     await revokeAllUserTokens(id);
 
@@ -422,7 +470,7 @@ export default async function routes(app) {
       after: { ...before, is_active: false },
     });
 
-    return { ok: true };
+    return { ok: true, hard_deleted: false };
   });
 
   /* ------------------------------------------------------------------------

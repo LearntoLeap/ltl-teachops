@@ -45,6 +45,19 @@ export async function buildApp() {
     exposedHeaders: ['Content-Disposition'],
   });
 
+  /* --------------------- Thân JSON rỗng = object rỗng --------------------- */
+  // Nhiều endpoint không cần dữ liệu gửi lên (cấp lại mật khẩu, xoá, đánh dấu
+  // đã đọc…). Một số client vẫn đính kèm Content-Type: application/json với
+  // thân rỗng; Fastify mặc định coi đó là lỗi. Ở đây nhận là {} cho êm.
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (!body || !String(body).trim()) return done(null, {});
+    try {
+      done(null, JSON.parse(body));
+    } catch {
+      done(new AppError(400, 'BAD_REQUEST', 'Dữ liệu gửi lên không phải JSON hợp lệ.'), undefined);
+    }
+  });
+
   /* ----------------------------- Multipart ------------------------------- */
   await app.register(multipart, {
     limits: {
@@ -98,6 +111,18 @@ export async function buildApp() {
     if (err instanceof AppError) {
       return reply.code(err.status).send({
         error: { code: err.code, message: err.message, details: err.details },
+      });
+    }
+
+    // Client gửi Content-Type: application/json nhưng thân rỗng (hay gặp ở các
+    // endpoint không cần dữ liệu như reset-password, DELETE). Coi như body rỗng
+    // là hợp lệ chứ không phải lỗi hệ thống.
+    if (err.code === 'FST_ERR_CTP_EMPTY_JSON_BODY') {
+      return reply.code(400).send({
+        error: {
+          code: 'EMPTY_BODY',
+          message: 'Yêu cầu thiếu dữ liệu gửi lên. Vui lòng thử lại.',
+        },
       });
     }
 

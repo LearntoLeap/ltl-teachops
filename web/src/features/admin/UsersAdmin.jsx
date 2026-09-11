@@ -625,6 +625,8 @@ export default function UsersAdmin() {
   const [resetBusy, setResetBusy] = useState(false);
   const [lockConfirm, setLockConfirm] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [tempResult, setTempResult] = useState(null);   // { email, temp_password }
 
   const onCreated = (res, email) => {
@@ -672,6 +674,24 @@ export default function UsersAdmin() {
       toast.fromError(e);
     } finally {
       setLockBusy(false);
+    }
+  };
+
+  const doDelete = async () => {
+    if (!detail || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      await api.del(`/api/users/${detail.id}`, { query: { hard: 1 } });
+      toast.ok(`Đã xoá hẳn tài khoản ${detail.email}. Email này dùng lại được.`);
+      setDeleteConfirm(false);
+      setSelectedId(null);          // đóng bảng chi tiết vì bản ghi không còn
+      load();
+    } catch (e) {
+      // 422 = tài khoản đã phát sinh dữ liệu; server nói rõ dữ liệu gì.
+      toast.fromError(e);
+      setDeleteConfirm(false);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -888,7 +908,21 @@ export default function UsersAdmin() {
                   🔓 Mở khoá tài khoản
                 </button>
               ))}
+              {!isSelf && (
+                <button
+                  className="btn-line col-span-2 !text-rose-700 !border-rose-200 hover:!border-rose-400"
+                  onClick={() => setDeleteConfirm(true)}>
+                  🗑️ Xoá hẳn tài khoản
+                </button>
+              )}
             </div>
+            {!isSelf && (
+              <p className="text-[12px] text-ink-muted mt-2 leading-relaxed">
+                <b>Khoá</b> giữ lại toàn bộ dữ liệu chấm công, người dùng chỉ không đăng nhập được.
+                <b> Xoá hẳn</b> dùng khi tạo nhầm — chỉ thực hiện được nếu tài khoản chưa phát sinh
+                dữ liệu nào, và sau đó email được giải phóng để tạo lại.
+              </p>
+            )}
           </>
         )}
       </Sheet>
@@ -944,6 +978,19 @@ export default function UsersAdmin() {
         message={detail?.is_active
           ? `Khoá tài khoản "${detail?.full_name || ''}"? Người dùng sẽ không thể đăng nhập cho tới khi được mở khoá.`
           : `Mở khoá tài khoản "${detail?.full_name || ''}"? Người dùng sẽ đăng nhập lại được ngay.`}
+      />
+
+      <ConfirmSheet
+        open={deleteConfirm}
+        onClose={() => setDeleteConfirm(false)}
+        onConfirm={doDelete}
+        busy={deleteBusy}
+        danger
+        title="Xoá hẳn tài khoản"
+        confirmLabel="Xoá hẳn"
+        message={`Xoá hẳn tài khoản "${detail?.full_name || ''}" (${detail?.email || ''})? `
+          + 'Thao tác này không hoàn tác được. Nếu tài khoản đã từng chấm công, điểm danh hay '
+          + 'đăng học liệu thì hệ thống sẽ từ chối để bảo vệ số liệu — khi đó hãy dùng "Khoá tài khoản".'}
       />
 
       <TempPasswordSheet result={tempResult} onClose={() => setTempResult(null)} />
