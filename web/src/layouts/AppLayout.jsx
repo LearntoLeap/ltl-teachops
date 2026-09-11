@@ -255,7 +255,10 @@ export default function AppLayout() {
           <div>
             <div className="font-bold">{auth.user?.full_name}</div>
             <div className="text-[13px] text-ink-muted">{auth.user?.email}</div>
-            <div className="text-[12px] text-brand-700 font-semibold">{auth.roleLabel}</div>
+            <div className="text-[12px] text-brand-700 font-semibold">
+              {auth.roleLabel}
+              {auth.user?.region_name ? ` · 📍 ${auth.user.region_name}` : ''}
+            </div>
           </div>
         </div>
         <div className="grid gap-2">

@@ -7,19 +7,21 @@
  */
 import { query, rows, one, scalar, tx } from '../db.js';
 import { notFound, conflict, unprocessable, badRequest } from '../lib/errors.js';
-import { requirePerm, assertPerm, ROLES, ROLE_LABEL, isAdmin } from '../lib/rbac.js';
+import { requirePerm, requireRole, assertPerm, ROLES, ROLE_LABEL, isAdmin } from '../lib/rbac.js';
 import { visibleSchoolIds, assertSchoolAccess, scheduleFilter } from '../lib/scope.js';
 import { generateTempPassword, hashPassword, revokeAllUserTokens } from '../lib/auth.js';
 import { audit } from '../lib/audit.js';
 import { sendWelcome } from '../lib/mailer.js';
 import {
-  str, uuid, bool, enumOf, email, uuidList, paging, dateRange,
+  str, uuid, bool, enumOf, email, uuidList, paging, dateRange, dateStr,
 } from '../lib/validate.js';
 
 /** Cột công khai của bảng users — KHÔNG BAO GIỜ trả password_hash. */
 const USER_COLS = `u.id, u.email, u.full_name, u.phone, u.role, u.is_active,
        u.must_change_password, u.avatar_file_id, u.last_login_at,
-       u.created_by, u.created_at, u.updated_at`;
+       u.created_by, u.created_at, u.updated_at,
+       u.region_id, u.birth_date, rg.name as region_name`;
+// Mọi truy vấn dùng USER_COLS phải kèm: left join regions rg on rg.id = u.region_id
 
 /**
  * Điều kiện SQL: người dùng (bí danh u) có gắn với ít nhất một trường trong mảng $idx (uuid[])
@@ -42,7 +44,10 @@ const userSchoolLinkSql = (idx) => `exists (
  * Ngoài phạm vi ⇒ notFound (404).
  */
 async function getVisibleUser(actor, id) {
-  const u = await one(`select ${USER_COLS} from users u where u.id = $1`, [id]);
+  const u = await one(
+    `select ${USER_COLS} from users u left join regions rg on rg.id = u.region_id where u.id = $1`,
+    [id]
+  );
   if (!u) throw notFound('Không tìm thấy người dùng.');
   if (isAdmin(actor)) return u;
   if (u.id === actor.id) return u;
@@ -63,6 +68,29 @@ export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * GET /api/users — danh sách (admin, manager)
    * ---------------------------------------------------------------------- */
+  /* ------------------------------------------------------------------------
+   * Khu vực công tác (Hà Nội, Thái Nguyên…) — danh mục mở, Admin thêm mới.
+   * ---------------------------------------------------------------------- */
+  app.get('/api/regions', async () => ({
+    items: await rows(
+      'select id, name, sort_order from regions where is_active order by sort_order, name'
+    ),
+  }));
+
+  app.post('/api/regions', { preHandler: requireRole('admin') }, async (req, reply) => {
+    const name = str(req.body?.name, 'Tên khu vực', { required: true, max: 100 });
+    const dup = await one('select id from regions where lower(name) = lower($1)', [name]);
+    if (dup) throw conflict(`Khu vực "${name}" đã tồn tại.`);
+    const rg = await one(
+      `insert into regions (name, sort_order, created_by)
+       values ($1, (select coalesce(max(sort_order), 0) + 10 from regions), $2)
+       returning id, name, sort_order`,
+      [name, req.user.id]
+    );
+    audit(req, { action: 'create', entity: 'regions', entityId: rg.id, summary: `Thêm khu vực "${rg.name}"` });
+    return reply.code(201).send(rg);
+  });
+
   app.get('/api/users', { preHandler: requirePerm('users.view') }, async (req) => {
     const q = req.query || {};
     const role = enumOf(q.role, 'role', ROLES);
@@ -116,6 +144,7 @@ export default async function routes(app) {
     const items = await rows(
       `select ${USER_COLS}, coalesce(sn.names, array[]::text[]) as school_names
          from users u
+         left join regions rg on rg.id = u.region_id
          left join lateral (
            select array_agg(s.name order by s.name) as names
              from user_schools us join schools s on s.id = us.school_id
@@ -140,6 +169,12 @@ export default async function routes(app) {
     const phone = str(b.phone, 'Số điện thoại', { max: 30 });
     const role = enumOf(b.role, 'Vai trò', ROLES, { required: true });
     const schoolIds = [...new Set(uuidList(b.school_ids, 'school_ids'))];
+    const regionId = uuid(b.region_id, 'region_id');
+    const birthDate = dateStr(b.birth_date, 'Ngày sinh');
+    if (regionId) {
+      const rg = await one('select id from regions where id = $1 and is_active', [regionId]);
+      if (!rg) throw badRequest('Khu vực được chọn không tồn tại.');
+    }
 
     const existed = await one('select id from users where email = $1', [emailAddr]);
     if (existed) throw conflict('Email này đã có tài khoản.');
@@ -157,11 +192,13 @@ export default async function routes(app) {
 
     const user = await tx(async (c) => {
       const r = await c.query(
-        `insert into users (email, password_hash, full_name, phone, role, must_change_password, created_by)
-         values ($1, $2, $3, $4, $5, true, $6)
+        `insert into users
+           (email, password_hash, full_name, phone, role, must_change_password, created_by,
+            region_id, birth_date)
+         values ($1, $2, $3, $4, $5, true, $6, $7, $8)
          returning id, email, full_name, phone, role, is_active, must_change_password,
-                   created_by, created_at, updated_at`,
-        [emailAddr, passwordHash, fullName, phone, role, req.user.id]
+                   created_by, created_at, updated_at, region_id, birth_date`,
+        [emailAddr, passwordHash, fullName, phone, role, req.user.id, regionId, birthDate]
       );
       const u = r.rows[0];
       if (role === 'manager' && schoolIds.length) {
@@ -264,6 +301,20 @@ export default async function routes(app) {
     if (b.role !== undefined) {
       const v = enumOf(b.role, 'Vai trò', ROLES, { required: true });
       sets.push(`role = $${next++}::user_role`);
+      params.push(v);
+    }
+    if (b.region_id !== undefined) {
+      const v = uuid(b.region_id, 'region_id');
+      if (v) {
+        const rg = await one('select id from regions where id = $1 and is_active', [v]);
+        if (!rg) throw badRequest('Khu vực được chọn không tồn tại.');
+      }
+      sets.push(`region_id = $${next++}`);
+      params.push(v);
+    }
+    if (b.birth_date !== undefined) {
+      const v = dateStr(b.birth_date, 'Ngày sinh');
+      sets.push(`birth_date = $${next++}`);
       params.push(v);
     }
     if (b.is_active !== undefined) {

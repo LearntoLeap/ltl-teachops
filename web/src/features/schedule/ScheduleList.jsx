@@ -59,7 +59,7 @@ function skippedLabel(s) {
 /* --------------------- Nạp lớp/phòng/GV/TG theo trường --------------------- */
 const EMPTY_RES = { classes: [], rooms: [], teachers: [], assistants: [], loading: false };
 
-function useSchoolResources(schoolId) {
+function useSchoolResources(schoolId, { light = false } = {}) {
   const toast = useToast();
   const [res, setRes] = useState(EMPTY_RES);
 
@@ -70,8 +70,9 @@ function useSchoolResources(schoolId) {
     Promise.all([
       api.get('/api/classes', { school_id: schoolId, limit: 200 }),
       api.get('/api/rooms', { school_id: schoolId, limit: 200 }),
-      api.get('/api/users', { role: 'teacher', school_id: schoolId, limit: 200 }),
-      api.get('/api/users', { role: 'assistant', school_id: schoolId, limit: 200 }),
+      // GV/TG không có quyền xem danh bạ — buổi tự gắn chính họ
+      light ? Promise.resolve([]) : api.get('/api/users', { role: 'teacher', school_id: schoolId, limit: 200 }),
+      light ? Promise.resolve([]) : api.get('/api/users', { role: 'assistant', school_id: schoolId, limit: 200 }),
     ]).then(([c, r, t, a]) => {
       if (!alive) return;
       setRes({ classes: listOf(c), rooms: listOf(r), teachers: listOf(t), assistants: listOf(a), loading: false });
@@ -81,7 +82,7 @@ function useSchoolResources(schoolId) {
       toast.fromError(e);
     });
     return () => { alive = false; };
-  }, [schoolId, toast]);
+  }, [schoolId, light, toast]);
 
   return res;
 }
@@ -251,7 +252,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
  * bulk=false + schedule       → sửa buổi (PATCH /api/schedules/:id)
  * bulk=true                   → lịch lặp tuần (POST /api/schedules/bulk)
  */
-function ScheduleForm({ bulk = false, schedule = null, initialDate = null, schools, onSaved, onClose }) {
+function ScheduleForm({ bulk = false, schedule = null, initialDate = null, selfOnly = false, schools, onSaved, onClose }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [skipped, setSkipped] = useState(null);
@@ -271,7 +272,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, schoo
     to: '',
   }));
 
-  const res = useSchoolResources(f.school_id);
+  const res = useSchoolResources(f.school_id, { light: selfOnly });
 
   const setField = (k) => (e) => {
     const v = e.target.value;
@@ -292,7 +293,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, schoo
     const need = [];
     if (!f.school_id) need.push('trường');
     if (!f.class_id) need.push('lớp');
-    if (!f.teacher_id) need.push('giáo viên');
+    if (!selfOnly && !f.teacher_id) need.push('giáo viên');
     if (bulk) {
       if (!f.weekdays.length) need.push('thứ trong tuần');
       if (!f.from) need.push('từ ngày');
@@ -394,8 +395,14 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, schoo
         </Field>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3">
-        <Field label="Giáo viên" required>
+      {selfOnly && (
+        <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
+          ℹ️ Buổi này sẽ tự gắn tên bạn làm người phụ trách.
+        </div>
+      )}
+
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-3 ${selfOnly ? 'hidden' : ''}`}>
+        <Field label="Giáo viên" required={!selfOnly}>
           <select className="input" value={f.teacher_id} onChange={setField('teacher_id')} disabled={!f.school_id || res.loading}>
             <option value="">{res.loading ? 'Đang tải…' : '— Chọn giáo viên —'}</option>
             {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name || u.name}</option>)}
@@ -508,12 +515,13 @@ export default function ScheduleList() {
   }, [mode, view, monthAnchor]);
 
   /* Danh sách trường cho bộ lọc + form (chỉ admin/manager cần gọi). */
+  const canSelfAdd = auth.can('schedule.selfCreate');
   useEffect(() => {
-    if (!showSchoolFilter && !canManage) return;
+    if (!showSchoolFilter && !canManage && !canSelfAdd) return;
     api.get('/api/schools', { limit: 200 })
       .then((r) => setSchools(listOf(r)))
       .catch((e) => toast.fromError(e));
-  }, [showSchoolFilter, canManage, toast]);
+  }, [showSchoolFilter, canManage, canSelfAdd, toast]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -584,6 +592,8 @@ export default function ScheduleList() {
             <button className="btn-line" onClick={() => openForm({ bulk: true })}>+ Lịch lặp tuần</button>
             <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi</button>
           </>
+        ) : canSelfAdd ? (
+          <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi bị thiếu</button>
         ) : null}
       />
 
@@ -651,7 +661,7 @@ export default function ScheduleList() {
           anchor={monthAnchor}
           items={items}
           onOpen={(sItem) => setDetail(sItem)}
-          onAddDay={canManage ? (d) => openForm({ date: d }) : null}
+          onAddDay={(canManage || canSelfAdd) ? (d) => openForm({ date: d }) : null}
         />
       )}
 
@@ -753,6 +763,7 @@ export default function ScheduleList() {
             bulk={!!formCfg.bulk}
             schedule={formCfg.schedule || null}
             initialDate={formCfg.date || null}
+            selfOnly={!canManage}
             schools={schools}
             onSaved={(close) => { load(); if (close) setFormCfg(null); }}
             onClose={() => setFormCfg(null)}

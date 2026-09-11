@@ -144,6 +144,65 @@ function MaterialCard({ m, area }) {
   );
 }
 
+/* ------------------------ Sheet thêm giải pháp (Admin) ---------------------- */
+const SOLUTION_GROUPS = [
+  ['ubtech', 'UBTECH'], ['stickem', "Stick'em"], ['weeemake', 'Weeemake'], ['other', 'Khác'],
+];
+
+function AddSolutionSheet({ open, onClose, onCreated }) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [grp, setGrp] = useState('ubtech');
+  const [description, setDescription] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) { toast.err('Vui lòng nhập tên giải pháp.'); return; }
+    setBusy(true);
+    try {
+      const sol = await api.post('/api/solutions', {
+        name: name.trim(), grp,
+        description: description.trim() || undefined,
+      });
+      toast.ok(`Đã thêm giải pháp "${sol.name || name.trim()}".`);
+      setName(''); setDescription('');
+      onCreated(sol);
+    } catch (err) {
+      toast.fromError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onClose={busy ? undefined : onClose} title="Thêm giải pháp giảng dạy">
+      <form onSubmit={submit}>
+        <Field label="Tên giải pháp" required>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Ví dụ: UBTECH — uGo, VEX IQ…" autoFocus />
+        </Field>
+        <Field label="Nhóm" required>
+          <select className="input" value={grp} onChange={(e) => setGrp(e.target.value)}>
+            {SOLUTION_GROUPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+        </Field>
+        <Field label="Mô tả">
+          <textarea className="input" rows={2} value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Bộ kit, phạm vi cấp học, ghi chú triển khai…" />
+        </Field>
+        <div className="flex gap-2.5 justify-end mt-4">
+          <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
+          <button type="submit" className="btn-primary" disabled={busy}>
+            {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Thêm giải pháp'}
+          </button>
+        </div>
+      </form>
+    </Sheet>
+  );
+}
+
 /* --------------------------- Sheet đăng tài liệu --------------------------- */
 function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = '', types, onTypesChanged, onDone }) {
   const auth = useAuth();
@@ -413,6 +472,7 @@ export default function MaterialsHome() {
   const [types, setTypes] = useState([]);
   const [solutionId, setSolutionId] = useState('');
   const [solutions, setSolutions] = useState([]);
+  const [solutionFormOpen, setSolutionFormOpen] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -430,11 +490,12 @@ export default function MaterialsHome() {
   useEffect(() => { loadTypes(); }, [loadTypes]);
 
   // Danh mục giải pháp (UGOT, uKIT, Stick'em…) — trục duyệt chính của kho học liệu.
-  useEffect(() => {
+  const loadSolutions = useCallback(() => {
     api.get('/api/solutions')
       .then((d) => setSolutions(flattenSolutions(Array.isArray(d) ? d : d?.items || [])))
       .catch(() => setSolutions([]));
   }, []);
+  useEffect(() => { loadSolutions(); }, [loadSolutions]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -481,12 +542,13 @@ export default function MaterialsHome() {
           options={[{ value: '', label: 'Tất cả' },
             ...solutions.map((so) => ({ value: so.id, label: `🧩 ${so.label}` }))]}
           trailing={auth.isAdmin ? (
-            <Link
-              to="/giai-phap"
+            <button
+              type="button"
+              onClick={() => setSolutionFormOpen(true)}
               className="shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-semibold text-brand-700
                          ring-1 ring-inset ring-brand-300 border border-dashed border-brand-300 hover:bg-brand-50">
               + Thêm giải pháp
-            </Link>
+            </button>
           ) : null}
         />
         <div className="flex flex-wrap items-center gap-2.5">
@@ -563,6 +625,16 @@ export default function MaterialsHome() {
       )}
 
       <Pager page={page} limit={LIMIT} total={data?.total} onPage={setPage} />
+
+      <AddSolutionSheet
+        open={solutionFormOpen}
+        onClose={() => setSolutionFormOpen(false)}
+        onCreated={(sol) => {
+          setSolutionFormOpen(false);
+          loadSolutions();
+          if (sol?.id) { setSolutionId(sol.id); setPage(1); }
+        }}
+      />
 
       <UploadSheet
         open={formOpen}

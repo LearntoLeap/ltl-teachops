@@ -8,7 +8,7 @@
  *   - "Hôm nay" tính theo múi giờ Việt Nam: (now() at time zone 'Asia/Ho_Chi_Minh')::date.
  */
 import { query, rows, one, scalar, tx } from '../db.js';
-import { requirePerm } from '../lib/rbac.js';
+import { requirePerm, assertPerm, isFieldStaff } from '../lib/rbac.js';
 import {
   scheduleFilter,
   combine,
@@ -229,8 +229,20 @@ export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * POST /api/schedules — tạo một buổi.
    * ---------------------------------------------------------------------- */
-  app.post('/api/schedules', { preHandler: requirePerm('schedule.manage') }, async (req, reply) => {
+  app.post('/api/schedules', async (req, reply) => {
     const b = req.body || {};
+
+    // GV/TG được TỰ thêm buổi bị thiếu — nhưng buổi phải gắn CHÍNH họ,
+    // trường phải nằm trong phạm vi họ được phân công (assertSchoolAccess lo).
+    const selfOnly = isFieldStaff(req.user);
+    if (selfOnly) {
+      assertPerm(req.user, 'schedule.selfCreate');
+      if (req.user.role === 'teacher') b.teacher_id = req.user.id;
+      else b.assistant_id = req.user.id;
+    } else {
+      assertPerm(req.user, 'schedule.manage');
+    }
+
     const core = await validateSessionCore(req.user, b);
     const sessionDate = dateStr(b.session_date, 'session_date', { required: true });
     const note = str(b.note, 'note');

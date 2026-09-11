@@ -112,9 +112,11 @@ export default async function routes(app) {
   /* ----------------------------- Hồ sơ của tôi --------------------------- */
   app.get('/api/auth/me', async (req) => {
     const u = await one(
-      `select id, email, full_name, phone, role, must_change_password,
-              avatar_file_id, last_login_at, created_at
-         from users where id = $1`,
+      `select u.id, u.email, u.full_name, u.phone, u.role, u.must_change_password,
+              u.avatar_file_id, u.last_login_at, u.created_at,
+              u.region_id, u.birth_date, rg.name as region_name
+         from users u left join regions rg on rg.id = u.region_id
+        where u.id = $1`,
       [req.user.id]
     );
 

@@ -30,6 +30,8 @@ const PERMISSIONS = {
 
   // Lịch dạy
   'schedule.manage':         ['admin', 'manager'],
+  // GV/TG tự thêm buổi dạy BỊ THIẾU cho chính mình (để điểm danh/chấm công)
+  'schedule.selfCreate':     ['admin', 'manager', 'teacher', 'assistant'],
   'schedule.viewOwn':        ['admin', 'manager', 'teacher', 'assistant'],
 
   // Chấm công

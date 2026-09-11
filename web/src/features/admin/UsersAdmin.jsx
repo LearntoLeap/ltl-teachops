@@ -103,6 +103,53 @@ function SchoolChecklist({ schools, loading, selected, onToggle, onRetry }) {
   );
 }
 
+/* ------------------------ Chọn khu vực (+ thêm mới) ------------------------ */
+function RegionSelect({ value, onChange, canAdd }) {
+  const toast = useToast();
+  const [regions, setRegions] = useState([]);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+
+  const load = () => api.get('/api/regions')
+    .then((d) => setRegions(d?.items || []))
+    .catch(() => setRegions([]));
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    const v = name.trim();
+    if (!v) return;
+    try {
+      const rg = await api.post('/api/regions', { name: v });
+      toast.ok(`Đã thêm khu vực "${rg.name}".`);
+      setName(''); setAdding(false);
+      await load();
+      onChange(rg.id);
+    } catch (e) { toast.fromError(e); }
+  };
+
+  return (
+    <>
+      <div className="flex gap-2">
+        <select className="input flex-1" value={value || ''} onChange={(e) => onChange(e.target.value)}>
+          <option value="">— Chọn khu vực —</option>
+          {regions.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+        {canAdd && !adding && (
+          <button type="button" className="btn-line !px-3 shrink-0" onClick={() => setAdding(true)}>+ Khu vực</button>
+        )}
+      </div>
+      {adding && (
+        <div className="flex gap-2 mt-2">
+          <input className="input flex-1" value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Tên khu vực mới, ví dụ: Bắc Ninh" autoFocus />
+          <button type="button" className="btn-primary !px-3" onClick={add}>Thêm</button>
+          <button type="button" className="btn-line !px-3" onClick={() => setAdding(false)}>Huỷ</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ------------------------- Sheet hiển thị mật khẩu tạm ------------------------- */
 
 function TempPasswordSheet({ result, onClose }) {
@@ -145,14 +192,14 @@ function TempPasswordSheet({ result, onClose }) {
 
 function CreateUserSheet({ open, onClose, schools, schoolsLoading, ensureSchools, onCreated }) {
   const toast = useToast();
-  const [form, setForm] = useState({ full_name: '', email: '', phone: '', role: '' });
+  const [form, setForm] = useState({ full_name: '', email: '', phone: '', role: '', region_id: '', birth_date: '' });
   const [schoolIds, setSchoolIds] = useState([]);
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setForm({ full_name: '', email: '', phone: '', role: '' });
+      setForm({ full_name: '', email: '', phone: '', role: '', region_id: '', birth_date: '' });
       setSchoolIds([]);
       setErrors({});
     }
@@ -188,6 +235,8 @@ function CreateUserSheet({ open, onClose, schools, schoolsLoading, ensureSchools
         role: form.role,
       };
       if (form.role === 'manager') body.school_ids = schoolIds;
+      if (form.region_id) body.region_id = form.region_id;
+      if (form.birth_date) body.birth_date = form.birth_date;
       const res = await api.post('/api/users', body);
       onCreated(res, email);
     } catch (err) {
@@ -209,6 +258,19 @@ function CreateUserSheet({ open, onClose, schools, schoolsLoading, ensureSchools
         <Field label="Số điện thoại">
           <input className="input" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} placeholder="09xx xxx xxx" />
         </Field>
+        <div className="grid sm:grid-cols-2 sm:gap-3">
+          <Field label="Khu vực" hint="Hiển thị trên danh sách để nhận biết địa bàn.">
+            <RegionSelect
+              value={form.region_id}
+              onChange={(v) => setForm((f) => ({ ...f, region_id: v }))}
+              canAdd
+            />
+          </Field>
+          <Field label="Ngày sinh">
+            <input className="input" type="date" value={form.birth_date}
+              onChange={set('birth_date')} max="2015-12-31" />
+          </Field>
+        </div>
         <Field label="Vai trò" required error={errors.role}>
           <select className="input" value={form.role} onChange={set('role')}>
             <option value="">— Chọn vai trò —</option>
@@ -247,12 +309,16 @@ function CreateUserSheet({ open, onClose, schools, schoolsLoading, ensureSchools
 
 function EditUserSheet({ open, onClose, user, isSelf, onSaved }) {
   const toast = useToast();
-  const [form, setForm] = useState({ full_name: '', phone: '', role: 'teacher' });
+  const [form, setForm] = useState({ full_name: '', phone: '', role: 'teacher', region_id: '', birth_date: '' });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open && user) {
-      setForm({ full_name: user.full_name || '', phone: user.phone || '', role: user.role || 'teacher' });
+      setForm({
+        full_name: user.full_name || '', phone: user.phone || '', role: user.role || 'teacher',
+        region_id: user.region_id || '',
+        birth_date: user.birth_date ? String(user.birth_date).slice(0, 10) : '',
+      });
     }
   }, [open, user]);
 
@@ -271,6 +337,8 @@ function EditUserSheet({ open, onClose, user, isSelf, onSaved }) {
         full_name: form.full_name.trim(),
         phone: form.phone.trim(),
         role: form.role,
+        region_id: form.region_id || null,
+        birth_date: form.birth_date || null,
       });
       toast.ok('Đã cập nhật thông tin.');
       onSaved();
@@ -290,6 +358,18 @@ function EditUserSheet({ open, onClose, user, isSelf, onSaved }) {
         <Field label="Số điện thoại">
           <input className="input" type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
         </Field>
+        <div className="grid sm:grid-cols-2 sm:gap-3">
+          <Field label="Khu vực">
+            <RegionSelect
+              value={form.region_id}
+              onChange={(v) => setForm((f) => ({ ...f, region_id: v }))}
+              canAdd
+            />
+          </Field>
+          <Field label="Ngày sinh">
+            <input className="input" type="date" value={form.birth_date} onChange={set('birth_date')} />
+          </Field>
+        </div>
         <Field
           label="Vai trò"
           required
@@ -659,6 +739,7 @@ export default function UsersAdmin() {
                         <th className="th">Người dùng</th>
                         <th className="th">SĐT</th>
                         <th className="th">Vai trò</th>
+                        <th className="th">Khu vực</th>
                         <th className="th">Trạng thái</th>
                         <th className="th">Đăng nhập gần nhất</th>
                       </tr>
@@ -671,12 +752,17 @@ export default function UsersAdmin() {
                               <Avatar name={u.full_name} />
                               <div className="min-w-0">
                                 <div className="font-semibold truncate">{u.full_name}</div>
-                                <div className="text-[12.5px] text-ink-muted truncate">{u.email}</div>
+                                <div className="text-[12.5px] text-ink-muted truncate">
+                                  {u.email}{u.birth_date ? ` · 🎂 ${fmtDate(u.birth_date)}` : ''}
+                                </div>
                               </div>
                             </div>
                           </td>
                           <td className="td whitespace-nowrap">{u.phone || '—'}</td>
                           <td className="td"><RoleBadge role={u.role} /></td>
+                          <td className="td whitespace-nowrap">
+                            {u.region_name ? `📍 ${u.region_name}` : '—'}
+                          </td>
                           <td className="td"><StatusBadge active={u.is_active} /></td>
                           <td className="td whitespace-nowrap text-ink-muted">{lastLoginText(u)}</td>
                         </tr>
