@@ -2,15 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
   "//": [
-    "Repo có 2 phần: web/ (giao diện, deploy Vercel) và server/ (API, chạy trên VPS).",
-    "Vercel mặc định build ở GỐC repo — nơi không có package.json — nên nếu thiếu tệp này",
-    "sẽ không sinh ra trang nào và mọi đường dẫn trả 404.",
-    "Tệp này chỉ Vercel trỏ thẳng vào web/, KHÔNG cần đặt Root Directory trong giao diện Vercel.",
-    "Nếu bạn đã đặt Root Directory = web thì Vercel dùng web/vercel.json — cả hai đều chạy đúng."
+    "Cấu hình cho trường hợp Root Directory của Vercel để TRỐNG (gốc repo) — mặc định khi import.",
+    "Vercel chạy script `vercel-build` trong package.json ở gốc, script đó build web/ ra web/dist.",
+    "Nếu bạn đặt Root Directory = web thì Vercel dùng web/vercel.json, cũng chạy đúng.",
+    "LƯU Ý: vercel.json KHÔNG đổi được Root Directory — chỉ sửa được trong Settings của Vercel."
   ],
 
-  "installCommand": "npm --prefix web ci",
-  "buildCommand": "npm --prefix web run build",
   "outputDirectory": "web/dist",
 
   "rewrites": [
