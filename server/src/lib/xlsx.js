@@ -37,14 +37,20 @@ export async function sendXlsx(reply, spec) {
     .normalize('NFD').replace(/[̀-ͯ]/g, '')   // bỏ dấu tiếng Việt trong tên tệp
     .replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(0, 80);
 
-  reply
+  // Sinh ra bộ đệm rồi mới gửi qua reply.send().
+  //
+  // KHÔNG ghi thẳng vào reply.raw: cách đó đi vòng qua Fastify nên MỌI header
+  // đặt bằng reply.header() đều bị bỏ. Hậu quả là phản hồi không có
+  // Content-Type lẫn Content-Disposition — trình duyệt không nhận ra đây là
+  // tệp Excel và người dùng không tải về được.
+  const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+
+  return reply
     .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     .header('Content-Disposition', `attachment; filename="${safeName}.xlsx"`)
-    .header('Cache-Control', 'no-store');
-
-  await wb.xlsx.write(reply.raw);
-  reply.raw.end();
-  return reply;
+    .header('Content-Length', String(buffer.length))
+    .header('Cache-Control', 'no-store')
+    .send(buffer);
 }
 
 function buildSheet(wb, s) {

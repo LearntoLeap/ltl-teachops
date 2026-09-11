@@ -588,7 +588,10 @@ export default function UsersAdmin() {
     setDetailError(null);
     try {
       const d = await api.get(`/api/users/${id}`);
-      setDetail(d);
+      // Server trả { user, schools, classes } — giao diện đọc phẳng (detail.email,
+      // detail.is_active…) nên phải trải phẳng, nếu không toàn bộ ô sẽ trống và
+      // trạng thái hiện sai thành "Đã khoá".
+      setDetail(d?.user ? { ...d.user, schools: d.schools || [], classes: d.classes || [] } : d);
     } catch (e) {
       setDetailError(e);
     } finally {
