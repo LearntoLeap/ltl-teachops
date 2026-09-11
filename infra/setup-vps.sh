@@ -123,6 +123,10 @@ fi
 # ---------------------------------------------------------------- 3. Khởi động
 step "[3/4] Build và khởi động (lần đầu mất 2-4 phút)"
 mkdir -p data/uploads data/pgdata
+# Container api chạy bằng user 'node' (UID 1000). Thư mục trên host do root tạo
+# nên user đó KHÔNG ghi được → API chết ngay lúc khởi động với lỗi EACCES.
+# Giao quyền sở hữu đúng UID trước khi chạy.
+chown -R 1000:1000 data/uploads
 docker compose up -d --build
 ok "Container đã khởi động"
 
