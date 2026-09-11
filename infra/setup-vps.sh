@@ -32,6 +32,22 @@ docker compose version >/dev/null 2>&1 || die "Docker có nhưng thiếu plugin 
 docker info >/dev/null 2>&1 || die "Docker chưa chạy. Khởi động: systemctl start docker"
 ok "Docker $(docker --version | sed 's/Docker version //;s/,.*//') sẵn sàng"
 
+# ------------------------------------------------- 1b. Chọn cổng còn trống
+# VPS có thể đã chạy dịch vụ khác (site cũ, panel...). Dùng trùng cổng sẽ làm
+# sập dịch vụ đó, nên tự dò cổng trống trong dải 3000-3020.
+step "[1b/4] Tìm cổng trống cho API"
+PICKED=""
+for p in $(seq 3000 3020); do
+  if ! ss -tln 2>/dev/null | grep -q ":${p} "; then PICKED="$p"; break; fi
+done
+[ -n "$PICKED" ] || die "Không tìm được cổng trống trong dải 3000-3020."
+if [ "$PICKED" = "3000" ]; then
+  ok "Cổng 3000 trống — dùng cổng này"
+else
+  warn "Cổng 3000 đã bị dịch vụ khác chiếm — API sẽ dùng cổng ${B}${PICKED}${N}"
+fi
+API_HOST_PORT_IN="${API_HOST_PORT:-$PICKED}"
+
 # ---------------------------------------------------------------- 2. .env
 step "[2/4] Chuẩn bị file cấu hình .env"
 
@@ -62,6 +78,8 @@ POSTGRES_PASSWORD=${PG_PASS}
 # ---- API ----
 NODE_ENV=production
 PORT=3000
+# Cổng trên VPS mà Nginx sẽ trỏ vào (chỉ mở trên 127.0.0.1)
+API_HOST_PORT=${API_HOST_PORT_IN}
 JWT_SECRET=${JWT}
 ACCESS_TOKEN_TTL=15m
 REFRESH_TOKEN_TTL_DAYS=30
@@ -110,9 +128,12 @@ ok "Container đã khởi động"
 
 # ---------------------------------------------------------------- 4. Kiểm tra
 step "[4/4] Chờ API sẵn sàng"
+# Đọc cổng thật từ .env (có thể .env đã tồn tại từ lần chạy trước)
+PORT_OUT="$(grep -E '^API_HOST_PORT=' .env | cut -d= -f2- || true)"
+PORT_OUT="${PORT_OUT:-3000}"
 READY=0
 for i in $(seq 1 40); do
-  if curl -fsS --max-time 3 http://127.0.0.1:3000/api/health >/dev/null 2>&1; then
+  if curl -fsS --max-time 3 "http://127.0.0.1:${PORT_OUT}/api/health" >/dev/null 2>&1; then
     READY=1; break
   fi
   sleep 3
@@ -126,7 +147,7 @@ if [ "$READY" != "1" ]; then
     cd ${PROJECT_DIR} && docker compose logs --tail 60 api"
 fi
 
-ok "API phản hồi tốt tại http://127.0.0.1:3000"
+ok "API phản hồi tốt tại http://127.0.0.1:${PORT_OUT}"
 
 # In thông tin đăng nhập lấy từ .env (kể cả khi .env đã có sẵn từ trước)
 ADMIN_EMAIL_OUT="$(grep -E '^SEED_ADMIN_EMAIL=' .env | cut -d= -f2-)"
@@ -148,7 +169,7 @@ ${B}CÒN 2 BƯỚC NỮA:${N}
 
 ${B}1.${N} Trong aaPanel → Website → ${B}Proxy Project${N} → Add:
       Tên miền     : ${API_DOMAIN_OUT}
-      Target URL   : http://127.0.0.1:3000
+      Target URL   : http://127.0.0.1:${PORT_OUT}
       Tích ${B}Apply for SSL${N}
    (bản ghi DNS loại A của tên miền này phải trỏ về IP VPS trước)
 

@@ -37,7 +37,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1200M
+          memory: 768M
     # Không mở cổng ra ngoài — chỉ api trong mạng nội bộ truy cập được.
     expose:
       - "5432"
@@ -88,11 +88,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: 800M
+          memory: 640M
     # 127.0.0.1 = chỉ tiến trình khác TRÊN CHÍNH VPS này gọi được (Nginx của
     # panel, hoặc Caddy ở dưới) — Internet không truy cập trực tiếp cổng này.
+    # API_HOST_PORT đổi được trong .env khi VPS đã có dịch vụ khác chiếm cổng
+    # (kiểm tra trước bằng: ss -tlnp | grep :3000).
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:${API_HOST_PORT:-3000}:3000"
 
   # Chỉ khởi động khi chạy: docker compose --profile caddy up -d
   # (bỏ qua hoàn toàn nếu VPS đã có panel tự lo Nginx + SSL, ví dụ aaPanel)
