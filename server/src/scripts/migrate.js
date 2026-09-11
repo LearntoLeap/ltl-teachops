@@ -30,26 +30,37 @@ export async function runMigrations() {
     .filter((f) => f.endsWith('.sql'))
     .sort(); // 001_, 002_… — thứ tự theo tên file
 
-  const done = new Set(
+  let done = new Set(
     (await rows('select file_name from schema_migrations')).map((r) => r.file_name)
   );
+
+  /* ------------------------------------------------------------------------
+   * Trường hợp CSDL dựng lần đầu qua docker-entrypoint-initdb.d:
+   * Postgres đã chạy TOÀN BỘ file .sql trong thư mục migrations theo thứ tự
+   * tên, nhưng bảng schema_migrations lúc đó chưa có nên không ghi nhận gì.
+   * Dấu hiệu nhận biết: bảng users đã tồn tại mà sổ theo dõi hoàn toàn trống.
+   * Khi đó ghi nhận HẾT các file hiện có — chạy lại sẽ lỗi "already exists".
+   * ---------------------------------------------------------------------- */
+  if (done.size === 0) {
+    const usersTable = await scalar("select to_regclass('public.users')");
+    if (usersTable) {
+      for (const f of files) {
+        await query(
+          'insert into schema_migrations (file_name) values ($1) on conflict do nothing',
+          [f]
+        );
+      }
+      done = new Set(files);
+      console.log(
+        `[migrate] CSDL đã được khởi tạo sẵn qua initdb — ghi nhận ${files.length} migration ` +
+        'là đã chạy, không thực thi lại.'
+      );
+    }
+  }
 
   let applied = 0;
   for (const file of files) {
     if (done.has(file)) continue;
-
-    // 001 đã chạy qua initdb trên DB đang vận hành ⇒ chỉ ghi nhận.
-    if (file === '001_init.sql') {
-      const usersTable = await scalar("select to_regclass('public.users')");
-      if (usersTable) {
-        await query(
-          'insert into schema_migrations (file_name) values ($1) on conflict do nothing',
-          [file]
-        );
-        console.log(`[migrate] ${file}: bảng users đã tồn tại — đánh dấu đã chạy, không thực thi lại.`);
-        continue;
-      }
-    }
 
     const sqlText = await fs.readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
     console.log(`[migrate] Đang chạy ${file}…`);
