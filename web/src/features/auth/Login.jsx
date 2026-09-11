@@ -21,6 +21,9 @@ export default function Login() {
   const submit = async (e) => {
     e.preventDefault();
     if (busy) return;
+    // Chưa khai VITE_API_URL thì mọi lời gọi đều hỏng — dừng tại đây để người dùng
+    // chỉ thấy MỘT thông báo (hộp vàng phía trên), không kèm lỗi mạng khó hiểu.
+    if (!API_CONFIGURED) return;
     setError('');
     if (!email.trim() || !password) {
       setError('Vui lòng nhập đầy đủ email và mật khẩu.');
@@ -88,7 +91,7 @@ export default function Login() {
           </div>
         )}
 
-        <button className="btn-primary w-full !py-3" disabled={busy}>
+        <button className="btn-primary w-full !py-3" disabled={busy || !API_CONFIGURED}>
           {busy ? <Spinner className="border-white/40 border-t-white" /> : 'Đăng nhập'}
         </button>
       </form>
