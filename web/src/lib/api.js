@@ -11,6 +11,16 @@
 
 export const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
+/**
+ * Đã trỏ tới máy chủ API thật chưa?
+ * Bản build trên Vercel mà thiếu biến VITE_API_URL sẽ gọi vào localhost của MÁY NGƯỜI DÙNG
+ * — không bao giờ kết nối được. Cờ này để màn hình đăng nhập báo rõ thay vì chỉ "lỗi mạng".
+ */
+export const API_CONFIGURED = !(
+  !import.meta.env.VITE_API_URL && typeof window !== 'undefined'
+  && !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)
+);
+
 const STORE = {
   access: 'teachops.access',
   refresh: 'teachops.refresh',

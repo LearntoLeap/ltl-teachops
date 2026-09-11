@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth.jsx';
+import { API_CONFIGURED } from '../../lib/api.js';
 import { Field, Spinner } from '../../components/ui.jsx';
 import AuthShell from './AuthShell.jsx';
 
@@ -38,6 +39,15 @@ export default function Login() {
 
   return (
     <AuthShell title="Đăng nhập" sub="Dùng tài khoản email do Quản trị viên cấp.">
+      {!API_CONFIGURED && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 mb-4 text-[13px] text-amber-900">
+          <div className="font-bold mb-1">⚙️ Chưa kết nối máy chủ</div>
+          Bản web đã chạy, nhưng chưa biết gọi API ở đâu nên chưa đăng nhập được.
+          Người quản trị cần thêm biến <code className="font-semibold">VITE_API_URL</code> ở
+          Vercel (Settings → Environment Variables), trỏ tới địa chỉ API trên VPS, rồi deploy lại.
+        </div>
+      )}
+
       <form onSubmit={submit} noValidate>
         <Field label="Email" required>
           <input

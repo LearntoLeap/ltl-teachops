@@ -2,13 +2,17 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
 
   "//": [
-    "Dùng khi Root Directory trong Vercel được đặt = web.",
-    "Nếu để Root Directory ở gốc repo thì Vercel dùng ../vercel.json — cả hai đều chạy đúng.",
-    "Rewrite đưa mọi đường dẫn về index.html cho React Router (ứng dụng một trang):",
-    "Vercel luôn tìm tệp tĩnh TRƯỚC, không khớp mới rewrite, nên ảnh/js/css vẫn tải bình thường."
+    "Repo có 2 phần: web/ (giao diện, deploy Vercel) và server/ (API, chạy trên VPS).",
+    "Vercel mặc định build ở GỐC repo — nơi không có package.json — nên nếu thiếu tệp này",
+    "sẽ không sinh ra trang nào và mọi đường dẫn trả 404.",
+    "Tệp này chỉ Vercel trỏ thẳng vào web/, KHÔNG cần đặt Root Directory trong giao diện Vercel.",
+    "Nếu bạn đã đặt Root Directory = web thì Vercel dùng web/vercel.json — cả hai đều chạy đúng."
   ],
 
-  "framework": "vite",
+  "installCommand": "npm --prefix web ci",
+  "buildCommand": "npm --prefix web run build",
+  "outputDirectory": "web/dist",
+
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
