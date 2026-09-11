@@ -1,18 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": [
-    "Dùng khi Root Directory trong Vercel được đặt = web.",
-    "Nếu để Root Directory ở gốc repo thì Vercel dùng ../vercel.json — cả hai đều chạy đúng.",
-    "Rewrite đưa mọi đường dẫn về index.html cho React Router (ứng dụng một trang):",
-    "Vercel luôn tìm tệp tĩnh TRƯỚC, không khớp mới rewrite, nên ảnh/js/css vẫn tải bình thường."
-  ],
-
   "framework": "vite",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-
   "headers": [
     {
       "source": "/sw.js",

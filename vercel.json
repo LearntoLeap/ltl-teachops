@@ -1,23 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-
-  "//": [
-    "Repo có 2 phần: web/ (giao diện, deploy Vercel) và server/ (API, chạy trên VPS).",
-    "Ba lệnh dưới đây bảo Vercel: cài và build trong web/, lấy kết quả ở web/dist.",
-    "Dùng 'cd web &&' thay cho 'npm --prefix web' vì --prefix hay lỗi trên môi trường build.",
-    "framework: null để Vercel không tự áp preset rồi tìm thư mục output sai chỗ.",
-    "Nếu bạn đặt Root Directory = web trong Settings thì Vercel dùng web/vercel.json — cũng đúng."
-  ],
-
   "framework": null,
   "installCommand": "cd web && npm ci --no-audit --no-fund",
   "buildCommand": "cd web && npm run build",
   "outputDirectory": "web/dist",
-
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-
   "headers": [
     {
       "source": "/sw.js",
