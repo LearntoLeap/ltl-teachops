@@ -6,6 +6,7 @@ import env from './env.js';
 import { waitForDb, closeDb } from './db.js';
 import { initStorage } from './lib/storage.js';
 import { verifyMailer } from './lib/mailer.js';
+import { verifyDrive } from './lib/drive.js';
 import { buildApp } from './app.js';
 import { seedAdmin } from './scripts/seed.js';
 import { startJobs, stopJobs } from './jobs.js';
@@ -19,6 +20,7 @@ async function main() {
   await initStorage();
   await seedAdmin();
   await verifyMailer();
+  await verifyDrive();
 
   const app = await buildApp();
   await app.listen({ port: env.port, host: '0.0.0.0' });

@@ -202,6 +202,14 @@ Mọi endpoint `.xlsx` nhận `?from=&to=&school_id=&class_id=&user_id=`.
 
 Ảnh được nén phía client xuống cạnh dài ≤ 1600px, JPEG chất lượng 0.8 trước khi tải lên.
 
+## 13b. Sao lưu Google Drive — `/api/reports/drive` (admin)
+
+`GET /api/reports/drive` → `{enabled, total, synced, pending, failed, last_synced_at, last_error}`
+· `POST /api/reports/drive/sync` — đẩy ngay tối đa 50 tệp, không chờ job nền (5 phút/lượt).
+
+Ảnh vẫn lưu chính trên VPS; Drive là bản sao. Chưa cấu hình 4 biến GOOGLE_* thì `enabled=false`
+và hệ thống bỏ qua đồng bộ. Xem docs/HUONG_DAN_GOOGLE_DRIVE.md.
+
 ## 14. Nhật ký — `/api/audit` (admin)
 
 `GET /` — `?entity=&entity_id=&actor_id=&from=&to=&action=`.

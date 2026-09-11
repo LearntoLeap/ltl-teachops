@@ -13,6 +13,7 @@ import { schoolFilter, scheduleFilter } from '../lib/scope.js';
 import { uuid, dateRange } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
 import { sendXlsx, LABELS, formatVN, formatVNDate, formatVNTime } from '../lib/xlsx.js';
+import { driveStatus, syncPendingFiles } from '../lib/drive.js';
 
 /* ----------------------------- Tiện ích chung ------------------------------ */
 
@@ -112,6 +113,21 @@ async function fetchTimesheetDetail(user, { from, to, schoolId, classId, userId 
 /* --------------------------------- Routes ---------------------------------- */
 
 export default async function routes(app) {
+  /* ======================================================================== *
+   * GET /api/reports/drive — CHỈ admin: tình trạng sao lưu ảnh lên Google Drive.
+   * ======================================================================== */
+  app.get('/api/reports/drive', { preHandler: requireRole('admin') }, async () => driveStatus());
+
+  /* POST /api/reports/drive/sync — đẩy ngay, không chờ job nền. */
+  app.post('/api/reports/drive/sync', { preHandler: requireRole('admin') }, async (req) => {
+    const r = await syncPendingFiles({ limit: 50 });
+    audit(req, {
+      action: 'export', entity: 'files',
+      summary: `Đẩy thủ công ${r.sent} tệp lên Google Drive${r.failed ? ` (lỗi ${r.failed})` : ''}`,
+    });
+    return r;
+  });
+
   /* ======================================================================== *
    * GET /api/reports/admin-overview — CHỈ admin: sức khoẻ toàn hệ thống.
    * Trả: quy mô tổ chức, nhân sự theo vai trò, hàng đợi cần xử lý,

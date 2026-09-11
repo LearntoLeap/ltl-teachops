@@ -53,6 +53,16 @@ export const env = {
   get mailEnabled() { return !!this.smtp.host; },
 
   appPublicUrl: (process.env.APP_PUBLIC_URL || '').replace(/\/+$/, ''),
+
+  // Sao lưu ảnh/tài liệu lên Google Drive của tài khoản quản trị chính.
+  // Bỏ trống ⇒ tắt đồng bộ, ảnh chỉ nằm trên VPS (app vẫn chạy bình thường).
+  drive: {
+    clientId: process.env.GOOGLE_CLIENT_ID || '',
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+    refreshToken: process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '',
+    rootFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+    syncMinutes: Number(process.env.DRIVE_SYNC_MINUTES || 5),
+  },
 };
 
 export default env;

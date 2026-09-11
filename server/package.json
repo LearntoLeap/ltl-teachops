@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "description": "API quản lý vận hành giáo viên & trợ giảng — Learn to Leap",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "migrate": "node src/scripts/migrate.js",
     "seed": "node src/scripts/seed.js",
-    "seed:demo": "node src/scripts/seed-demo.js"
+    "seed:demo": "node src/scripts/seed-demo.js",
+    "drive:auth": "node src/scripts/drive-auth.js",
+    "drive:sync": "node src/scripts/drive-sync.js"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.1",

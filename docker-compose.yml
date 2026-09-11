@@ -60,6 +60,12 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      # Sao lưu ảnh lên Google Drive — bỏ trống thì tự tắt
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
+      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
+      DRIVE_SYNC_MINUTES: ${DRIVE_SYNC_MINUTES:-5}
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./data/uploads:/data/uploads

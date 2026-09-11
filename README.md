@@ -82,6 +82,8 @@ Cập nhật API sau này: `bash infra/deploy.sh` trên VPS. Web tự deploy khi
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — kiến trúc, quy tắc phân quyền & phạm vi dữ liệu, luồng nghiệp vụ.
 - [docs/API.md](docs/API.md) — hợp đồng API đầy đủ (nguồn sự thật khi sửa server lẫn web).
+- [docs/HUONG_DAN_GITHUB.md](docs/HUONG_DAN_GITHUB.md) — đẩy code lên GitHub + nối Vercel.
+- [docs/HUONG_DAN_GOOGLE_DRIVE.md](docs/HUONG_DAN_GOOGLE_DRIVE.md) — bật sao lưu ảnh lên Drive.
 
 ## Cấu hình đã chốt
 
@@ -97,5 +99,6 @@ và danh sách cấp học ngoài K-12 (nếu cần). Chi tiết ở mục 9 `do
 
 ## Lộ trình còn lại
 
-- [ ] Đẩy ảnh minh chứng sang Google Drive của tài khoản quản trị (cần Google OAuth credentials).
+- [x] Sao lưu ảnh lên Google Drive của tài khoản quản trị — đã xong, bật theo
+      [docs/HUONG_DAN_GOOGLE_DRIVE.md](docs/HUONG_DAN_GOOGLE_DRIVE.md) (cần OAuth Client của bạn).
 - [ ] Trợ giảng gửi ảnh vào nhóm Zalo/Telegram (cần tạo bot/OA và webhook).
