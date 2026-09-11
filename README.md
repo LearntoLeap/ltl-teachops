@@ -19,9 +19,30 @@ docs/    ARCHITECTURE.md · API.md · HUONG_DAN_DEPLOY.md
 | Quản trị viên | `admin` | Toàn hệ thống, tạo tài khoản |
 | Phòng chuyên môn | `manager` | Các trường được gán |
 | Giáo viên | `teacher` | Lớp/buổi được phân công |
-| Trợ giảng | `assistant` | Như giáo viên, quyền hẹp hơn |
+| Trợ giảng | `assistant` | **Quyền ngang Giáo viên** — hỗ trợ giáo viên tại lớp |
 
 Không có đăng ký công khai — mọi tài khoản do Admin tạo, bắt buộc đổi mật khẩu lần đầu.
+
+## Tính năng chính
+
+**Vận hành hiện trường**
+- Chấm công GPS: bắt buộc **ảnh selfie** + ảnh thiết bị + đếm thiết bị; ngoài bán kính phải ghi lý do
+  và chờ duyệt. Các **tiết nối tiếp** trong cùng buổi sáng/chiều chỉ cần cập nhật thiết bị.
+- Điểm danh: sĩ số dạng **X/Y**, nhập tên học sinh vắng thì tự trừ sĩ số, bắt buộc ảnh lớp.
+- Kiểm kê thiết bị 4 mốc/ngày, mỗi loại kèm **tình trạng** (tốt / có hỏng / thiếu-mất); hỏng thì
+  tự sinh phiếu báo cho Phòng chuyên môn.
+- **Offline-first**: mất mạng vẫn chấm công/điểm danh được, tự đồng bộ khi có sóng.
+
+**Lịch dạy** — 3 cách xem: danh sách, **thời khoá biểu tuần** (bảng × khung giờ), **lịch tháng**.
+Phòng chuyên môn/Admin xếp lịch lẻ hoặc lặp tuần; giáo viên tự thêm buổi bị thiếu (hệ thống ép
+gắn đúng tên người tạo).
+
+**Học liệu** — duyệt theo **Giải pháp** (UGOT, uKIT EDU, Stick'em…), trong mỗi giải pháp lọc tiếp
+theo khối 1–12 và loại tài liệu (giáo án / giáo trình / slide / video / mục tự thêm). Có tiết –
+tên bài – chương trình học, ảnh minh hoạ, phiên bản, bình luận, duyệt bài.
+
+**Quản trị** — tài khoản kèm **khu vực** & ngày sinh, danh mục thiết bị đề xuất (23 mục chuẩn),
+tìm kiếm nhanh có gợi ý, thông báo realtime (SSE), nhật ký thao tác, xuất Excel 6 loại báo cáo.
 
 ## Chạy phát triển tại máy
 
@@ -62,7 +83,19 @@ Cập nhật API sau này: `bash infra/deploy.sh` trên VPS. Web tự deploy khi
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — kiến trúc, quy tắc phân quyền & phạm vi dữ liệu, luồng nghiệp vụ.
 - [docs/API.md](docs/API.md) — hợp đồng API đầy đủ (nguồn sự thật khi sửa server lẫn web).
 
-## Điểm chờ Ban lãnh đạo xác nhận
+## Cấu hình đã chốt
 
-Xem mục 9 trong `docs/ARCHITECTURE.md` — vai trò Trợ giảng, bán kính GPS mặc định (150m),
-ngưỡng trễ (10 phút), số Admin, tích hợp lương. Tất cả đều sửa được qua cấu hình, không cần sửa code.
+| Mục | Giá trị | Sửa ở đâu |
+|---|---|---|
+| Quyền Trợ giảng | Ngang Giáo viên | `server/src/lib/rbac.js` |
+| Bán kính GPS chấm công | **1.000 m** | Màn hình Trường (từng trường) |
+| Ngưỡng tính trễ | **10 phút** | Màn hình Trường (từng trường) |
+| Khung giờ nhắc check-out | 45 phút | Màn hình Trường — **chỉ Admin** |
+
+Còn chờ xác nhận: quy mô trường/lớp dự kiến, có tích hợp phần mềm lương hay chỉ xuất Excel,
+và danh sách cấp học ngoài K-12 (nếu cần). Chi tiết ở mục 9 `docs/ARCHITECTURE.md`.
+
+## Lộ trình còn lại
+
+- [ ] Đẩy ảnh minh chứng sang Google Drive của tài khoản quản trị (cần Google OAuth credentials).
+- [ ] Trợ giảng gửi ảnh vào nhóm Zalo/Telegram (cần tạo bot/OA và webhook).
