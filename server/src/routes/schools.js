@@ -11,6 +11,9 @@ import { schoolFilter, combine, assertSchoolAccess } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, notFound, forbidden } from '../lib/errors.js';
 import { str, num, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
+import { sendXlsx } from '../lib/xlsx.js';
+
+const MAX_BATCH_ROWS = 300;
 
 // Khớp enum device_slot trong 001_init.sql
 const DEVICE_SLOTS = ['morning_start', 'morning_end', 'afternoon_start', 'afternoon_end'];
@@ -25,6 +28,57 @@ function parseDeviceSlots(v) {
     if (!out.includes(slot)) out.push(slot);
   }
   return out;
+}
+
+/** Ép kiểu thân tạo trường — dùng chung cho tạo đơn lẻ và nhập bảng. */
+function schoolFields(b) {
+  return {
+    code: str(b.code, 'Mã trường', { required: true, max: 30 }),
+    name: str(b.name, 'Tên trường', { required: true, max: 200 }),
+    address: str(b.address, 'Địa chỉ', { max: 500 }),
+    province: str(b.province, 'Tỉnh/Thành phố', { max: 100 }),
+    lat: num(b.lat, 'Vĩ độ', { min: -90, max: 90 }),
+    lng: num(b.lng, 'Kinh độ', { min: -180, max: 180 }),
+    gpsRadius: int(b.gps_radius_m, 'Bán kính GPS (m)', { min: 20, max: 5000 }),
+    graceMinutes: int(b.grace_minutes, 'Phút ân hạn trễ', { min: 0, max: 120 }),
+    deviceSlots: parseDeviceSlots(b.device_slots),
+    contactName: str(b.contact_name, 'Người liên hệ', { max: 200 }),
+    contactPhone: str(b.contact_phone, 'SĐT liên hệ', { max: 30 }),
+  };
+}
+
+/**
+ * Chèn trường mới. Manager tạo trường ⇒ tự đưa trường vào phạm vi phụ trách của
+ * chính họ, nếu không họ sẽ không nhìn thấy trường vừa tạo (phạm vi đọc từ user_schools).
+ * Các giá trị coalesce khớp default schema (1000m / 10 phút / đủ 4 mốc).
+ */
+async function insertSchool(user, f) {
+  const dup = await one('select id from schools where code = $1', [f.code]);
+  if (dup) throw conflict(`Mã trường "${f.code}" đã được sử dụng.`);
+
+  return tx(async (c) => {
+    const r = await c.query(
+      `insert into schools
+         (code, name, address, province, lat, lng, gps_radius_m, grace_minutes, device_slots,
+          contact_name, contact_phone)
+       values ($1, $2, $3, $4, $5, $6,
+               coalesce($7, 1000), coalesce($8, 10),
+               coalesce($9::device_slot[],
+                        '{morning_start,morning_end,afternoon_start,afternoon_end}'::device_slot[]),
+               $10, $11)
+       returning *`,
+      [f.code, f.name, f.address, f.province, f.lat, f.lng, f.gpsRadius, f.graceMinutes, f.deviceSlots,
+       f.contactName, f.contactPhone]
+    );
+    const s = r.rows[0];
+    if (user.role === 'manager') {
+      await c.query(
+        'insert into user_schools (user_id, school_id) values ($1, $2) on conflict do nothing',
+        [user.id, s.id]
+      );
+    }
+    return s;
+  });
 }
 
 export default async function routes(app) {
@@ -70,48 +124,7 @@ export default async function routes(app) {
    * POST /api/schools — admin, manager (org.manage).
    * ---------------------------------------------------------------------- */
   app.post('/api/schools', { preHandler: requirePerm('org.manage') }, async (req, reply) => {
-    const b = req.body || {};
-    const code = str(b.code, 'code', { required: true, max: 30 });
-    const name = str(b.name, 'name', { required: true, max: 200 });
-    const address = str(b.address, 'address', { max: 500 });
-    const province = str(b.province, 'province', { max: 100 });
-    const lat = num(b.lat, 'lat', { min: -90, max: 90 });
-    const lng = num(b.lng, 'lng', { min: -180, max: 180 });
-    const gpsRadius = int(b.gps_radius_m, 'gps_radius_m', { min: 20, max: 5000 });
-    const graceMinutes = int(b.grace_minutes, 'grace_minutes', { min: 0, max: 120 });
-    const deviceSlots = parseDeviceSlots(b.device_slots);
-    const contactName = str(b.contact_name, 'contact_name', { max: 200 });
-    const contactPhone = str(b.contact_phone, 'contact_phone', { max: 30 });
-
-    const dup = await one('select id from schools where code = $1', [code]);
-    if (dup) throw conflict(`Mã trường "${code}" đã được sử dụng.`);
-
-    // Manager tạo trường ⇒ tự đưa trường vào phạm vi phụ trách của chính họ,
-    // nếu không họ sẽ không nhìn thấy trường vừa tạo (phạm vi đọc từ user_schools).
-    // Các giá trị coalesce khớp default schema (1000m / 10 phút / đủ 4 mốc).
-    const school = await tx(async (c) => {
-      const r = await c.query(
-        `insert into schools
-           (code, name, address, province, lat, lng, gps_radius_m, grace_minutes, device_slots,
-            contact_name, contact_phone)
-         values ($1, $2, $3, $4, $5, $6,
-                 coalesce($7, 1000), coalesce($8, 10),
-                 coalesce($9::device_slot[],
-                          '{morning_start,morning_end,afternoon_start,afternoon_end}'::device_slot[]),
-                 $10, $11)
-         returning *`,
-        [code, name, address, province, lat, lng, gpsRadius, graceMinutes, deviceSlots,
-         contactName, contactPhone]
-      );
-      const s = r.rows[0];
-      if (req.user.role === 'manager') {
-        await c.query(
-          'insert into user_schools (user_id, school_id) values ($1, $2) on conflict do nothing',
-          [req.user.id, s.id]
-        );
-      }
-      return s;
-    });
+    const school = await insertSchool(req.user, schoolFields(req.body || {}));
 
     audit(req, {
       action: 'create',
@@ -122,6 +135,65 @@ export default async function routes(app) {
     });
     return reply.code(201).send(school);
   });
+
+  /* ------------------------------------------------------------------------
+   * POST /api/schools/batch — nhập NHIỀU trường một lượt (dạng bảng / dán Excel).
+   * body: { rows: [{ code, name, address?, province?, lat?, lng?, gps_radius_m?,
+   *                  grace_minutes?, contact_name?, contact_phone? }] }
+   * Dòng lỗi (trùng mã, thiếu tên…) bị bỏ qua và trả về trong `skipped`.
+   * ---------------------------------------------------------------------- */
+  app.post('/api/schools/batch', { preHandler: requirePerm('org.manage') }, async (req) => {
+    const rowsIn = req.body?.rows;
+    if (!Array.isArray(rowsIn) || !rowsIn.length) throw badRequest('Chưa có dòng nào để tạo.');
+    if (rowsIn.length > MAX_BATCH_ROWS) {
+      throw badRequest(`Mỗi lượt nhập tối đa ${MAX_BATCH_ROWS} dòng (đang có ${rowsIn.length}).`);
+    }
+
+    const created = [];
+    const skipped = [];
+    for (let i = 0; i < rowsIn.length; i++) {
+      try {
+        const s = await insertSchool(req.user, schoolFields(rowsIn[i] || {}));
+        created.push({ id: s.id, code: s.code, name: s.name });
+      } catch (e) {
+        skipped.push({ row: i + 1, reason: e.message || 'Dòng không hợp lệ.' });
+      }
+    }
+
+    if (created.length) {
+      audit(req, {
+        action: 'create', entity: 'schools',
+        summary: `Nhập bảng trường: tạo ${created.length} trường` +
+          `${skipped.length ? `, bỏ qua ${skipped.length} dòng` : ''}.`,
+        after: { created, skipped },
+      });
+    }
+    return { created: created.length, items: created, skipped };
+  });
+
+  /* GET /api/schools/batch-template — tệp Excel mẫu đúng thứ tự cột của bảng nhập. */
+  app.get('/api/schools/batch-template', { preHandler: requirePerm('org.manage') }, async (req, reply) =>
+    sendXlsx(reply, {
+      fileName: 'mau-nhap-truong',
+      sheetName: 'Nhập trường',
+      title: 'MẪU NHẬP DANH SÁCH TRƯỜNG — LtL TeachOps',
+      subtitle: 'Điền từ dòng 5 (xoá 2 dòng ví dụ) → bôi đen các dòng dữ liệu → Copy → bấm Ctrl+V trên bảng "Nhập bảng trường"',
+      columns: [
+        { header: 'Mã trường *', key: 'code', width: 14 },
+        { header: 'Tên trường *', key: 'name', width: 32 },
+        { header: 'Địa chỉ', key: 'address', width: 34 },
+        { header: 'Tỉnh / Thành phố', key: 'province', width: 16 },
+        { header: 'Toạ độ GPS (vĩ độ, kinh độ)', key: 'gps', width: 26 },
+        { header: 'Bán kính chấm công (m)', key: 'radius', width: 14, align: 'center' },
+        { header: 'Phút ân hạn trễ', key: 'grace', width: 12, align: 'center' },
+        { header: 'Người liên hệ', key: 'contact', width: 22 },
+        { header: 'SĐT liên hệ', key: 'phone', width: 14 },
+      ],
+      rows: [
+        { code: 'VD-THCS01', name: 'THCS Nguyễn Trãi (ví dụ)', address: '12 Lý Thái Tổ', province: 'Bắc Ninh', gps: '21.1861, 106.0763', radius: 1000, grace: 10, contact: 'Cô Hoa — Hiệu phó', phone: '0912345678' },
+        { code: 'VD-TH02', name: 'Tiểu học Kim Đồng (ví dụ)', address: '', province: 'Hà Nội', gps: '', radius: '', grace: '', contact: '', phone: '' },
+      ],
+    }));
 
   /* ------------------------------------------------------------------------
    * GET /api/schools/:id — chi tiết + danh sách lớp & phòng đang hoạt động.

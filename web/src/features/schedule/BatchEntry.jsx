@@ -16,6 +16,7 @@ import { api } from '../../lib/api.js';
 import { Field, Sheet, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 import { today } from '../../lib/format.js';
+import { findByName } from '../../lib/tablePaste.js';
 
 const listOf = (r) => (Array.isArray(r) ? r : r?.items || []);
 
@@ -55,16 +56,6 @@ function parseTime(v) {
   m = s.match(/^(\d{2})(\d{2})$/);
   if (m) return `${m[1]}:${m[2]}`;
   return s;
-}
-
-/** Tìm theo tên gần đúng (bỏ dấu, không phân biệt hoa thường). */
-const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
-function findByName(list, name, keys = ['name', 'full_name']) {
-  const n = norm(name);
-  if (!n) return '';
-  const hit = list.find((x) => keys.some((k) => norm(x[k]) === n))
-    || list.find((x) => keys.some((k) => norm(x[k]).includes(n)));
-  return hit?.id || '';
 }
 
 export default function BatchEntry({ open, onClose, schools, onDone }) {

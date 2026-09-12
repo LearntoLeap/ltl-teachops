@@ -107,11 +107,10 @@ const server = http.createServer(async (req, res) => {
       `GOOGLE_CLIENT_ID=${clientId}\n` +
       `GOOGLE_CLIENT_SECRET=${clientSecret}\n` +
       `GOOGLE_DRIVE_REFRESH_TOKEN=${data.refresh_token}\n\n` +
-      'Còn thiếu GOOGLE_DRIVE_FOLDER_ID: mở Google Drive, tạo thư mục\n' +
-      '"LtL TeachOps — Ảnh minh chứng", vào thư mục đó rồi chép đoạn mã\n' +
-      'cuối thanh địa chỉ:\n' +
-      '  drive.google.com/drive/folders/<ĐÂY_LÀ_FOLDER_ID>\n\n' +
-      'GIỮ KÍN refresh token — ai có nó là vào được Drive của bạn.\n' +
+      'Ứng dụng tự tạo thư mục "LtL TeachOps — Ảnh & Video" trong Drive của bạn\n' +
+      '(quyền drive.file chỉ ghi được vào thư mục do chính ứng dụng tạo).\n' +
+      'Cách dễ hơn: Admin vào app → Lưu trữ Drive → Kết nối, không cần chạy script này.\n\n' +
+      'GIỮ KÍN refresh token — ai có nó là vào được các tệp ứng dụng đã tải lên.\n' +
       '============================================================\n'
     );
   } catch (e) {

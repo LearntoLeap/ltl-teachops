@@ -218,6 +218,26 @@ export const api = {
     return name;
   },
 
+  /**
+   * Tải tệp lớn (ZIP học liệu) bằng chính trình duyệt: có thanh tiến trình, không giữ
+   * cả tệp trong RAM. Điều hướng không gửi được header nên token đi qua ?token=.
+   * Nên gọi ngay sau một request qua `api` để token vừa được làm mới nếu sắp hết hạn.
+   */
+  downloadDirect(path, query) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(query || {})) {
+      if (v === undefined || v === null || v === '') continue;
+      qs.append(k, Array.isArray(v) ? v.join(',') : String(v));
+    }
+    qs.append('token', tokens.access);
+    const a = document.createElement('a');
+    a.href = `${API_URL}${path}?${qs}`;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  },
+
   request,
 };
 

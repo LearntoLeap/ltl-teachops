@@ -105,7 +105,7 @@ export function Sheet({ open, onClose, title, children, wide = false }) {
       <div
         className={`bg-white w-full sm:rounded-xl3 rounded-t-xl3 shadow-card-lg overflow-hidden
                     transition-transform duration-200 flex flex-col
-                    ${wide ? 'sm:max-w-2xl' : 'sm:max-w-md'}
+                    ${wide === 'xl' ? 'sm:max-w-6xl' : wide ? 'sm:max-w-2xl' : 'sm:max-w-md'}
                     ${show ? 'translate-y-0' : 'translate-y-8 sm:translate-y-4 sm:opacity-0'}`}
         style={{ maxHeight: 'min(92vh, 100dvh - 24px)' }}>
         <div className="sm:hidden pt-2.5 flex justify-center">

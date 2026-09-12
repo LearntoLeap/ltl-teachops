@@ -3,35 +3,77 @@
  *
  * - POST /api/files        : upload rời qua multipart, trả danh sách tệp đã lưu.
  * - GET  /api/files/:id    : kiểm quyền rồi stream tệp gốc (?download=1 → tải về).
- * - GET  /api/files/:id/thumb : ảnh thu nhỏ 480px, cache 1 năm; không phải ảnh → bản gốc.
+ *                            Hỗ trợ Range (tua video, iPhone bắt buộc có). Bản gốc đã
+ *                            chuyển sang Google Drive ⇒ lấy từ Drive rồi chuyển tiếp.
+ * - GET  /api/files/:id/thumb : ảnh thu nhỏ 480px, cache 1 năm; video ⇒ ảnh bìa có nút ▶.
  *
  * Token qua query ?token= đã được lib/auth (extractToken) xử lý toàn cục —
- * thẻ <img src="/api/files/..?token=..."> dùng được trực tiếp.
+ * thẻ <img>/<video src="/api/files/..?token=..."> dùng được trực tiếp.
  */
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { consumeMultipart, getFileForUser, getThumbPath, absPath } from '../lib/storage.js';
+import { Readable } from 'node:stream';
+import {
+  consumeMultipart, getFileForUser, getThumbPath, absPath, contentDisposition, isVideo,
+} from '../lib/storage.js';
+import { fetchFromDrive } from '../lib/drive.js';
 import { assertSchoolAccess } from '../lib/scope.js';
 import { uuid, bool } from '../lib/validate.js';
-import { badRequest, notFound } from '../lib/errors.js';
+import { badRequest, notFound, AppError } from '../lib/errors.js';
 
-/**
- * Header Content-Disposition an toàn với tên tệp tiếng Việt:
- * filename= chỉ giữ ASCII (client cũ), filename*= mã hoá UTF-8 (RFC 5987).
- */
-function contentDisposition(kind, fileName) {
-  const name = String(fileName || 'tep');
-  const ascii = name.replace(/[^\x20-\x7e]+/g, '_').replace(/["\\]/g, '_') || 'tep';
-  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+const statOrNull = (abs) => stat(abs).catch(() => null);
+
+/** 'bytes=100-' · 'bytes=100-199' · 'bytes=-500' → {start, end}; không hợp lệ ⇒ null. */
+function parseRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(String(header || '').trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  let start;
+  let end;
+  if (m[1] === '') {
+    start = Math.max(0, size - Number(m[2]));
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === '' ? size - 1 : Math.min(Number(m[2]), size - 1);
+  }
+  return start <= end && start < size ? { start, end } : null;
 }
 
-/** stat tệp trên đĩa; mất tệp ⇒ 404 (bản ghi DB có thể còn nhưng đĩa đã mất). */
-async function statOrNotFound(abs) {
+/** Ảnh bìa cho video (không cần ffmpeg): nền tím, nút ▶, dung lượng. */
+function videoPoster(f) {
+  const mb = (Number(f.size_bytes || 0) / 1024 / 1024).toFixed(1);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8a3f97"/><stop offset="1" stop-color="#4f2a78"/></linearGradient></defs>
+<rect width="480" height="480" fill="url(#g)"/>
+<circle cx="240" cy="220" r="78" fill="#fff" fill-opacity=".92"/>
+<path d="M214 178 L292 220 L214 262 Z" fill="#6f3fa2"/>
+<text x="240" y="352" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#fff">VIDEO</text>
+<text x="240" y="394" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="26" fill="#f3e8f6">${mb} MB</text>
+</svg>`;
+}
+
+/** Chuyển tiếp tệp từ Google Drive (bản gốc đã rời VPS). */
+async function sendFromDrive(f, req, reply, disposition) {
+  if (!f.drive_file_id) throw notFound('Tệp không còn tồn tại trên máy chủ.');
+  let res;
   try {
-    return await stat(abs);
-  } catch {
-    throw notFound('Tệp không còn tồn tại trên máy chủ.');
+    res = await fetchFromDrive(f.drive_file_id, req.headers.range);
+  } catch (e) {
+    throw new AppError(503, 'DRIVE_UNAVAILABLE', `Chưa lấy được tệp từ Google Drive: ${e.message}`);
   }
+  if (!res.ok && res.status !== 206) {
+    throw new AppError(502, 'DRIVE_ERROR', `Google Drive trả lỗi ${res.status} khi lấy tệp.`);
+  }
+  reply.code(res.status)
+    .header('Content-Type', f.mime)
+    .header('Content-Disposition', disposition)
+    .header('Accept-Ranges', 'bytes')
+    .header('Cache-Control', 'private, max-age=3600');
+  for (const h of ['content-length', 'content-range']) {
+    const v = res.headers.get(h);
+    if (v) reply.header(h, v);
+  }
+  return reply.send(Readable.fromWeb(res.body));
 }
 
 export default async function routes(app) {
@@ -60,35 +102,59 @@ export default async function routes(app) {
   app.get('/api/files/:id', async (req, reply) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const f = await getFileForUser(req.user, id);
+    const download = bool(req.query.download, 'download', { def: false });
+    const disposition = contentDisposition(download ? 'attachment' : 'inline', f.file_name);
 
     const abs = absPath(f);
-    const st = await statOrNotFound(abs);
+    const st = await statOrNull(abs);
+    if (!st) return sendFromDrive(f, req, reply, disposition);
 
-    const download = bool(req.query.download, 'download', { def: false });
     reply
       .header('Content-Type', f.mime)
-      .header('Content-Disposition', contentDisposition(download ? 'attachment' : 'inline', f.file_name))
-      .header('Content-Length', st.size)
+      .header('Content-Disposition', disposition)
+      .header('Accept-Ranges', 'bytes')
       .header('Cache-Control', 'private, max-age=3600');
-    return reply.send(createReadStream(abs));
+
+    if (req.headers.range) {
+      const r = parseRange(req.headers.range, st.size);
+      if (!r) {
+        return reply.code(416).header('Content-Range', `bytes */${st.size}`).send();
+      }
+      return reply.code(206)
+        .header('Content-Range', `bytes ${r.start}-${r.end}/${st.size}`)
+        .header('Content-Length', r.end - r.start + 1)
+        .send(createReadStream(abs, { start: r.start, end: r.end }));
+    }
+    return reply.header('Content-Length', st.size).send(createReadStream(abs));
   });
 
   /* -------------- GET /api/files/:id/thumb — ảnh thu nhỏ 480px ------------- */
   app.get('/api/files/:id/thumb', async (req, reply) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const f = await getFileForUser(req.user, id);
+    // Nội dung theo id là bất biến ⇒ cache dài hạn phía trình duyệt.
+    reply.header('Cache-Control', 'private, max-age=31536000, immutable');
 
-    // Không phải ảnh, hoặc không tạo được thumbnail ⇒ trả bản gốc.
-    const thumb = await getThumbPath(f, 480);
+    if (isVideo(f.mime)) {
+      return reply.header('Content-Type', 'image/svg+xml; charset=utf-8').send(videoPoster(f));
+    }
+
+    let thumb = await getThumbPath(f, 480);
+    if (!thumb && f.drive_file_id && !(await statOrNull(absPath(f)))) {
+      // Ảnh đã chuyển sang Drive mà chưa có bản thu nhỏ ⇒ lấy về một lần để tạo.
+      const res = await fetchFromDrive(f.drive_file_id).catch(() => null);
+      if (res?.ok) thumb = await getThumbPath(f, 480, { buffer: Buffer.from(await res.arrayBuffer()) });
+    }
     const abs = thumb || absPath(f);
-    const st = await statOrNotFound(abs);
-
-    reply
+    const st = await statOrNull(abs);
+    if (!st) {
+      // Không phải ảnh (tài liệu) và bản gốc đã rời VPS ⇒ chuyển tiếp nguyên tệp từ Drive.
+      return sendFromDrive(f, req, reply, contentDisposition('inline', f.file_name));
+    }
+    return reply
       .header('Content-Type', thumb ? 'image/jpeg' : f.mime)
       .header('Content-Disposition', contentDisposition('inline', f.file_name))
       .header('Content-Length', st.size)
-      // Nội dung theo id là bất biến ⇒ cache dài hạn phía trình duyệt.
-      .header('Cache-Control', 'private, max-age=31536000, immutable');
-    return reply.send(createReadStream(abs));
+      .send(createReadStream(abs));
   });
 }

@@ -1,27 +1,28 @@
 /**
- * drive-sync.js — Đẩy thủ công toàn bộ ảnh/tài liệu tồn đọng lên Google Drive.
+ * drive-sync.js — Đẩy thủ công toàn bộ ảnh/video/tài liệu tồn đọng lên Google Drive,
+ * rồi dọn bản gốc đủ hạn trên VPS.
  *
- * Dùng khi: vừa bật Drive lần đầu (cần đẩy dồn ảnh cũ), hoặc sau khi sửa lỗi
+ * Dùng khi: vừa kết nối Drive lần đầu (cần đẩy dồn ảnh cũ), hoặc sau khi sửa lỗi
  * cấu hình muốn chạy lại ngay thay vì chờ job nền 5 phút/lượt.
  *
  * Chạy trên VPS:
  *   docker compose exec api node src/scripts/drive-sync.js
  */
-import { waitForDb, closeDb, one } from '../db.js';
-import { syncPendingFiles, driveEnabled, verifyDrive, driveStatus } from '../lib/drive.js';
+import { waitForDb, closeDb } from '../db.js';
+import { syncPendingFiles, offloadLocalCopies, driveEnabled, verifyDrive, driveStatus } from '../lib/drive.js';
+import { getThumbPath } from '../lib/storage.js';
 
 async function main() {
-  if (!driveEnabled()) {
+  await waitForDb();
+  if (!(await driveEnabled())) {
     console.error(
-      '[drive:sync] Chưa cấu hình Google Drive.\n' +
-      '  Cần đủ 4 biến trong .env: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,\n' +
-      '  GOOGLE_DRIVE_REFRESH_TOKEN, GOOGLE_DRIVE_FOLDER_ID.\n' +
+      '[drive:sync] Chưa kết nối Google Drive.\n' +
+      '  Admin vào app → Lưu trữ Drive → Kết nối (hoặc đặt GOOGLE_CLIENT_ID,\n' +
+      '  GOOGLE_CLIENT_SECRET, GOOGLE_DRIVE_REFRESH_TOKEN trong .env).\n' +
       '  Xem docs/HUONG_DAN_GOOGLE_DRIVE.md'
     );
     process.exit(1);
   }
-
-  await waitForDb();
   if (!(await verifyDrive())) process.exit(1);
 
   const before = await driveStatus();
@@ -35,8 +36,11 @@ async function main() {
     total += r.sent;
     failed += r.failed;
     if (r.sent) console.log(`[drive:sync] … đã đẩy ${total} tệp`);
-    if (!r.sent) break;             // hết tệp gửi được (hoặc toàn lỗi) ⇒ dừng
+    if (!r.sent) break;
   }
+
+  const o = await offloadLocalCopies({ limit: 10_000, ensureThumb: (f) => getThumbPath(f, 480) });
+  if (o.freed) console.log(`[drive:sync] Giải phóng ${o.freed} tệp (${Math.round(o.bytes / 1048576)} MB) trên VPS.`);
 
   const after = await driveStatus();
   console.log(
@@ -47,9 +51,7 @@ async function main() {
   if (after.last_error) {
     console.log(`             Lỗi gần nhất (${after.last_error_file}): ${after.last_error}`);
   }
-
   await closeDb();
-  void one;
 }
 
 main().catch((e) => {

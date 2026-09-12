@@ -653,8 +653,8 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
           value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
 
-      <PhotoInput value={photos} onChange={setPhotos} label="Ảnh thiết bị hỏng"
-        hint="Chụp rõ vị trí hỏng để đội xử lý chuẩn bị linh kiện." />
+      <PhotoInput value={photos} onChange={setPhotos} label="Ảnh / video thiết bị hỏng" allowVideo
+        hint="Chụp rõ vị trí hỏng; quay video nếu lỗi chỉ thấy khi thiết bị chạy." />
 
       <div className="flex gap-2.5 justify-end mt-1">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>

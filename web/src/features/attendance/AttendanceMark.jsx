@@ -300,12 +300,13 @@ export default function AttendanceMark() {
           </Field>
 
           <PhotoInput
-            label="Ảnh tổng quan lớp"
+            label="Ảnh / video tổng quan lớp"
             required
             max={4}
+            allowVideo
             value={photos}
             onChange={setPhotos}
-            hint="Chụp bao quát cả lớp để đối chiếu sĩ số."
+            hint="Chụp bao quát cả lớp để đối chiếu sĩ số; có thể quay thêm video hoạt động của lớp."
           />
 
           <Field label="Ghi chú">

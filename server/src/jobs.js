@@ -10,7 +10,8 @@
  */
 import { rows, query } from './db.js';
 import { notify, purgeOld } from './lib/notify.js';
-import { syncPendingFiles, driveEnabled } from './lib/drive.js';
+import { syncPendingFiles, offloadLocalCopies, driveEnabled } from './lib/drive.js';
+import { getThumbPath } from './lib/storage.js';
 import env from './env.js';
 
 let timers = [];
@@ -167,13 +168,19 @@ export async function remindUpcoming() {
 }
 
 /* ---------------------------------------------------------------------------
- * 3c. Sao lưu ảnh/tài liệu lên Google Drive (nếu đã cấu hình).
+ * 3c. Đẩy ảnh/video/tài liệu lên Google Drive rồi dọn bản gốc đủ hạn trên VPS.
+ * Luôn được lên lịch — Admin có thể kết nối Drive trong app lúc server đang chạy.
  * ------------------------------------------------------------------------- */
 export async function syncDrive() {
-  if (!driveEnabled()) return 0;
+  if (!(await driveEnabled())) return 0;
   const r = await syncPendingFiles({ limit: 25 });
   if (r.sent || r.failed) {
     log.info?.(`[jobs] Drive: đã đẩy ${r.sent} tệp${r.failed ? `, lỗi ${r.failed}` : ''}.`);
+  }
+  const o = await offloadLocalCopies({ limit: 100, ensureThumb: (f) => getThumbPath(f, 480) });
+  if (o.freed || o.requeued) {
+    log.info?.(`[jobs] Drive: giải phóng ${o.freed} tệp (${Math.round(o.bytes / 1048576)} MB) trên VPS` +
+      `${o.requeued ? `, ${o.requeued} tệp mất trên Drive sẽ đẩy lại` : ''}.`);
   }
   return r.sent;
 }
@@ -222,12 +229,10 @@ export function startJobs(logger) {
   // Mỗi giờ: gắn nhãn vắng.
   timers.push(setInterval(() => safe('markAbsences', markAbsences), 60 * MINUTE));
 
-  // Sao lưu Drive theo chu kỳ cấu hình (mặc định 5 phút).
-  if (driveEnabled()) {
-    const every = Math.max(1, env.drive.syncMinutes) * MINUTE;
-    timers.push(setInterval(() => safe('syncDrive', syncDrive), every));
-    timers.push(setTimeout(() => safe('syncDrive', syncDrive), 30_000));
-  }
+  // Đồng bộ Drive theo chu kỳ cấu hình (mặc định 5 phút); tự bỏ qua khi chưa kết nối.
+  const every = Math.max(1, env.drive.syncMinutes) * MINUTE;
+  timers.push(setInterval(() => safe('syncDrive', syncDrive), every));
+  timers.push(setTimeout(() => safe('syncDrive', syncDrive), 30_000));
 
   // Mỗi 6 giờ: dọn dữ liệu.
   timers.push(setInterval(() => safe('cleanup', cleanup), 6 * 60 * MINUTE));

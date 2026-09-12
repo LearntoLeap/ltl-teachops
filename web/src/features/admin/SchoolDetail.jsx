@@ -14,6 +14,7 @@ import { useToast } from '../../components/Toast.jsx';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
+import { ClassBatchSheet } from './OrgBatch.jsx';
 
 const SLOT_KEYS = Object.keys(LABEL.slot);
 
@@ -430,10 +431,11 @@ function ClassSheet({ cls, teachers, assistants, canManage, onClose, onSaved }) 
   );
 }
 
-function ClassesTab({ schoolId, canManage }) {
+function ClassesTab({ schoolId, schoolName, canManage }) {
   const [list, setList] = useState(null);
   const [error, setError] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [teachers, setTeachers] = useState([]);
   const [assistants, setAssistants] = useState([]);
@@ -468,7 +470,10 @@ function ClassesTab({ schoolId, canManage }) {
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="text-[13px] text-ink-muted">{fmtNumber(list.length)} lớp</div>
         {canManage && (
-          <button className="btn-primary !py-2" onClick={() => setAddOpen(true)}>+ Thêm lớp</button>
+          <div className="flex gap-2">
+            <button className="btn-line !py-2" onClick={() => setBatchOpen(true)}>▦ Nhập bảng lớp</button>
+            <button className="btn-primary !py-2" onClick={() => setAddOpen(true)}>+ Thêm lớp</button>
+          </div>
         )}
       </div>
 
@@ -527,6 +532,15 @@ function ClassesTab({ schoolId, canManage }) {
         onClose={() => setAddOpen(false)}
         onCreated={() => { setAddOpen(false); load(); }}
       />
+
+      {canManage && (
+        <ClassBatchSheet
+          open={batchOpen}
+          fixedSchool={{ id: schoolId, name: schoolName }}
+          onClose={() => setBatchOpen(false)}
+          onDone={(allOk) => { if (allOk) setBatchOpen(false); load(); }}
+        />
+      )}
 
       {editing && (
         <ClassSheet
@@ -766,7 +780,7 @@ export default function SchoolDetail() {
           onDisabled={() => navigate('/to-chuc')}
         />
       )}
-      {tab === 'classes' && <ClassesTab schoolId={schoolId} canManage={canManage} />}
+      {tab === 'classes' && <ClassesTab schoolId={schoolId} schoolName={school.name} canManage={canManage} />}
       {tab === 'rooms' && <RoomsTab schoolId={schoolId} canManage={canManage} />}
     </div>
   );

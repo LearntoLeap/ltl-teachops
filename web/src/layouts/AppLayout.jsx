@@ -52,6 +52,7 @@ function navGroups(auth) {
         auth.can('org.manage') && { to: '/to-chuc', icon: '🏫', label: 'Trường & Lớp' },
         auth.can('users.manage') && { to: '/tai-khoan', icon: '👥', label: 'Tài khoản' },
         auth.can('audit.view') && { to: '/nhat-ky', icon: '🧾', label: 'Nhật ký' },
+        auth.can('drive.manage') && { to: '/luu-tru-drive', icon: '☁️', label: 'Lưu trữ Drive' },
       ].filter(Boolean),
     },
   ];

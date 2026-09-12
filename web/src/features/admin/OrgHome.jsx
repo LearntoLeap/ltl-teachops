@@ -14,6 +14,7 @@ import { useToast } from '../../components/Toast.jsx';
 import {
   Badge, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Pager, SearchBox, Sheet, Spinner,
 } from '../../components/ui.jsx';
+import { ClassBatchSheet, SchoolBatchSheet } from './OrgBatch.jsx';
 
 const LIMIT = 50;
 
@@ -188,6 +189,8 @@ export default function OrgHome() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [schoolBatchOpen, setSchoolBatchOpen] = useState(false);
+  const [classBatchOpen, setClassBatchOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -211,7 +214,11 @@ export default function OrgHome() {
         title="Trường & Lớp"
         sub="Cấu hình trường, lớp học và phòng STEM"
         actions={canManage && (
-          <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Thêm trường</button>
+          <>
+            <button className="btn-line" onClick={() => setSchoolBatchOpen(true)}>▦ Nhập bảng trường</button>
+            <button className="btn-line" onClick={() => setClassBatchOpen(true)}>▦ Nhập bảng lớp</button>
+            <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Thêm trường</button>
+          </>
         )}
       />
 
@@ -252,6 +259,21 @@ export default function OrgHome() {
         onClose={() => setAddOpen(false)}
         onCreated={() => { setAddOpen(false); load(); }}
       />
+
+      {canManage && (
+        <>
+          <SchoolBatchSheet
+            open={schoolBatchOpen}
+            onClose={() => setSchoolBatchOpen(false)}
+            onDone={(allOk) => { if (allOk) setSchoolBatchOpen(false); load(); }}
+          />
+          <ClassBatchSheet
+            open={classBatchOpen}
+            onClose={() => setClassBatchOpen(false)}
+            onDone={(allOk) => { if (allOk) setClassBatchOpen(false); load(); }}
+          />
+        </>
+      )}
     </div>
   );
 }

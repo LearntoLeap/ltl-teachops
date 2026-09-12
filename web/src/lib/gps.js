@@ -112,14 +112,17 @@ export function humanSize(bytes) {
 }
 
 /**
- * Mở hộp thoại chọn/chụp ảnh. `capture: 'environment'` mở thẳng camera sau trên điện thoại.
+ * Mở hộp thoại chọn/chụp ảnh (hoặc video). `capture: 'environment'` mở thẳng camera sau.
+ * `accept: 'video/*'` + capture ⇒ mở chế độ quay video trên điện thoại.
  * @returns {Promise<File[]>}
  */
-export function pickImages({ multiple = false, capture = null } = {}) {
+export function pickImages({ multiple = false, capture = null, accept = 'image/*' } = {}) {
+  // Điện thoại cần thêm chút thời gian mới trả được video vừa quay về trang.
+  const cancelDelay = accept.includes('video') ? 4000 : 800;
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = accept;
     if (multiple) input.multiple = true;
     if (capture) input.capture = capture;
     input.style.display = 'none';
@@ -136,7 +139,7 @@ export function pickImages({ multiple = false, capture = null } = {}) {
     input.addEventListener('change', () => done(Array.from(input.files || [])));
     // Người dùng bấm Huỷ: sự kiện 'cancel' có ở trình duyệt mới; window focus là phương án dự phòng.
     input.addEventListener('cancel', () => done([]));
-    window.addEventListener('focus', () => setTimeout(() => done([]), 800), { once: true });
+    window.addEventListener('focus', () => setTimeout(() => done([]), cancelDelay), { once: true });
 
     input.click();
   });

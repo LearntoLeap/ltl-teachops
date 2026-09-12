@@ -23,16 +23,6 @@ const BRAND_SOFT = 'FFF3E8F6';
  * @param {Array}  [spec.sheets]    Nhiều sheet: [{ name, title, columns, rows }]
  */
 export async function sendXlsx(reply, spec) {
-  const wb = new ExcelJS.Workbook();
-  wb.creator = 'LtL TeachOps';
-  wb.created = new Date();
-
-  const sheets = spec.sheets?.length
-    ? spec.sheets
-    : [{ name: spec.sheetName || 'Dữ liệu', title: spec.title, subtitle: spec.subtitle, columns: spec.columns, rows: spec.rows }];
-
-  for (const s of sheets) buildSheet(wb, s);
-
   const safeName = String(spec.fileName || 'bao-cao')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')   // bỏ dấu tiếng Việt trong tên tệp
     .replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(0, 80);
@@ -43,7 +33,7 @@ export async function sendXlsx(reply, spec) {
   // đặt bằng reply.header() đều bị bỏ. Hậu quả là phản hồi không có
   // Content-Type lẫn Content-Disposition — trình duyệt không nhận ra đây là
   // tệp Excel và người dùng không tải về được.
-  const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+  const buffer = await xlsxBuffer(spec);
 
   return reply
     .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -51,6 +41,20 @@ export async function sendXlsx(reply, spec) {
     .header('Content-Length', String(buffer.length))
     .header('Cache-Control', 'no-store')
     .send(buffer);
+}
+
+/** Sinh tệp .xlsx thành Buffer (cùng định dạng với sendXlsx) — dùng khi cần nhúng vào tệp khác. */
+export async function xlsxBuffer(spec) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'LtL TeachOps';
+  wb.created = new Date();
+
+  const sheets = spec.sheets?.length
+    ? spec.sheets
+    : [{ name: spec.sheetName || 'Dữ liệu', title: spec.title, subtitle: spec.subtitle, columns: spec.columns, rows: spec.rows }];
+
+  for (const s of sheets) buildSheet(wb, s);
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
 function buildSheet(wb, s) {

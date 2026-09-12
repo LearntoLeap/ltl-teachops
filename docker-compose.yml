@@ -60,6 +60,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS}
       UPLOAD_DIR: ${UPLOAD_DIR:-/data/uploads}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-15}
+      MAX_VIDEO_MB: ${MAX_VIDEO_MB:-100}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME}
@@ -70,12 +71,13 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
       APP_PUBLIC_URL: ${APP_PUBLIC_URL}
-      # Sao lưu ảnh lên Google Drive — bỏ trống thì tự tắt
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-}
+      # Google Drive — thường kết nối ngay trong app (Lưu trữ Drive); các biến dưới là dự phòng
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_DRIVE_REFRESH_TOKEN: ${GOOGLE_DRIVE_REFRESH_TOKEN:-}
-      GOOGLE_DRIVE_FOLDER_ID: ${GOOGLE_DRIVE_FOLDER_ID:-}
       DRIVE_SYNC_MINUTES: ${DRIVE_SYNC_MINUTES:-5}
+      DRIVE_KEEP_LOCAL_DAYS: ${DRIVE_KEEP_LOCAL_DAYS:-7}
       TZ: Asia/Ho_Chi_Minh
     volumes:
       - ./data/uploads:/data/uploads

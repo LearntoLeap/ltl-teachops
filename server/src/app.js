@@ -17,6 +17,9 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/refresh',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
+  // Google chuyển trình duyệt về đây sau khi Admin cho phép — không mang theo Bearer
+  // token; route tự kiểm `state` (JWT ngắn hạn gắn với Admin đã bấm Kết nối).
+  '/api/drive/oauth/callback',
 ]);
 
 export async function buildApp() {
@@ -61,7 +64,8 @@ export async function buildApp() {
   /* ----------------------------- Multipart ------------------------------- */
   await app.register(multipart, {
     limits: {
-      fileSize: env.maxUploadBytes,
+      // Trần chung = loại lớn nhất (video); storage.js kiểm lại giới hạn riêng từng loại.
+      fileSize: Math.max(env.maxUploadBytes, env.maxVideoBytes),
       files: 12,              // đủ cho nhiều ảnh minh chứng một lượt
       fieldSize: 1024 * 1024, // trường `items` JSON của kiểm kê thiết bị có thể dài
     },
@@ -196,6 +200,7 @@ export async function buildApp() {
     import('./routes/files.js'),
     import('./routes/audit.js'),
     import('./routes/search.js'),
+    import('./routes/drive.js'),
   ]);
   for (const m of modules) {
     await app.register(m.default);

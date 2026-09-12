@@ -133,7 +133,7 @@ export default async function routes(app) {
   app.post('/api/feedback', { preHandler: requirePerm('feedback.create') }, async (req, reply) => {
     // school_id nằm trong fields multipart nên chưa biết trước — lưu tệp với schoolId null
     // rồi gắn lại sau khi đã kiểm phạm vi.
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: null });
+    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: null, allowVideo: true });
 
     const category = enumOf(fields.category, 'category', CATEGORIES, { required: true });
     const priority = enumOf(fields.priority, 'priority', PRIORITIES, { def: 'normal' }) || 'normal';

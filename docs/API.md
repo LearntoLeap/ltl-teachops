@@ -63,6 +63,14 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | PUT | `/api/classes/:id/assignments` | admin, manager | `{assignments:[{user_id, role}]}` |
 | GET/POST | `/api/rooms` | POST: admin, manager | `?school_id=` |
 | GET/PATCH/DELETE | `/api/rooms/:id` | | |
+| POST | `/api/schools/batch` | admin, manager | Nhập bảng: `{rows:[{code, name, address?, province?, lat?, lng?, gps_radius_m?, grace_minutes?, contact_name?, contact_phone?}]}` (≤300 dòng) |
+| GET | `/api/schools/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
+| POST | `/api/classes/batch` | admin, manager | Nhập bảng: `{rows:[{school_id, name, grade?, level?, roster_size?, note?, teacher_id?, assistant_id?}]}` (≤300 dòng) |
+| GET | `/api/classes/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
+
+Các endpoint nhập bảng trả `{created, items[], skipped:[{row, reason}]}` — dòng lỗi (trùng mã/tên,
+thiếu thông tin, ngoài phạm vi…) bị bỏ qua kèm lý do, các dòng khác vẫn được tạo.
+Lớp: không gửi `level` thì server tự suy từ `grade` (1-5 Tiểu học · 6-9 THCS · 10-12 THPT) — áp dụng cả `POST /api/classes`.
 
 ## 4. Lịch dạy — `/api/schedules`
 
@@ -72,6 +80,7 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | GET | `/today` | mọi vai trò | Buổi hôm nay của tôi + trạng thái chấm công/điểm danh |
 | POST | `/` | admin, manager | Tạo một buổi |
 | POST | `/bulk` | admin, manager | `{template, weekdays:[], from, to}` — sinh lịch lặp theo tuần |
+| POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}` |
 | GET/PATCH/DELETE | `/:id` | PATCH/DELETE: admin, manager | |
 
 ## 5. Chấm công — `/api/timesheets`
@@ -157,6 +166,25 @@ Tải xuống qua `GET /api/files/:id` (route kiểm quyền).
 | GET | `/api/materials/types` | mọi vai trò — danh sách loại (Giáo án, Giáo trình, Slide, Nghiên cứu, Video…) |
 | POST | `/api/materials/types` | admin, manager — thêm loại mới `{name, icon?}` |
 
+**Lọc theo giải pháp**: `solution_id` là giải pháp gốc ⇒ gồm luôn học liệu của các giải pháp con.
+Lọc nhiều loại cùng lúc: `?type_ids=a,b`.
+
+**Đăng hàng loạt** (màn hình dạng bảng): gọi `POST /api/materials` cho từng tệp kèm `batch=1`
+(không gửi thông báo từng tệp), xong gọi `POST /api/materials/batch-done {ids}` — server gửi
+MỘT thông báo tổng hợp theo cấp học cho GV/TG (chỉ tính học liệu chuẩn do chính người gọi đăng trong 1 ngày).
+
+**Tải về .zip**
+
+| Method | Path | Quyền |
+|---|---|---|
+| GET | `/api/materials/zip/preview` | mọi vai trò — cùng bộ lọc danh sách + `ids=a,b` (mục đã chọn) + `type_ids=` → `{count, file_count, text_count, total_bytes, too_many, too_large}` |
+| GET | `/api/materials/zip` | mọi vai trò — như trên + `group=type\|lesson`; nhận token qua `?token=` để trình duyệt tự tải |
+
+Cây thư mục: `Giải pháp / [Giải pháp con] / Khối 06 / <Loại> / Tiết 05 - Tên bài - Tiêu đề.pdf`
+(`group=lesson`: `… / Khối 06 / Tiết 05 - Tên bài / <Loại> - Tiêu đề.pdf`). Lấy tệp phiên bản mới nhất;
+bài viết không kèm tệp ⇒ `.txt`. Kèm `00 - Danh muc hoc lieu.xlsx`. Giới hạn 500 tài liệu / 1 GB mỗi lần.
+Chỉ đóng gói học liệu người gọi được xem (cùng quy tắc với danh sách); ghi `audit_log` hành động `export`.
+
 ## 8b. Tìm kiếm nhanh — `/api/search`
 
 `GET /api/search?q=` (≥2 ký tự) → `{schools, classes, users, materials, solutions, schedules}` —
@@ -197,18 +225,34 @@ Mọi endpoint `.xlsx` nhận `?from=&to=&school_id=&class_id=&user_id=`.
 ## 13. Tệp — `/api/files`
 
 `POST /` (`multipart`, tối đa 15MB/tệp — ảnh `jpeg/png/webp/heic`, tài liệu `pdf/docx/pptx/xlsx`) →
-`{id, url, mime, size_bytes}` · `GET /:id` (kiểm quyền rồi stream) ·
-`GET /:id/thumb` (ảnh thu nhỏ 480px, cache 1 năm).
+`{id, url, mime, size_bytes}` · `GET /:id` (kiểm quyền rồi stream; hỗ trợ `Range` → `206` để tua video)
+· `GET /:id/thumb` (ảnh thu nhỏ 480px, cache 1 năm; video ⇒ ảnh bìa SVG có nút ▶).
 
 Ảnh được nén phía client xuống cạnh dài ≤ 1600px, JPEG chất lượng 0.8 trước khi tải lên.
 
-## 13b. Sao lưu Google Drive — `/api/reports/drive` (admin)
+**Video** (`mp4/mov/webm/3gp/m4v`, tối đa `MAX_VIDEO_MB`=100MB, ghi luồng xuống đĩa) chỉ được nhận ở:
+`POST /api/attendance` + `PATCH /api/attendance/:id` (`photos`), `POST /api/devices/issues`,
+`POST /api/feedback`, `POST /api/materials` + `/:id/versions`. Nơi khác gửi video ⇒ `400`.
 
-`GET /api/reports/drive` → `{enabled, total, synced, pending, failed, last_synced_at, last_error}`
-· `POST /api/reports/drive/sync` — đẩy ngay tối đa 50 tệp, không chờ job nền (5 phút/lượt).
+Tệp đã chuyển hẳn sang Google Drive (`local_deleted_at`): `GET /:id` lấy từ Drive rồi chuyển tiếp
+(kể cả `Range`); Drive không truy cập được ⇒ `503`.
 
-Ảnh vẫn lưu chính trên VPS; Drive là bản sao. Chưa cấu hình 4 biến GOOGLE_* thì `enabled=false`
-và hệ thống bỏ qua đồng bộ. Xem docs/HUONG_DAN_GOOGLE_DRIVE.md.
+## 13b. Google Drive — `/api/drive` (quyền `drive.manage` = admin)
+
+| Method | Path | Mô tả |
+|---|---|---|
+| GET | `/api/drive` | Trạng thái + cấu hình: `connected, account, root_folder_link, total, synced, pending, failed, offloaded, offloaded_bytes, local_bytes, keep_local_days, offload, redirect_uri…` (không bao giờ trả secret/token) |
+| PUT | `/api/drive/config` | `{client_id, client_secret}` — OAuth client (Web application). Đã có tệp chỉ nằm trên Drive ⇒ không cho đổi client khác (`409`) |
+| GET | `/api/drive/connect` | → `{url}` trang đăng nhập Google (scope `drive.file`, `state` = JWT 15 phút) |
+| GET | `/api/drive/oauth/callback` | **Công khai** — Google chuyển về; đổi mã lấy refresh token, tạo thư mục gốc, chuyển về `APP_PUBLIC_URL/luu-tru-drive?ket_noi=ok\|loi&ly_do=` |
+| POST | `/api/drive/disconnect` | Thu hồi quyền; tệp trên Drive giữ nguyên |
+| PATCH | `/api/drive/settings` | `{keep_local_days (0-365), offload (bool)}` |
+| POST | `/api/drive/sync` | Đẩy ngay tối đa 100 tệp + dọn bản gốc đủ hạn → `{sync, offload, status}` |
+
+Job nền (mỗi `DRIVE_SYNC_MINUTES`): đẩy tệp mới quá 2 phút theo cây `<Trường>/<YYYY-MM>/<Nghiệp vụ>`,
+rồi xoá bản gốc ảnh/video hiện trường đã lên Drive quá `keep_local_days` ngày — chỉ khi Drive xác nhận
+md5 khớp và tệp chưa vào thùng rác (không thì đưa lại hàng đợi đẩy). Học liệu, ảnh bìa, ảnh đại diện
+không bị dọn. Xem docs/HUONG_DAN_GOOGLE_DRIVE.md.
 
 ## 14. Nhật ký — `/api/audit` (admin)
 

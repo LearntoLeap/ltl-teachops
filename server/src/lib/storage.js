@@ -32,8 +32,55 @@ const DOC_MIMES = new Set([
   'application/zip',
 ]);
 
+// Video quay từ điện thoại: Android (mp4/3gp/webm), iPhone (mov).
+const VIDEO_EXT = {
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/webm': '.webm',
+  'video/3gpp': '.3gp',
+  'video/x-m4v': '.m4v',
+};
+
 export const isImage = (mime) => IMAGE_MIMES.has(String(mime).toLowerCase());
+export const isVideo = (mime) => Object.hasOwn(VIDEO_EXT, String(mime).toLowerCase());
 const isAllowed = (mime) => isImage(mime) || DOC_MIMES.has(String(mime).toLowerCase());
+
+/**
+ * Video: ghi thẳng luồng xuống đĩa (vừa ghi vừa băm), không nạp cả tệp vào RAM.
+ * Vượt giới hạn ⇒ xoá tệp dở dang rồi báo lỗi.
+ */
+async function streamVideoToDisk(part, mime) {
+  const dir = relDir();
+  const ext = VIDEO_EXT[mime];
+  const name = `${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+  const storagePath = path.posix.join(dir, name);
+  const abs = path.join(env.uploadDir, storagePath);
+  await ensureDir(path.join(env.uploadDir, dir));
+
+  const hash = crypto.createHash('sha256');
+  let size = 0;
+  const limitMb = Math.round(env.maxVideoBytes / 1024 / 1024);
+  try {
+    await pipeline(
+      part.file,
+      async function* meter(source) {
+        for await (const chunk of source) {
+          size += chunk.length;
+          if (size > env.maxVideoBytes) throw tooLarge(`Video vượt quá ${limitMb}MB — hãy quay ngắn hơn.`);
+          hash.update(chunk);
+          yield chunk;
+        }
+      },
+      createWriteStream(abs)
+    );
+    if (part.file.truncated) throw tooLarge(`Video vượt quá ${limitMb}MB — hãy quay ngắn hơn.`);
+    if (!size) throw badRequest('Tệp rỗng.');
+  } catch (e) {
+    await fs.unlink(abs).catch(() => {});
+    throw e;
+  }
+  return { storagePath, size, sha256: hash.digest('hex') };
+}
 
 /** Thư mục theo năm/tháng để một thư mục không phình quá lớn. */
 function relDir(d = new Date()) {
@@ -47,15 +94,25 @@ async function ensureDir(abs) {
 /**
  * Lưu một phần multipart thành tệp + bản ghi `files`.
  * @param {object} part      Phần multipart của @fastify/multipart (có .file stream, .mimetype, .filename)
- * @param {object} opts      { userId, schoolId }
+ * @param {object} opts      { userId, schoolId, allowVideo } — allowVideo: nghiệp vụ này nhận video
  * @returns {Promise<object>} bản ghi files
  */
-export async function saveUpload(part, { userId, schoolId = null } = {}) {
+export async function saveUpload(part, { userId, schoolId = null, allowVideo = false } = {}) {
   if (!part || !part.file) throw badRequest('Không nhận được tệp tải lên.');
 
   const mime = String(part.mimetype || 'application/octet-stream').toLowerCase();
+  if (isVideo(mime)) {
+    if (!allowVideo) throw badRequest('Mục này chỉ nhận ảnh, không nhận video.');
+    const v = await streamVideoToDisk(part, mime);
+    return one(
+      `insert into files (storage_path, file_name, mime, size_bytes, sha256, uploaded_by, school_id)
+       values ($1, $2, $3, $4, $5, $6, $7) returning *`,
+      [v.storagePath, String(part.filename || path.posix.basename(v.storagePath)).slice(0, 200),
+       mime, v.size, v.sha256, userId || null, schoolId]
+    );
+  }
   if (!isAllowed(mime)) {
-    throw badRequest(`Định dạng tệp không được hỗ trợ: ${mime}. Chỉ nhận ảnh (JPG/PNG/WEBP/HEIC) và tài liệu (PDF/DOCX/PPTX/XLSX).`);
+    throw badRequest(`Định dạng tệp không được hỗ trợ: ${mime}. Chỉ nhận ảnh (JPG/PNG/WEBP/HEIC), video (MP4/MOV) và tài liệu (PDF/DOCX/PPTX/XLSX).`);
   }
 
   // Đọc vào bộ nhớ có giới hạn — @fastify/multipart đã chặn ở mức limits.fileSize,
@@ -132,22 +189,26 @@ export async function saveUpload(part, { userId, schoolId = null } = {}) {
 /**
  * Duyệt toàn bộ phần multipart của một request: tách trường văn bản và tệp.
  * Trả { fields: {...}, files: { fieldname: [fileRow, ...] } }
+ * Một tệp lỗi (quá dung lượng, sai định dạng…) ⇒ xoá các tệp đã lưu trong cùng request.
  */
-export async function consumeMultipart(req, { userId, schoolId = null } = {}) {
+export async function consumeMultipart(req, { userId, schoolId = null, allowVideo = false } = {}) {
   const fields = {};
   const files = {};
-  for await (const part of req.parts()) {
-    if (part.type === 'file') {
-      const row = await saveUpload(part, { userId, schoolId });
-      (files[part.fieldname] ||= []).push(row);
-    } else {
-      // Trường lặp lại ⇒ gom thành mảng
-      if (fields[part.fieldname] !== undefined) {
+  try {
+    for await (const part of req.parts()) {
+      if (part.type === 'file') {
+        const row = await saveUpload(part, { userId, schoolId, allowVideo });
+        (files[part.fieldname] ||= []).push(row);
+      } else if (fields[part.fieldname] !== undefined) {
+        // Trường lặp lại ⇒ gom thành mảng
         fields[part.fieldname] = [].concat(fields[part.fieldname], part.value);
       } else {
         fields[part.fieldname] = part.value;
       }
     }
+  } catch (e) {
+    await Promise.all(Object.values(files).flat().map((f) => deleteFile(f.id).catch(() => {})));
+    throw e;
   }
   return { fields, files };
 }
@@ -174,8 +235,11 @@ export async function getFileForUser(user, fileId) {
   throw notFound('Không tìm thấy tệp.');
 }
 
-/** Ảnh thu nhỏ, tạo một lần rồi lưu cạnh bản gốc (`<tên>.thumb.jpg`). */
-export async function getThumbPath(fileRow, size = 480) {
+/**
+ * Ảnh thu nhỏ, tạo một lần rồi lưu cạnh bản gốc (`<tên>.thumb480.jpg`).
+ * `buffer`: nội dung ảnh gốc khi bản trên VPS đã được chuyển sang Drive.
+ */
+export async function getThumbPath(fileRow, size = 480, { buffer } = {}) {
   if (!isImage(fileRow.mime)) return null;
   const src = absPath(fileRow);
   const thumb = src.replace(/(\.[^.]+)?$/, `.thumb${size}.jpg`);
@@ -185,7 +249,8 @@ export async function getThumbPath(fileRow, size = 480) {
   } catch { /* chưa có, tạo mới */ }
 
   try {
-    await sharp(src)
+    await ensureDir(path.dirname(thumb));
+    await sharp(buffer || src)
       .resize({ width: size, height: size, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 72, mozjpeg: true })
       .toFile(thumb);
@@ -194,6 +259,16 @@ export async function getThumbPath(fileRow, size = 480) {
     console.warn('[storage] Không tạo được ảnh thu nhỏ:', e.message);
     return null;
   }
+}
+
+/**
+ * Header Content-Disposition an toàn với tên tệp tiếng Việt:
+ * filename= chỉ giữ ASCII (client cũ), filename*= mã hoá UTF-8 (RFC 5987).
+ */
+export function contentDisposition(kind, fileName) {
+  const name = String(fileName || 'tep');
+  const ascii = name.replace(/[^\x20-\x7e]+/g, '_').replace(/["\\]/g, '_') || 'tep';
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 /** Xoá tệp khỏi đĩa + DB (dùng khi gỡ học liệu). Không ném lỗi nếu đĩa đã mất tệp. */

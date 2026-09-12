@@ -7,6 +7,8 @@
  * - Thẻ tài liệu có ẢNH MINH HOẠ, dòng "Tiết – Tên bài – Chương trình học".
  * - Đăng tài liệu: tệp HOẶC nội dung tự do (bài viết), kèm ảnh bìa; admin/manager
  *   thêm loại tài liệu mới ngay trong form.
+ * - Đăng hàng loạt dạng bảng (MaterialsBulkUpload) và tải về .zip theo lựa chọn:
+ *   tích chọn từng bài, theo bộ lọc, hoặc cả thư mục giải pháp (MaterialsDownload).
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -18,6 +20,8 @@ import {
   Pager, SearchBox, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
+import MaterialsBulkUpload from './MaterialsBulkUpload.jsx';
+import MaterialsDownload from './MaterialsDownload.jsx';
 
 const LIMIT = 30;
 
@@ -75,8 +79,22 @@ function ChipRow({ label, options, value, onChange, trailing }) {
   );
 }
 
+/** Tải nhanh tệp phiên bản mới nhất của một tài liệu. */
+function useQuickDownload() {
+  const toast = useToast();
+  return useCallback(async (m) => {
+    const v = m.latest_version;
+    if (!v?.file_id) return;
+    try {
+      await api.download(`/api/files/${v.file_id}`, { download: 1 }, v.file_name || m.title);
+    } catch (e) {
+      toast.fromError(e);
+    }
+  }, [toast]);
+}
+
 /* ------------------------------ Thẻ tài liệu ------------------------------ */
-function MaterialCard({ m, area }) {
+function MaterialCard({ m, area, checked, onToggle }) {
   const ownerName = m.owner_name || m.owner?.full_name || '';
   const at = m.updated_at || m.latest_version?.created_at || m.created_at;
   const lessonLine = [
@@ -88,7 +106,19 @@ function MaterialCard({ m, area }) {
   return (
     <Link
       to={`/hoc-lieu/${m.id}`}
-      className="card overflow-hidden flex hover:border-brand-300 hover:-translate-y-px transition group">
+      className={`card overflow-hidden flex hover:border-brand-300 hover:-translate-y-px transition group relative
+        ${checked ? '!border-brand-400 ring-1 ring-brand-300' : ''}`}>
+      {/* Ô chọn để tải về — nút thay cho checkbox thật vì nằm trong liên kết */}
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        aria-label={`Chọn ${m.title} để tải về`}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(m); }}
+        className={`absolute top-2 right-2 h-5 w-5 rounded-md border grid place-items-center text-[12px] font-bold transition
+          ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white/90 border-line text-transparent hover:border-brand-400'}`}>
+        ✓
+      </button>
       {/* Ảnh minh hoạ / icon tệp */}
       {m.cover_file_id ? (
         <img
@@ -103,7 +133,7 @@ function MaterialCard({ m, area }) {
         </div>
       )}
 
-      <div className="min-w-0 flex-1 p-3">
+      <div className="min-w-0 flex-1 p-3 pr-9">
         <div className="flex items-center gap-1.5 flex-wrap">
           {m.type_name && (
             <span className="rounded-md bg-brand-50 text-brand-800 px-1.5 py-[1px] text-[10.5px] font-bold">
@@ -149,13 +179,20 @@ function MaterialCard({ m, area }) {
  * MaterialTable — chế độ xem danh sách: mỗi tài liệu một dòng, thấy được
  * nhiều mục cùng lúc và so sánh nhanh theo khối / tiết / loại.
  */
-function MaterialTable({ items, area }) {
+function MaterialTable({ items, area, selected, onToggle, onTogglePage }) {
+  const quickDownload = useQuickDownload();
+  const allOnPage = items.length > 0 && items.every((m) => selected.has(m.id));
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[820px]">
+        <table className="w-full min-w-[880px]">
           <thead>
             <tr>
+              <th className="th !w-[40px] text-center">
+                <input type="checkbox" className="h-4 w-4 accent-[#8A3F97] align-middle"
+                  aria-label="Chọn tất cả tài liệu trong trang"
+                  checked={allOnPage} onChange={(e) => onTogglePage(items, e.target.checked)} />
+              </th>
               <th className="th !w-[52px]">Khối</th>
               <th className="th !w-[64px]">Tiết</th>
               <th className="th">Tên tài liệu</th>
@@ -163,11 +200,17 @@ function MaterialTable({ items, area }) {
               <th className="th !w-[130px]">Loại</th>
               <th className="th !w-[150px]">Giải pháp</th>
               <th className="th !w-[130px]">Người đăng</th>
+              <th className="th !w-[44px]"></th>
             </tr>
           </thead>
           <tbody>
             {items.map((m) => (
-              <tr key={m.id} className="hover:bg-brand-50/40 transition">
+              <tr key={m.id} className={`transition ${selected.has(m.id) ? 'bg-brand-50/70' : 'hover:bg-brand-50/40'}`}>
+                <td className="td text-center">
+                  <input type="checkbox" className="h-4 w-4 accent-[#8A3F97] align-middle"
+                    aria-label={`Chọn ${m.title}`}
+                    checked={selected.has(m.id)} onChange={() => onToggle(m)} />
+                </td>
                 <td className="td text-center font-bold text-sky-700">{m.grade || '—'}</td>
                 <td className="td text-center text-ink-soft">{m.lesson_no || '—'}</td>
                 <td className="td">
@@ -200,13 +243,20 @@ function MaterialTable({ items, area }) {
                     <span className="block text-[11px]">{fmtAgo(m.updated_at || m.created_at)}</span>
                   )}
                 </td>
+                <td className="td !px-1 text-center">
+                  {m.latest_version?.file_id && (
+                    <button type="button" title={`Tải ${m.latest_version.file_name || 'tệp'} về máy`}
+                      className="h-8 w-8 rounded-lg text-[17px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
+                      onClick={() => quickDownload(m)}>⬇</button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
-        {items.length} tài liệu — bấm tên để mở chi tiết
+        {items.length} tài liệu — bấm tên để mở chi tiết · tích ô vuông để chọn tải nhiều bài · ⬇ tải nhanh một tệp
       </div>
     </div>
   );
@@ -547,10 +597,25 @@ export default function MaterialsHome() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [dlOpen, setDlOpen] = useState(false);
+  // Chọn từng bài để tải về — giữ qua các trang và khi đổi bộ lọc.
+  const [selected, setSelected] = useState(() => new Map());
 
-  const canWrite = area === 'official'
-    ? auth.can('material.official.write')
-    : auth.can('material.teacher.write');
+  const canOfficial = auth.can('material.official.write');
+  const canTeacher = auth.can('material.teacher.write');
+  const canWrite = area === 'official' ? canOfficial : canTeacher;
+
+  const toggleOne = (m) => setSelected((s) => {
+    const n = new Map(s);
+    if (n.has(m.id)) n.delete(m.id); else n.set(m.id, m.title);
+    return n;
+  });
+  const togglePage = (list, on) => setSelected((s) => {
+    const n = new Map(s);
+    for (const m of list) { if (on) n.set(m.id, m.title); else n.delete(m.id); }
+    return n;
+  });
 
   const loadTypes = useCallback(() => {
     api.get('/api/materials/types')
@@ -598,8 +663,18 @@ export default function MaterialsHome() {
       <PageHeader
         title="Học liệu"
         sub="Duyệt theo giải pháp giảng dạy — trong mỗi giải pháp có giáo án, giáo trình, slide theo khối"
-        actions={canWrite && (
-          <button className="btn-primary" onClick={() => setFormOpen(true)}>+ Đăng tài liệu</button>
+        actions={(
+          <>
+            <button className="btn-line" onClick={() => setDlOpen(true)}>
+              ⬇ Tải về{selected.size ? ` (${selected.size})` : ''}
+            </button>
+            {canWrite && (
+              <button className="btn-line" onClick={() => setBulkOpen(true)}>▦ Đăng hàng loạt</button>
+            )}
+            {canWrite && (
+              <button className="btn-primary" onClick={() => setFormOpen(true)}>+ Đăng tài liệu</button>
+            )}
+          </>
         )}
       />
 
@@ -698,10 +773,14 @@ export default function MaterialsHome() {
         ) : (
           <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
             {view === 'list' ? (
-              <MaterialTable items={items} area={area} />
+              <MaterialTable items={items} area={area} selected={selected}
+                onToggle={toggleOne} onTogglePage={togglePage} />
             ) : (
               <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                {items.map((m) => <MaterialCard key={m.id} m={m} area={area} />)}
+                {items.map((m) => (
+                  <MaterialCard key={m.id} m={m} area={area}
+                    checked={selected.has(m.id)} onToggle={toggleOne} />
+                ))}
               </div>
             )}
           </div>
@@ -709,6 +788,45 @@ export default function MaterialsHome() {
       )}
 
       <Pager page={page} limit={LIMIT} total={data?.total} onPage={setPage} />
+
+      {selected.size > 0 && (
+        <div className="sticky bottom-[calc(76px+var(--safe-bot))] lg:bottom-4 z-30 mt-3 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl bg-ink text-white shadow-card-lg px-4 py-2.5">
+            <span className="text-[13.5px]">Đã chọn <b>{selected.size}</b> tài liệu</span>
+            <button className="rounded-xl bg-white text-brand-900 font-semibold text-[13px] px-3 py-1.5 hover:bg-brand-50"
+              onClick={() => setDlOpen(true)}>⬇ Tải các mục đã chọn</button>
+            <button className="text-[13px] text-white/80 hover:text-white px-2"
+              onClick={() => setSelected(new Map())}>Bỏ chọn</button>
+          </div>
+        </div>
+      )}
+
+      <MaterialsDownload
+        open={dlOpen}
+        onClose={() => setDlOpen(false)}
+        filters={{ area, solutionId, grade, typeId, level, q }}
+        selectedIds={[...selected.keys()]}
+        types={types}
+        solutionLabel={solutions.find((so) => so.id === solutionId)?.label.replace(/^(— )+/, '')}
+        gradeLabel={grade ? `Khối ${grade}` : ''}
+      />
+
+      <MaterialsBulkUpload
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        area={area}
+        canOfficial={canOfficial}
+        canTeacher={canTeacher}
+        types={types}
+        solutions={solutions}
+        defaultSolutionId={solutionId}
+        defaultGrade={grade}
+        onDone={(allOk) => {
+          if (allOk) setBulkOpen(false);
+          setPage(1);
+          load();
+        }}
+      />
 
       <AddSolutionSheet
         open={solutionFormOpen}

@@ -8,9 +8,29 @@ import { schoolFilter, combine, assertSchoolAccess, assertClassAccess } from '..
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, unprocessable } from '../lib/errors.js';
 import { str, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
+import { sendXlsx } from '../lib/xlsx.js';
 
 // Khớp enum edu_level trong 001_init.sql
 const LEVELS = ['primary', 'secondary', 'highschool'];
+const MAX_BATCH_ROWS = 300;
+
+/** Khối 1-5 → Tiểu học · 6-9 → THCS · 10-12 → THPT. */
+const levelOfGrade = (g) => (g <= 5 ? 'primary' : g <= 9 ? 'secondary' : 'highschool');
+
+/** Cấp học: lấy theo giá trị gửi lên, không có thì suy từ khối. */
+function resolveLevel(b, grade) {
+  const level = enumOf(b.level, 'Cấp học', LEVELS) || (grade ? levelOfGrade(grade) : null);
+  if (!level) throw badRequest('Cần nhập Khối (1–12) hoặc chọn Cấp học.');
+  return level;
+}
+
+async function assertStaff(userId, role, label) {
+  const u = await one('select id, full_name, role, is_active from users where id = $1', [userId]);
+  if (!u || u.role !== role || !u.is_active) {
+    throw unprocessable(`${label} không hợp lệ — phải là tài khoản ${label.toLowerCase()} đang hoạt động.`);
+  }
+  return u;
+}
 
 /** Subquery: danh sách người phụ trách lớp (từ class_assignments, kèm vai trò trong lớp). */
 const TEACHERS_SQL = `
@@ -97,9 +117,9 @@ export default async function routes(app) {
   app.post('/api/classes', { preHandler: requirePerm('org.manage') }, async (req, reply) => {
     const b = req.body || {};
     const schoolId = uuid(b.school_id, 'school_id', { required: true });
-    const name = str(b.name, 'name', { required: true, max: 100 });
-    const level = enumOf(b.level, 'level', LEVELS, { required: true });
-    const grade = int(b.grade, 'grade', { min: 1, max: 12 });
+    const name = str(b.name, 'Tên lớp', { required: true, max: 100 });
+    const grade = int(b.grade, 'Khối', { min: 1, max: 12 });
+    const level = resolveLevel(b, grade);
     const rosterSize = int(b.roster_size, 'roster_size', { min: 0, max: 200, def: 0 });
     const note = str(b.note, 'note', { max: 1000 });
 
@@ -122,6 +142,100 @@ export default async function routes(app) {
     });
     return reply.code(201).send(cls);
   });
+
+  /* ------------------------------------------------------------------------
+   * POST /api/classes/batch — nhập NHIỀU lớp một lượt (dạng bảng / dán Excel),
+   * mỗi dòng có thể thuộc một trường khác nhau và gán sẵn GV/TG phụ trách.
+   * body: { rows: [{ school_id, name, grade?, level?, roster_size?, note?,
+   *                  teacher_id?, assistant_id? }] }
+   * Dòng lỗi bị bỏ qua và trả về trong `skipped` kèm số dòng + lý do.
+   * ---------------------------------------------------------------------- */
+  app.post('/api/classes/batch', { preHandler: requirePerm('org.manage') }, async (req) => {
+    const rowsIn = req.body?.rows;
+    if (!Array.isArray(rowsIn) || !rowsIn.length) throw badRequest('Chưa có dòng nào để tạo.');
+    if (rowsIn.length > MAX_BATCH_ROWS) {
+      throw badRequest(`Mỗi lượt nhập tối đa ${MAX_BATCH_ROWS} dòng (đang có ${rowsIn.length}).`);
+    }
+
+    const schools = new Map();   // school_id → trường đã qua kiểm phạm vi
+    const created = [];
+    const skipped = [];
+    for (let i = 0; i < rowsIn.length; i++) {
+      const b = rowsIn[i] || {};
+      try {
+        const schoolId = uuid(b.school_id, 'Trường', { required: true });
+        if (!schools.has(schoolId)) schools.set(schoolId, await assertSchoolAccess(req.user, schoolId));
+        const school = schools.get(schoolId);
+
+        const name = str(b.name, 'Tên lớp', { required: true, max: 100 });
+        const grade = int(b.grade, 'Khối', { min: 1, max: 12 });
+        const level = resolveLevel(b, grade);
+        const rosterSize = int(b.roster_size, 'Sĩ số', { min: 0, max: 200, def: 0 });
+        const note = str(b.note, 'Ghi chú', { max: 1000 });
+        const teacherId = uuid(b.teacher_id, 'Giáo viên');
+        const assistantId = uuid(b.assistant_id, 'Trợ giảng');
+        if (teacherId) await assertStaff(teacherId, 'teacher', 'Giáo viên');
+        if (assistantId) await assertStaff(assistantId, 'assistant', 'Trợ giảng');
+
+        const dup = await one('select is_active from classes where school_id = $1 and name = $2', [schoolId, name]);
+        if (dup) {
+          throw conflict(`Lớp "${name}" đã có ở ${school.name}${dup.is_active ? '' : ' (đang bị vô hiệu hoá)'}.`);
+        }
+
+        const cls = await tx(async (c) => {
+          const { rows: [x] } = await c.query(
+            `insert into classes (school_id, name, level, grade, roster_size, note)
+             values ($1, $2, $3, $4, $5, $6) returning *`,
+            [schoolId, name, level, grade, rosterSize, note]
+          );
+          for (const [uid, role] of [[teacherId, 'teacher'], [assistantId, 'assistant']]) {
+            if (!uid) continue;
+            await c.query(
+              'insert into class_assignments (class_id, user_id, role) values ($1, $2, $3)',
+              [x.id, uid, role]
+            );
+          }
+          return x;
+        });
+        created.push({ id: cls.id, name: cls.name, school_name: school.name });
+      } catch (e) {
+        skipped.push({ row: i + 1, reason: e.message || 'Dòng không hợp lệ.' });
+      }
+    }
+
+    if (created.length) {
+      audit(req, {
+        action: 'create', entity: 'classes',
+        summary: `Nhập bảng lớp: tạo ${created.length} lớp` +
+          `${skipped.length ? `, bỏ qua ${skipped.length} dòng` : ''}.`,
+        after: { created, skipped },
+      });
+    }
+    return { created: created.length, items: created, skipped };
+  });
+
+  /* GET /api/classes/batch-template — tệp Excel mẫu đúng thứ tự cột của bảng nhập lớp. */
+  app.get('/api/classes/batch-template', { preHandler: requirePerm('org.manage') }, async (req, reply) =>
+    sendXlsx(reply, {
+      fileName: 'mau-nhap-lop',
+      sheetName: 'Nhập lớp',
+      title: 'MẪU NHẬP DANH SÁCH LỚP — LtL TeachOps',
+      subtitle: 'Điền từ dòng 5 (xoá 2 dòng ví dụ) → bôi đen các dòng dữ liệu → Copy → bấm Ctrl+V trên bảng "Nhập bảng lớp". Cột Trường ghi MÃ hoặc TÊN trường; để trống = trường đang chọn.',
+      columns: [
+        { header: 'Mã / Tên trường', key: 'school', width: 22 },
+        { header: 'Tên lớp *', key: 'name', width: 12 },
+        { header: 'Khối (1-12)', key: 'grade', width: 10, align: 'center' },
+        { header: 'Cấp học (TH / THCS / THPT)', key: 'level', width: 16 },
+        { header: 'Sĩ số', key: 'roster', width: 8, align: 'center' },
+        { header: 'Giáo viên phụ trách', key: 'teacher', width: 24 },
+        { header: 'Trợ giảng phụ trách', key: 'assistant', width: 24 },
+        { header: 'Ghi chú', key: 'note', width: 28 },
+      ],
+      rows: [
+        { school: 'VD-THCS01', name: '6A1', grade: 6, level: 'THCS', roster: 38, teacher: 'Nguyễn Văn A', assistant: 'Trần Thị B', note: 'Ví dụ — xoá dòng này' },
+        { school: 'VD-THCS01', name: '6A2', grade: 6, level: '', roster: 40, teacher: '', assistant: '', note: '' },
+      ],
+    }));
 
   /* ------------------------------------------------------------------------
    * GET /api/classes/:id — chi tiết lớp + school_name + teachers[].

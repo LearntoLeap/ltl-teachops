@@ -35,6 +35,8 @@ export const env = {
 
   uploadDir: process.env.UPLOAD_DIR || '/data/uploads',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 15) * 1024 * 1024,
+  // Video minh chứng (điểm danh, báo hỏng, góp ý, học liệu video) — ghi luồng xuống đĩa.
+  maxVideoBytes: Number(process.env.MAX_VIDEO_MB || 100) * 1024 * 1024,
 
   seedAdmin: {
     email: process.env.SEED_ADMIN_EMAIL || '',
@@ -53,15 +55,19 @@ export const env = {
   get mailEnabled() { return !!this.smtp.host; },
 
   appPublicUrl: (process.env.APP_PUBLIC_URL || '').replace(/\/+$/, ''),
+  // Địa chỉ công khai của API (dùng làm redirect URI khi kết nối Google Drive).
+  // Bỏ trống ⇒ suy từ request (cần proxy chuyển đúng Host + X-Forwarded-Proto).
+  apiPublicUrl: (process.env.API_PUBLIC_URL || '').replace(/\/+$/, ''),
 
-  // Sao lưu ảnh/tài liệu lên Google Drive của tài khoản quản trị chính.
-  // Bỏ trống ⇒ tắt đồng bộ, ảnh chỉ nằm trên VPS (app vẫn chạy bình thường).
+  // Google Drive của tài khoản quản trị chính — thường kết nối ngay trong app
+  // (Lưu trữ Drive → Kết nối). Các biến dưới đây chỉ là cách cấu hình dự phòng.
   drive: {
     clientId: process.env.GOOGLE_CLIENT_ID || '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
     refreshToken: process.env.GOOGLE_DRIVE_REFRESH_TOKEN || '',
-    rootFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
     syncMinutes: Number(process.env.DRIVE_SYNC_MINUTES || 5),
+    // Giữ bản gốc ảnh/video trên VPS bao nhiêu ngày sau khi đã lên Drive (Admin đổi được trong app).
+    keepLocalDays: Number(process.env.DRIVE_KEEP_LOCAL_DAYS || 7),
   },
 };
 

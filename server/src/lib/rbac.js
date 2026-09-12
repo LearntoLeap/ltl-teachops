@@ -73,6 +73,9 @@ const PERMISSIONS = {
 
   // Nhật ký thao tác
   'audit.view':              ['admin'],
+
+  // Kết nối & quản lý kho ảnh/video Google Drive
+  'drive.manage':            ['admin'],
 };
 
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS);

@@ -10,9 +10,9 @@
 {$API_DOMAIN} {
 	encode zstd gzip
 
-	# Tệp tải lên có thể tới 15MB — nới giới hạn body.
+	# Tài liệu tới 15MB, video minh chứng tới 100MB (MAX_VIDEO_MB) — nới giới hạn body.
 	request_body {
-		max_size 20MB
+		max_size 110MB
 	}
 
 	# SSE cần tắt buffer để thông báo tới ngay.

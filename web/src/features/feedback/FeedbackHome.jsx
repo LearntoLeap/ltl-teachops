@@ -267,8 +267,9 @@ export default function FeedbackHome() {
             value={photos}
             onChange={setPhotos}
             max={3}
-            label="Ảnh minh hoạ"
-            hint="Tối đa 3 ảnh — chụp rõ vấn đề cần phản ánh."
+            allowVideo
+            label="Ảnh / video minh hoạ"
+            hint="Tối đa 3 tệp — chụp hoặc quay rõ vấn đề cần phản ánh."
           />
           <div className="flex justify-end gap-2.5 mt-2">
             <button type="button" className="btn-line" onClick={() => setOpen(false)} disabled={sending}>Huỷ</button>

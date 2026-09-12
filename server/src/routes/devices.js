@@ -523,7 +523,7 @@ export default async function routes(app) {
     if (!req.isMultipart()) throw badRequest('Yêu cầu phải gửi dạng multipart/form-data.');
 
     // school_id nằm trong fields ⇒ lưu tệp trước, gắn school_id cho tệp sau.
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id });
+    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, allowVideo: true });
 
     const schoolId = uuid(fields.school_id, 'school_id', { required: true });
     const roomId = uuid(fields.room_id, 'room_id');

@@ -6,20 +6,171 @@
  *   - teacher : bài của giáo viên/trợ giảng — thấy bài của MÌNH + bài đã duyệt trong
  *               phạm vi trường; manager thấy mọi bài trong phạm vi; admin thấy tất.
  * Mỗi lần tải tệp tạo một material_versions mới — giữ trọn lịch sử phiên bản.
+ *
+ * Tải về hàng loạt (GET /api/materials/zip): đóng gói tệp phiên bản mới nhất theo
+ * cây thư mục Giải pháp › Khối › Loại (hoặc › Bài), kèm tệp Excel danh mục.
  */
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
+import yazl from 'yazl';
 import { rows, one, scalar, tx, query } from '../db.js';
 import { badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
 import { assertPerm, requirePerm } from '../lib/rbac.js';
 import { visibleSchoolIds, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
-import { str, int, uuid, bool, enumOf, paging } from '../lib/validate.js';
-import { consumeMultipart, deleteFile } from '../lib/storage.js';
+import { str, int, uuid, uuidList, bool, enumOf, paging } from '../lib/validate.js';
+import { consumeMultipart, deleteFile, absPath, contentDisposition } from '../lib/storage.js';
 import { notify, notifySchoolManagers, notifyFieldStaff } from '../lib/notify.js';
+import { xlsxBuffer, formatVN, LABELS } from '../lib/xlsx.js';
 import { audit } from '../lib/audit.js';
 
 const LEVELS = ['primary', 'secondary', 'highschool'];
 const AREAS = ['official', 'teacher'];
 
+// Giới hạn một lần tải ZIP — vượt thì yêu cầu thu hẹp theo khối/loại.
+const MAX_ZIP_ITEMS = 500;
+const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
+
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o || {}, k);
+
+/**
+ * Điều kiện lọc dùng chung cho danh sách và tải ZIP — cùng bộ lọc nên tải về đúng
+ * những gì đang thấy. Chọn giải pháp gốc ⇒ gồm luôn các giải pháp con của nó.
+ * `p(v)` đẩy tham số và trả về placeholder ($n).
+ */
+function listConditions(q, me, p) {
+  const conds = ['not m.is_archived'];
+
+  const area = enumOf(q.area, 'area', AREAS);
+  if (area) conds.push(`m.area = ${p(area)}`);
+  const level = enumOf(q.level, 'level', LEVELS);
+  if (level) conds.push(`m.level = ${p(level)}`);
+  const subject = str(q.subject, 'subject', { max: 200 });
+  if (subject) conds.push(`m.subject ilike ${p(subject)}`); // so khớp không phân biệt hoa thường
+  const schoolId = uuid(q.school_id, 'school_id');
+  if (schoolId) conds.push(`m.school_id = ${p(schoolId)}`);
+  const classId = uuid(q.class_id, 'class_id');
+  if (classId) conds.push(`m.class_id = ${p(classId)}`);
+  const solutionId = uuid(q.solution_id, 'solution_id');
+  if (solutionId) {
+    const s = p(solutionId);
+    conds.push(`m.solution_id in (select id from solutions where id = ${s} or parent_id = ${s})`);
+  }
+  const grade = int(q.grade, 'grade', { min: 1, max: 12 });
+  if (grade !== null) conds.push(`m.grade = ${p(grade)}`);
+  const typeId = uuid(q.type_id, 'type_id');
+  if (typeId) conds.push(`m.type_id = ${p(typeId)}`);
+  const typeIds = uuidList(q.type_ids, 'type_ids');
+  if (typeIds.length) conds.push(`m.type_id = any(${p(typeIds)}::uuid[])`);
+  const ids = uuidList(q.ids, 'ids');
+  if (ids.length > MAX_ZIP_ITEMS) {
+    throw badRequest(`Chọn tối đa ${MAX_ZIP_ITEMS} tài liệu mỗi lần (đang chọn ${ids.length}).`);
+  }
+  if (ids.length) conds.push(`m.id = any(${p(ids)}::uuid[])`);
+  const search = str(q.q, 'q', { max: 200 });
+  if (search) {
+    const like = p(`%${search}%`);
+    conds.push(`(m.title ilike ${like} or m.description ilike ${like}
+                 or m.lesson_title ilike ${like} or m.curriculum ilike ${like})`);
+  }
+  if (bool(q.mine, 'mine', { def: false })) conds.push(`m.owner_id = ${p(me.id)}`);
+  return conds;
+}
+
+/* ------------------------------ Đóng gói ZIP ------------------------------ */
+
+/** Tên thư mục/tệp dùng được trên Windows lẫn macOS. */
+function safeSeg(s, fallback) {
+  let out = String(s ?? '')
+    .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 90)
+    .replace(/[. ]+$/, '');
+  if (/^(con|prn|aux|nul|com\d|lpt\d)$/i.test(out)) out = `_${out}`;
+  return out || fallback;
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/**
+ * Đường dẫn của một học liệu trong ZIP (chưa gồm đuôi tệp).
+ * group='type'  : Giải pháp / [Giải pháp con] / Khối 06 / Slide giảng dạy / Tiết 05 - Tên bài - Tiêu đề
+ * group='lesson': Giải pháp / [Giải pháp con] / Khối 06 / Tiết 05 - Tên bài / Slide giảng dạy - Tiêu đề
+ */
+function zipBasePath(m, group) {
+  const dirs = [safeSeg(m.solution_parent_name || m.solution_name, 'Chưa gắn giải pháp')];
+  if (m.solution_parent_name) dirs.push(safeSeg(m.solution_name, 'Khác'));
+  dirs.push(m.grade ? `Khối ${pad2(m.grade)}` : 'Chưa phân khối');
+
+  const tiet = m.lesson_no ? `Tiết ${pad2(m.lesson_no)}` : null;
+  const lesson = [tiet, m.lesson_title].filter(Boolean).join(' - ');
+  const type = safeSeg(m.type_name, 'Tài liệu khác');
+  let name;
+  if (group === 'lesson') {
+    dirs.push(safeSeg(lesson, 'Chưa phân tiết'));
+    name = `${type} - ${m.title}`;
+  } else {
+    dirs.push(type);
+    // Tiêu đề thường đã chứa tên bài ⇒ không lặp lại cho tên tệp gọn.
+    const lower = (s) => String(s || '').toLowerCase();
+    const inTitle = m.lesson_title && lower(m.title).includes(lower(m.lesson_title));
+    name = [inTitle ? tiet : lesson, m.title].filter(Boolean).join(' - ');
+  }
+  return [...dirs, safeSeg(name, 'Tài liệu')].join('/');
+}
+
+/**
+ * Học liệu khớp bộ lọc (đã áp quyền xem) kèm tệp phiên bản mới nhất.
+ * Lấy dư một dòng để biết có vượt MAX_ZIP_ITEMS hay không.
+ */
+async function zipCandidates(req) {
+  const me = req.user;
+  const params = [];
+  const p = (v) => { params.push(v); return `$${params.length}`; };
+  const conds = listConditions(req.query, me, p);
+  const vis = await materialVisibility(me, params.length + 1);
+  const { where, params: visParams } = combine(conds.join(' and '), vis);
+  const allParams = [...params, ...visParams];
+  const limIdx = allParams.push(MAX_ZIP_ITEMS + 1);
+
+  const items = await rows(
+    `select m.id, m.title, m.grade, m.lesson_no, m.lesson_title, m.curriculum, m.subject,
+            m.area, m.body, m.version_count, m.updated_at,
+            ow.full_name as owner_name,
+            mt.name as type_name,
+            so.name as solution_name, sp.name as solution_parent_name,
+            f.storage_path, f.size_bytes
+       from materials m
+       join users ow on ow.id = m.owner_id
+       left join material_types mt on mt.id = m.type_id
+       left join solutions so on so.id = m.solution_id
+       left join solutions sp on sp.id = so.parent_id
+       left join lateral (
+         select v.file_id from material_versions v
+          where v.material_id = m.id order by v.version desc limit 1
+       ) lv on true
+       left join files f on f.id = lv.file_id
+      where ${where}
+      order by coalesce(sp.sort_order, so.sort_order), coalesce(sp.name, so.name), so.name,
+               m.grade nulls last, m.lesson_no nulls last, mt.sort_order nulls last, m.title
+      limit $${limIdx}`,
+    allParams
+  );
+  const tooMany = items.length > MAX_ZIP_ITEMS;
+  return { items: tooMany ? items.slice(0, MAX_ZIP_ITEMS) : items, tooMany };
+}
+
+/** Nội dung tự do (bài viết không kèm tệp) ⇒ tệp .txt, có BOM để Notepad đọc đúng tiếng Việt. */
+function bodyText(m) {
+  const meta = [
+    m.solution_name && `Giải pháp: ${[m.solution_parent_name, m.solution_name].filter(Boolean).join(' › ')}`,
+    [m.grade && `Khối ${m.grade}`, m.lesson_no && `Tiết ${m.lesson_no}`, m.lesson_title].filter(Boolean).join(' · '),
+    m.curriculum && `Chương trình: ${m.curriculum}`,
+  ].filter(Boolean);
+  return `\ufeff${m.title}\r\n${meta.join('\r\n')}\r\n${'-'.repeat(40)}\r\n\r\n${String(m.body).replace(/\r?\n/g, '\r\n')}\r\n`;
+}
+
+const todayVN = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
 
 /** Xoá các tệp đã lỡ lưu khi nghiệp vụ thất bại giữa chừng (tránh tệp mồ côi trên đĩa). */
 async function removeUploaded(files) {
@@ -90,7 +241,8 @@ async function checkSolution(solutionId) {
 export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * GET /api/materials — danh sách, mọi vai trò (đã lọc hiển thị theo §5.4).
-   * ?area=&level=&subject=&school_id=&class_id=&solution_id=&q=&mine=1&page=&limit=
+   * ?area=&level=&subject=&school_id=&class_id=&solution_id=&grade=&type_id=&type_ids=
+   *  &q=&mine=1&page=&limit=  (solution_id gốc ⇒ gồm cả giải pháp con)
    * ---------------------------------------------------------------------- */
   app.get('/api/materials', async (req) => {
     const me = req.user;
@@ -98,31 +250,7 @@ export default async function routes(app) {
 
     const params = [];
     const p = (v) => { params.push(v); return `$${params.length}`; };
-    const conds = ['not m.is_archived'];
-
-    const area = enumOf(req.query.area, 'area', AREAS);
-    if (area) conds.push(`m.area = ${p(area)}`);
-    const level = enumOf(req.query.level, 'level', LEVELS);
-    if (level) conds.push(`m.level = ${p(level)}`);
-    const subject = str(req.query.subject, 'subject', { max: 200 });
-    if (subject) conds.push(`m.subject ilike ${p(subject)}`); // so khớp không phân biệt hoa thường
-    const schoolId = uuid(req.query.school_id, 'school_id');
-    if (schoolId) conds.push(`m.school_id = ${p(schoolId)}`);
-    const classId = uuid(req.query.class_id, 'class_id');
-    if (classId) conds.push(`m.class_id = ${p(classId)}`);
-    const solutionId = uuid(req.query.solution_id, 'solution_id');
-    if (solutionId) conds.push(`m.solution_id = ${p(solutionId)}`);
-    const grade = int(req.query.grade, 'grade', { min: 1, max: 12 });
-    if (grade !== null) conds.push(`m.grade = ${p(grade)}`);
-    const typeId = uuid(req.query.type_id, 'type_id');
-    if (typeId) conds.push(`m.type_id = ${p(typeId)}`);
-    const search = str(req.query.q, 'q', { max: 200 });
-    if (search) {
-      const like = p(`%${search}%`);
-      conds.push(`(m.title ilike ${like} or m.description ilike ${like}
-                   or m.lesson_title ilike ${like} or m.curriculum ilike ${like})`);
-    }
-    if (bool(req.query.mine, 'mine', { def: false })) conds.push(`m.owner_id = ${p(me.id)}`);
+    const conds = listConditions(req.query, me, p);
 
     const vis = await materialVisibility(me, params.length + 1);
     const { where, params: visParams } = combine(conds.join(' and '), vis);
@@ -180,12 +308,15 @@ export default async function routes(app) {
 
     // Tệp học liệu mặc định không gắn trường (tài nguyên dùng chung); nếu có school_id
     // sẽ gắn lại bên dưới để quyền tải tệp khớp với phạm vi của học liệu.
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: null });
+    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: null, allowVideo: true });
 
     let material;
     let version;
     let file;
+    let quiet = false;
     try {
+      // Đăng hàng loạt: không báo từng tệp — client gọi /batch-done để báo một lần.
+      quiet = bool(fields.batch, 'batch', { def: false });
       const area = enumOf(fields.area, 'area', AREAS, { required: true });
       assertPerm(req.user, area === 'official' ? 'material.official.write' : 'material.teacher.write');
 
@@ -258,7 +389,7 @@ export default async function routes(app) {
     }
 
     // Học liệu chuẩn mới ⇒ báo cho GV/TG đang dạy cấp học tương ứng.
-    if (material.area === 'official') {
+    if (material.area === 'official' && !quiet) {
       await notifyFieldStaff(
         {
           kind: 'material_new',
@@ -313,6 +444,196 @@ export default async function routes(app) {
       });
       return reply.code(201).send(t);
     });
+
+  /* ------------------------------------------------------------------------
+   * POST /api/materials/batch-done — {ids}: kết thúc một lượt đăng hàng loạt.
+   * Gửi MỘT thông báo tổng hợp theo cấp học thay vì mỗi tệp một thông báo.
+   * Chỉ tính học liệu chuẩn do chính người gọi vừa đăng (trong 1 ngày).
+   * ---------------------------------------------------------------------- */
+  app.post('/api/materials/batch-done', async (req) => {
+    const ids = uuidList(req.body?.ids, 'ids');
+    if (ids.length > MAX_ZIP_ITEMS) throw badRequest(`Tối đa ${MAX_ZIP_ITEMS} tài liệu mỗi lượt.`);
+    if (!ids.length) return { notified: 0 };
+
+    const mats = await rows(
+      `select m.id, m.title, m.level, so.name as solution_name
+         from materials m
+         left join solutions so on so.id = m.solution_id
+        where m.id = any($1::uuid[]) and m.owner_id = $2 and m.area = 'official'
+          and not m.is_archived and m.created_at > now() - interval '1 day'`,
+      [ids, req.user.id]
+    );
+
+    const byLevel = new Map();
+    for (const m of mats) {
+      if (!byLevel.has(m.level)) byLevel.set(m.level, []);
+      byLevel.get(m.level).push(m);
+    }
+    for (const [level, list] of byLevel) {
+      const sols = [...new Set(list.map((x) => x.solution_name).filter(Boolean))];
+      const one1 = list.length === 1 ? list[0] : null;
+      await notifyFieldStaff(
+        {
+          kind: 'material_new',
+          title: one1
+            ? `Học liệu mới: ${one1.title}`
+            : `${list.length} học liệu mới${sols.length ? ` — ${sols.slice(0, 2).join(', ')}${sols.length > 2 ? '…' : ''}` : ''}`,
+          link: one1 ? `/hoc-lieu/${one1.id}` : '/hoc-lieu',
+          refId: one1?.id,
+        },
+        { level }
+      );
+    }
+
+    if (mats.length) {
+      audit(req, {
+        action: 'create', entity: 'materials',
+        summary: `Đăng hàng loạt ${mats.length} học liệu chuẩn`,
+        after: { ids: mats.map((m) => m.id) },
+      });
+    }
+    return { notified: mats.length };
+  });
+
+  /* ------------------------------------------------------------------------
+   * GET /api/materials/zip/preview — ước lượng trước khi tải ZIP.
+   * Nhận cùng bộ lọc như danh sách + ids=a,b,c (mục đã chọn) + type_ids=.
+   * ---------------------------------------------------------------------- */
+  app.get('/api/materials/zip/preview', async (req) => {
+    const { items, tooMany } = await zipCandidates(req);
+    let fileCount = 0;
+    let textCount = 0;
+    let bytes = 0;
+    for (const m of items) {
+      if (m.storage_path) { fileCount++; bytes += Number(m.size_bytes || 0); } else if (m.body) textCount++;
+    }
+    return {
+      count: items.length,
+      file_count: fileCount,
+      text_count: textCount,
+      total_bytes: bytes,
+      too_many: tooMany,
+      too_large: bytes > MAX_ZIP_BYTES,
+      max_items: MAX_ZIP_ITEMS,
+      max_bytes: MAX_ZIP_BYTES,
+    };
+  });
+
+  /* ------------------------------------------------------------------------
+   * GET /api/materials/zip — tải về một tệp .zip theo cây thư mục.
+   * ?group=type|lesson + bộ lọc như /zip/preview. Token qua ?token= được chấp nhận
+   * để trình duyệt tự tải (có thanh tiến trình, không giữ cả tệp trong RAM).
+   * ---------------------------------------------------------------------- */
+  app.get('/api/materials/zip', async (req, reply) => {
+    const group = enumOf(req.query.group, 'group', ['type', 'lesson'], { def: 'type' });
+    const { items, tooMany } = await zipCandidates(req);
+    if (!items.length) throw badRequest('Không có tài liệu nào khớp lựa chọn để tải về.');
+    if (tooMany) {
+      throw badRequest(`Mỗi lần tải tối đa ${MAX_ZIP_ITEMS} tài liệu — hãy thu hẹp theo khối hoặc loại tài liệu.`);
+    }
+
+    // Kiểm tệp trên đĩa TRƯỚC khi mở luồng ZIP: lỗi giữa chừng sẽ để lại tệp ZIP hỏng.
+    const used = new Set();
+    const uniq = (p, ext) => {
+      let out = `${p}${ext}`;
+      for (let i = 2; used.has(out.toLowerCase()); i++) out = `${p} (${i})${ext}`;
+      used.add(out.toLowerCase());
+      return out;
+    };
+    const entries = [];
+    const manifest = [];
+    let bytes = 0;
+    for (const m of items) {
+      const base = zipBasePath(m, group);
+      let entryPath = '';
+      let note = '';
+      if (m.storage_path) {
+        const abs = absPath(m);
+        const st = await stat(abs).catch(() => null);
+        if (st) {
+          entryPath = uniq(base, path.extname(m.storage_path).toLowerCase());
+          entries.push({ abs, path: entryPath, mtime: new Date(m.updated_at) });
+          bytes += st.size;
+        } else {
+          note = 'Thiếu tệp trên máy chủ';
+        }
+      } else if (m.body) {
+        entryPath = uniq(`${base} (bài viết)`, '.txt');
+        entries.push({ text: bodyText(m), path: entryPath, mtime: new Date(m.updated_at) });
+        note = 'Bài viết (không kèm tệp)';
+      } else {
+        note = 'Chưa có tệp';
+      }
+      manifest.push({
+        stt: manifest.length + 1,
+        path: entryPath || '—',
+        solution: [m.solution_parent_name, m.solution_name].filter(Boolean).join(' › '),
+        grade: m.grade || '',
+        lesson_no: m.lesson_no || '',
+        lesson_title: m.lesson_title || '',
+        title: m.title,
+        type: m.type_name || '',
+        curriculum: m.curriculum || '',
+        subject: m.subject || '',
+        area: LABELS.area[m.area] || m.area,
+        version: m.version_count || '',
+        owner: m.owner_name || '',
+        updated: formatVN(m.updated_at),
+        note,
+      });
+    }
+    if (!entries.length) throw badRequest('Các tài liệu đã chọn chưa có tệp nào để tải về.');
+    if (bytes > MAX_ZIP_BYTES) {
+      throw badRequest(`Dung lượng vượt ${Math.round(MAX_ZIP_BYTES / 1024 / 1024)}MB — hãy tải theo từng khối hoặc từng loại tài liệu.`);
+    }
+
+    const solutionId = uuid(req.query.solution_id, 'solution_id');
+    const sol = solutionId ? await one('select name from solutions where id = $1', [solutionId]) : null;
+    const label = sol?.name || (req.query.ids ? 'Mục đã chọn' : 'Tổng hợp');
+
+    const zip = new yazl.ZipFile();
+    zip.addBuffer(await xlsxBuffer({
+      sheetName: 'Danh mục',
+      title: `Danh mục học liệu — ${label}`,
+      subtitle: `${entries.length} tệp · sắp theo ${group === 'lesson' ? 'Bài học' : 'Loại tài liệu'}`,
+      columns: [
+        { header: 'STT', key: 'stt', width: 6, align: 'center' },
+        { header: 'Tệp trong ZIP', key: 'path', width: 60 },
+        { header: 'Giải pháp', key: 'solution', width: 22 },
+        { header: 'Khối', key: 'grade', width: 7, align: 'center' },
+        { header: 'Tiết', key: 'lesson_no', width: 7, align: 'center' },
+        { header: 'Tên bài', key: 'lesson_title', width: 28 },
+        { header: 'Tiêu đề', key: 'title', width: 34 },
+        { header: 'Loại', key: 'type', width: 18 },
+        { header: 'Chương trình', key: 'curriculum', width: 22 },
+        { header: 'Môn', key: 'subject', width: 14 },
+        { header: 'Khu vực', key: 'area', width: 16 },
+        { header: 'Phiên bản', key: 'version', width: 9, align: 'center' },
+        { header: 'Người đăng', key: 'owner', width: 20 },
+        { header: 'Cập nhật', key: 'updated', width: 16 },
+        { header: 'Ghi chú', key: 'note', width: 22 },
+      ],
+      rows: manifest,
+    }), '00 - Danh muc hoc lieu.xlsx');
+    for (const e of entries) {
+      // Tài liệu văn phòng/PDF vốn đã nén — lưu nguyên để tải nhanh, đỡ tốn CPU máy chủ.
+      if (e.abs) zip.addFile(e.abs, e.path, { compress: false, mtime: e.mtime });
+      else zip.addBuffer(Buffer.from(e.text, 'utf8'), e.path, { mtime: e.mtime });
+    }
+    zip.end();
+
+    audit(req, {
+      action: 'export', entity: 'materials',
+      summary: `Tải ZIP ${entries.length} học liệu (${label})`,
+      after: { count: entries.length, bytes, group, query: { ...req.query, token: undefined } },
+    });
+
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', contentDisposition('attachment', `Học liệu - ${label} - ${todayVN()}.zip`))
+      .header('Cache-Control', 'no-store')
+      .send(zip.outputStream);
+  });
 
   /* ------------------------------------------------------------------------
    * GET /api/materials/:id — chi tiết kèm versions[] + comments[].
@@ -427,7 +748,7 @@ export default async function routes(app) {
     assertCanManage(req.user, m);
     if (!req.isMultipart()) throw badRequest('Cần gửi dữ liệu dạng multipart/form-data kèm tệp.');
 
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: m.school_id });
+    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: m.school_id, allowVideo: true });
 
     let version;
     let file;

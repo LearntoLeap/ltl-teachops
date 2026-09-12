@@ -35,6 +35,7 @@ function menuItems(auth) {
   if (auth.can('org.manage')) items.push({ to: '/to-chuc', icon: '🏫', label: 'Trường & Lớp' });
   if (auth.can('users.manage')) items.push({ to: '/tai-khoan', icon: '👥', label: 'Tài khoản' });
   if (auth.can('audit.view')) items.push({ to: '/nhat-ky', icon: '🧾', label: 'Nhật ký' });
+  if (auth.can('drive.manage')) items.push({ to: '/luu-tru-drive', icon: '☁️', label: 'Lưu trữ Drive' });
   items.push({ to: '/cho-dong-bo', icon: '⏳', label: 'Chờ đồng bộ' });
   items.push({ to: '/doi-mat-khau', icon: '🔑', label: 'Đổi mật khẩu' });
   return items;

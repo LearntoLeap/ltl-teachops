@@ -32,6 +32,9 @@ Không có đăng ký công khai — mọi tài khoản do Admin tạo, bắt bu
 - Kiểm kê thiết bị 4 mốc/ngày, mỗi loại kèm **tình trạng** (tốt / có hỏng / thiếu-mất); hỏng thì
   tự sinh phiếu báo cho Phòng chuyên môn.
 - **Offline-first**: mất mạng vẫn chấm công/điểm danh được, tự đồng bộ khi có sóng.
+- **Video minh chứng** (≤100MB) ở điểm danh, báo hỏng thiết bị, góp ý — quay thẳng từ điện thoại.
+- **Kho ảnh/video trên Google Drive**: Admin kết nối ngay trong app; tệp tự xếp theo
+  Trường › Tháng › Nghiệp vụ, bản gốc trên VPS tự dọn sau N ngày (xác minh md5) để tiết kiệm dung lượng.
 
 **Lịch dạy** — 3 cách xem: danh sách, **thời khoá biểu tuần** (bảng × khung giờ), **lịch tháng**.
 Phòng chuyên môn/Admin xếp lịch lẻ hoặc lặp tuần; giáo viên tự thêm buổi bị thiếu (hệ thống ép
@@ -40,9 +43,14 @@ gắn đúng tên người tạo).
 **Học liệu** — duyệt theo **Giải pháp** (UGOT, uKIT EDU, Stick'em…), trong mỗi giải pháp lọc tiếp
 theo khối 1–12 và loại tài liệu (giáo án / giáo trình / slide / video / mục tự thêm). Có tiết –
 tên bài – chương trình học, ảnh minh hoạ, phiên bản, bình luận, duyệt bài.
+- **Đăng hàng loạt dạng bảng**: kéo-thả nhiều tệp, tự đoán tiết/khối/loại từ tên tệp, dán phân phối
+  chương trình từ Excel; GV/TG chỉ nhận một thông báo tổng hợp cho cả lượt.
+- **Tải về .zip theo lựa chọn**: tích chọn từng bài, theo bộ lọc, hoặc cả thư mục giải pháp; lọc riêng
+  giáo án / slide…; xếp thư mục theo loại hoặc theo bài; kèm Excel danh mục.
 
 **Quản trị** — tài khoản kèm **khu vực** & ngày sinh, danh mục thiết bị đề xuất (23 mục chuẩn),
 tìm kiếm nhanh có gợi ý, thông báo realtime (SSE), nhật ký thao tác, xuất Excel 6 loại báo cáo.
+**Nhập bảng Trường & Lớp** (dán từ Excel hoặc tệp mẫu), lớp gán sẵn GV/TG phụ trách.
 
 ## Chạy phát triển tại máy
 
@@ -83,7 +91,7 @@ Cập nhật API sau này: `bash infra/deploy.sh` trên VPS. Web tự deploy khi
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — kiến trúc, quy tắc phân quyền & phạm vi dữ liệu, luồng nghiệp vụ.
 - [docs/API.md](docs/API.md) — hợp đồng API đầy đủ (nguồn sự thật khi sửa server lẫn web).
 - [docs/HUONG_DAN_GITHUB.md](docs/HUONG_DAN_GITHUB.md) — đẩy code lên GitHub + nối Vercel.
-- [docs/HUONG_DAN_GOOGLE_DRIVE.md](docs/HUONG_DAN_GOOGLE_DRIVE.md) — bật sao lưu ảnh lên Drive.
+- [docs/HUONG_DAN_GOOGLE_DRIVE.md](docs/HUONG_DAN_GOOGLE_DRIVE.md) — kết nối Google Drive làm kho ảnh/video.
 
 ## Cấu hình đã chốt
 
@@ -99,6 +107,6 @@ và danh sách cấp học ngoài K-12 (nếu cần). Chi tiết ở mục 9 `do
 
 ## Lộ trình còn lại
 
-- [x] Sao lưu ảnh lên Google Drive của tài khoản quản trị — đã xong, bật theo
+- [x] Google Drive làm kho ảnh/video (kết nối trong app, tự dọn bản gốc VPS) — xem
       [docs/HUONG_DAN_GOOGLE_DRIVE.md](docs/HUONG_DAN_GOOGLE_DRIVE.md) (cần OAuth Client của bạn).
 - [ ] Trợ giảng gửi ảnh vào nhóm Zalo/Telegram (cần tạo bot/OA và webhook).

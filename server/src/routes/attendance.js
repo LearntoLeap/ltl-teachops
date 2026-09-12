@@ -186,7 +186,7 @@ export default async function routes(app) {
       }
 
       // school_id chưa biết trước khi đọc fields ⇒ lưu tệp trước, gắn school_id sau.
-      const { fields, files } = await consumeMultipart(req, { userId: req.user.id });
+      const { fields, files } = await consumeMultipart(req, { userId: req.user.id, allowVideo: true });
       const photos = files.photos || files['photos[]'] || [];
       if (!photos.length) throw unprocessable('Bắt buộc có ảnh tổng quan lớp học.');
 
@@ -302,7 +302,7 @@ export default async function routes(app) {
     let fields = {};
     let newPhotos = [];
     if (req.isMultipart()) {
-      const parsed = await consumeMultipart(req, { userId: req.user.id, schoolId: before.school_id });
+      const parsed = await consumeMultipart(req, { userId: req.user.id, schoolId: before.school_id, allowVideo: true });
       fields = parsed.fields;
       newPhotos = parsed.files.photos || parsed.files['photos[]'] || [];
     } else {
