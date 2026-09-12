@@ -22,6 +22,8 @@ export default function AuthShell({ title, sub, children }) {
 
         <div className="text-center text-white/70 text-[11.5px] mt-6">
           © {new Date().getFullYear()} Công ty CP Công nghệ Giáo dục Learn to Leap
+          {' · '}
+          <a href="/chinh-sach-bao-mat" className="underline hover:text-white">Chính sách bảo mật</a>
         </div>
       </div>
     </div>

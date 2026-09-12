@@ -14,6 +14,7 @@ import Login from './features/auth/Login.jsx';
 import ForgotPassword from './features/auth/ForgotPassword.jsx';
 import ResetPassword from './features/auth/ResetPassword.jsx';
 import ChangePassword from './features/auth/ChangePassword.jsx';
+import PrivacyPolicy from './features/legal/PrivacyPolicy.jsx';
 
 // Màn hình chính — lazy để chia nhỏ bundle cho mobile.
 const Dashboard      = lazy(() => import('./features/dashboard/Dashboard.jsx'));
@@ -48,6 +49,9 @@ function Guard({ perm, children }) {
 export default function App() {
   const auth = useAuth();
   const location = useLocation();
+
+  // Trang công khai — mở được dù đã hay chưa đăng nhập (Google kiểm tra link này).
+  if (location.pathname === '/chinh-sach-bao-mat') return <PrivacyPolicy />;
 
   if (auth.loading) {
     return (
