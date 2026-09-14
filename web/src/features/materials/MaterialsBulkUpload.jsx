@@ -18,13 +18,13 @@ import {
 } from '../../lib/tablePaste.js';
 import { Field, Segmented, Sheet, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
+import { MAX_IMAGE_MB, MAX_MATERIAL_MB } from '../../lib/limits.js';
 
 // Khớp danh sách định dạng máy chủ nhận (server/src/lib/storage.js).
 const VIDEO_EXT = ['mp4', 'mov', 'webm', 'm4v', '3gp'];
 const ALLOWED_EXT = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'zip',
   'jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', ...VIDEO_EXT];
-const MAX_MB = 15;
-const MAX_VIDEO_MB = 100;
+const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'];
 const MAX_ROWS = 200;
 const PARALLEL = 2;
 const GRADES = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -85,7 +85,7 @@ const newRow = (over = {}) => ({
 function rowProblem(r) {
   if (!r.file) return 'Chưa có tệp';
   if (!ALLOWED_EXT.includes(extOf(r.file.name))) return `Định dạng .${extOf(r.file.name)} chưa được hỗ trợ`;
-  const limit = VIDEO_EXT.includes(extOf(r.file.name)) ? MAX_VIDEO_MB : MAX_MB;
+  const limit = IMAGE_EXT.includes(extOf(r.file.name)) ? MAX_IMAGE_MB : MAX_MATERIAL_MB;
   if (r.file.size > limit * 1024 * 1024) return `Tệp lớn hơn ${limit}MB`;
   if (!r.title.trim()) return 'Thiếu tiêu đề';
   return null;
@@ -364,7 +364,7 @@ export default function MaterialsBulkUpload({
           <div className="text-[26px] leading-none mb-1">📥</div>
           <div className="font-semibold text-[14px] text-brand-900">Kéo-thả tệp vào đây, hoặc bấm để chọn nhiều tệp</div>
           <div className="text-[12px] text-ink-muted mt-0.5">
-            PDF, Word, PowerPoint, Excel, ảnh, ZIP (tối đa {MAX_MB}MB) · video MP4/MOV (tối đa {MAX_VIDEO_MB}MB) · mỗi lượt tối đa {MAX_ROWS} tệp
+            PDF, Word, PowerPoint, Excel, ZIP, video MP4/MOV (tối đa {MAX_MATERIAL_MB} MB) · ảnh (tối đa {MAX_IMAGE_MB} MB) · mỗi lượt tối đa {MAX_ROWS} tệp
           </div>
         </button>
         <input

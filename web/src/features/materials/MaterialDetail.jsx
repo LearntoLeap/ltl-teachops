@@ -12,6 +12,7 @@ import {
   Badge, ErrorBox, Field, PageLoading, Sheet, Spinner,
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
+import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
 
 /** Số hiệu phiên bản — chịu được vài kiểu đặt tên trường từ server. */
 const verNo = (v, fallback) => v.version_no ?? v.version ?? fallback;
@@ -26,7 +27,10 @@ function VersionSheet({ open, onClose, materialId, onDone }) {
 
   const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     if (!file) { toast.err('Vui lòng chọn tệp cho phiên bản mới.'); return; }
+    const problem = materialFileProblem(file);
+    if (problem) { toast.err(problem, 8000); return; }
     const fd = new FormData();
     fd.append('file', file, file.name);
     if (note.trim()) fd.append('change_note', note.trim());
@@ -46,13 +50,18 @@ function VersionSheet({ open, onClose, materialId, onDone }) {
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} title="Phiên bản mới">
       <form onSubmit={submit}>
-        <Field label="Tệp tài liệu" required hint="Chấp nhận PDF, Word, PowerPoint, Excel — tối đa 15MB.">
+        <Field label="Tệp tài liệu" required hint={`PDF, Word, PowerPoint, Excel, video — tối đa ${MAX_MATERIAL_MB} MB.`}>
           <input
             key={fileKey}
             type="file"
             className="input !py-2"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.mov,.webm,.m4v,.zip"
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null;
+              const problem = materialFileProblem(f);
+              if (problem) { toast.err(problem, 8000); e.target.value = ''; setFile(null); return; }
+              setFile(f);
+            }}
           />
         </Field>
         <Field label="Ghi chú thay đổi" hint="Mô tả ngắn: sửa gì, thêm gì so với bản trước.">

@@ -35,8 +35,10 @@ export const env = {
 
   uploadDir: process.env.UPLOAD_DIR || '/data/uploads',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 15) * 1024 * 1024,
-  // Video minh chứng (điểm danh, báo hỏng, góp ý, học liệu video) — ghi luồng xuống đĩa.
+  // Video minh chứng hiện trường (điểm danh, báo hỏng, góp ý) — ghi luồng xuống đĩa.
   maxVideoBytes: Number(process.env.MAX_VIDEO_MB || 100) * 1024 * 1024,
+  // Học liệu (slide nhúng video, giáo án, video bài giảng) — giới hạn riêng, lớn hơn.
+  maxMaterialBytes: Number(process.env.MAX_MATERIAL_MB || 300) * 1024 * 1024,
 
   seedAdmin: {
     email: process.env.SEED_ADMIN_EMAIL || '',

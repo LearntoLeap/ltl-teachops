@@ -45,35 +45,36 @@ export const isImage = (mime) => IMAGE_MIMES.has(String(mime).toLowerCase());
 export const isVideo = (mime) => Object.hasOwn(VIDEO_EXT, String(mime).toLowerCase());
 const isAllowed = (mime) => isImage(mime) || DOC_MIMES.has(String(mime).toLowerCase());
 
+const newName = (ext) => `${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+const mb = (bytes) => Math.round(bytes / 1024 / 1024);
+
 /**
- * Video: ghi thẳng luồng xuống đĩa (vừa ghi vừa băm), không nạp cả tệp vào RAM.
+ * Video/tài liệu: ghi thẳng luồng xuống đĩa (vừa ghi vừa băm), không nạp cả tệp vào RAM
+ * — tệp học liệu vài trăm MB không làm đầy bộ nhớ máy chủ.
  * Vượt giới hạn ⇒ xoá tệp dở dang rồi báo lỗi.
  */
-async function streamVideoToDisk(part, mime) {
+async function streamToDisk(part, ext, limit, tooLargeMsg) {
   const dir = relDir();
-  const ext = VIDEO_EXT[mime];
-  const name = `${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}${ext}`;
-  const storagePath = path.posix.join(dir, name);
+  const storagePath = path.posix.join(dir, newName(ext));
   const abs = path.join(env.uploadDir, storagePath);
   await ensureDir(path.join(env.uploadDir, dir));
 
   const hash = crypto.createHash('sha256');
   let size = 0;
-  const limitMb = Math.round(env.maxVideoBytes / 1024 / 1024);
   try {
     await pipeline(
       part.file,
       async function* meter(source) {
         for await (const chunk of source) {
           size += chunk.length;
-          if (size > env.maxVideoBytes) throw tooLarge(`Video vượt quá ${limitMb}MB — hãy quay ngắn hơn.`);
+          if (size > limit) throw tooLarge(tooLargeMsg);
           hash.update(chunk);
           yield chunk;
         }
       },
       createWriteStream(abs)
     );
-    if (part.file.truncated) throw tooLarge(`Video vượt quá ${limitMb}MB — hãy quay ngắn hơn.`);
+    if (part.file.truncated) throw tooLarge(tooLargeMsg);
     if (!size) throw badRequest('Tệp rỗng.');
   } catch (e) {
     await fs.unlink(abs).catch(() => {});
@@ -94,29 +95,38 @@ async function ensureDir(abs) {
 /**
  * Lưu một phần multipart thành tệp + bản ghi `files`.
  * @param {object} part      Phần multipart của @fastify/multipart (có .file stream, .mimetype, .filename)
- * @param {object} opts      { userId, schoolId, allowVideo } — allowVideo: nghiệp vụ này nhận video
+ * @param {object} opts      { userId, schoolId, allowVideo, maxBytes }
+ *   allowVideo: nghiệp vụ này nhận video · maxBytes: trần riêng cho video/tài liệu (vd học liệu)
  * @returns {Promise<object>} bản ghi files
  */
-export async function saveUpload(part, { userId, schoolId = null, allowVideo = false } = {}) {
+export async function saveUpload(part, { userId, schoolId = null, allowVideo = false, maxBytes = null } = {}) {
   if (!part || !part.file) throw badRequest('Không nhận được tệp tải lên.');
 
   const mime = String(part.mimetype || 'application/octet-stream').toLowerCase();
-  if (isVideo(mime)) {
-    if (!allowVideo) throw badRequest('Mục này chỉ nhận ảnh, không nhận video.');
-    const v = await streamVideoToDisk(part, mime);
-    return one(
-      `insert into files (storage_path, file_name, mime, size_bytes, sha256, uploaded_by, school_id)
-       values ($1, $2, $3, $4, $5, $6, $7) returning *`,
-      [v.storagePath, String(part.filename || path.posix.basename(v.storagePath)).slice(0, 200),
-       mime, v.size, v.sha256, userId || null, schoolId]
-    );
-  }
-  if (!isAllowed(mime)) {
+  if (isVideo(mime) && !allowVideo) throw badRequest('Mục này chỉ nhận ảnh, không nhận video.');
+  if (!isVideo(mime) && !isAllowed(mime)) {
     throw badRequest(`Định dạng tệp không được hỗ trợ: ${mime}. Chỉ nhận ảnh (JPG/PNG/WEBP/HEIC), video (MP4/MOV) và tài liệu (PDF/DOCX/PPTX/XLSX).`);
   }
 
-  // Đọc vào bộ nhớ có giới hạn — @fastify/multipart đã chặn ở mức limits.fileSize,
-  // ở đây kiểm lại để chắc chắn và để phát hiện cờ truncated.
+  // Video & tài liệu: ghi luồng xuống đĩa (không nén, không cần nạp vào RAM).
+  if (!isImage(mime)) {
+    const video = isVideo(mime);
+    const limit = maxBytes || (video ? env.maxVideoBytes : env.maxUploadBytes);
+    const ext = video
+      ? VIDEO_EXT[mime]
+      : path.extname(part.filename || '').toLowerCase().replace(/[^a-z0-9.]/g, '').slice(0, 8);
+    const s = await streamToDisk(part, ext, limit,
+      video ? `Video vượt quá ${mb(limit)}MB — hãy quay/cắt ngắn hơn.` : `Tệp vượt quá ${mb(limit)}MB.`);
+    return one(
+      `insert into files (storage_path, file_name, mime, size_bytes, sha256, uploaded_by, school_id)
+       values ($1, $2, $3, $4, $5, $6, $7) returning *`,
+      [s.storagePath, String(part.filename || path.posix.basename(s.storagePath)).slice(0, 200),
+       mime, s.size, s.sha256, userId || null, schoolId]
+    );
+  }
+
+  // Ảnh: đọc vào bộ nhớ có giới hạn để nén bằng sharp — @fastify/multipart đã chặn ở mức
+  // limits.fileSize, ở đây kiểm lại để chắc chắn và để phát hiện cờ truncated.
   const chunks = [];
   let size = 0;
   for await (const chunk of part.file) {
@@ -191,13 +201,13 @@ export async function saveUpload(part, { userId, schoolId = null, allowVideo = f
  * Trả { fields: {...}, files: { fieldname: [fileRow, ...] } }
  * Một tệp lỗi (quá dung lượng, sai định dạng…) ⇒ xoá các tệp đã lưu trong cùng request.
  */
-export async function consumeMultipart(req, { userId, schoolId = null, allowVideo = false } = {}) {
+export async function consumeMultipart(req, { userId, schoolId = null, allowVideo = false, maxBytes = null } = {}) {
   const fields = {};
   const files = {};
   try {
     for await (const part of req.parts()) {
       if (part.type === 'file') {
-        const row = await saveUpload(part, { userId, schoolId, allowVideo });
+        const row = await saveUpload(part, { userId, schoolId, allowVideo, maxBytes });
         (files[part.fieldname] ||= []).push(row);
       } else if (fields[part.fieldname] !== undefined) {
         // Trường lặp lại ⇒ gom thành mảng

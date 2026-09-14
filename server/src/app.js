@@ -65,7 +65,7 @@ export async function buildApp() {
   await app.register(multipart, {
     limits: {
       // Trần chung = loại lớn nhất (video); storage.js kiểm lại giới hạn riêng từng loại.
-      fileSize: Math.max(env.maxUploadBytes, env.maxVideoBytes),
+      fileSize: Math.max(env.maxUploadBytes, env.maxVideoBytes, env.maxMaterialBytes),
       files: 12,              // đủ cho nhiều ảnh minh chứng một lượt
       fieldSize: 1024 * 1024, // trường `items` JSON của kiểm kê thiết bị có thể dài
     },

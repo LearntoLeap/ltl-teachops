@@ -13,6 +13,7 @@
 import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import yazl from 'yazl';
+import env from '../env.js';
 import { rows, one, scalar, tx, query } from '../db.js';
 import { badRequest, notFound, forbidden, conflict } from '../lib/errors.js';
 import { assertPerm, requirePerm } from '../lib/rbac.js';
@@ -308,7 +309,9 @@ export default async function routes(app) {
 
     // Tệp học liệu mặc định không gắn trường (tài nguyên dùng chung); nếu có school_id
     // sẽ gắn lại bên dưới để quyền tải tệp khớp với phạm vi của học liệu.
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: null, allowVideo: true });
+    const { fields, files } = await consumeMultipart(req, {
+      userId: req.user.id, schoolId: null, allowVideo: true, maxBytes: env.maxMaterialBytes,
+    });
 
     let material;
     let version;
@@ -748,7 +751,9 @@ export default async function routes(app) {
     assertCanManage(req.user, m);
     if (!req.isMultipart()) throw badRequest('Cần gửi dữ liệu dạng multipart/form-data kèm tệp.');
 
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id, schoolId: m.school_id, allowVideo: true });
+    const { fields, files } = await consumeMultipart(req, {
+      userId: req.user.id, schoolId: m.school_id, allowVideo: true, maxBytes: env.maxMaterialBytes,
+    });
 
     let version;
     let file;

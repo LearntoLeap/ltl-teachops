@@ -162,7 +162,10 @@ async function request(path, opts = {}, _retried = false) {
     res = await fetch(url, { method, headers, body: payload, signal });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    throw new ApiError(0, 'NETWORK', 'Không kết nối được máy chủ. Kiểm tra đường truyền và thử lại.');
+    // Đang gửi tệp mà đứt kết nối: hay gặp nhất là tệp vượt giới hạn bị chặn ở proxy.
+    throw new ApiError(0, 'NETWORK', formData
+      ? 'Không gửi được tệp lên máy chủ — kiểm tra đường truyền, hoặc tệp có thể vượt dung lượng cho phép (tài liệu/video học liệu tối đa 300 MB, video minh chứng 100 MB).'
+      : 'Không kết nối được máy chủ. Kiểm tra đường truyền và thử lại.');
   }
 
   if (res.status === 401 && !_retried && tokens.refresh) {

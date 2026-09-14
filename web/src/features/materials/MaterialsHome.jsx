@@ -22,6 +22,7 @@ import {
 import { useToast } from '../../components/Toast.jsx';
 import MaterialsBulkUpload from './MaterialsBulkUpload.jsx';
 import MaterialsDownload from './MaterialsDownload.jsx';
+import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
 
 const LIMIT = 30;
 
@@ -394,13 +395,29 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
     }
   };
 
+  /** Chọn tệp: vượt dung lượng ⇒ báo ngay và bỏ chọn, không để gửi rồi mới lỗi. */
+  const pickChecked = (e, setter) => {
+    const f = e.target.files?.[0] || null;
+    const problem = materialFileProblem(f);
+    if (problem) {
+      toast.err(problem, 8000);
+      e.target.value = '';
+      setter(null);
+      return;
+    }
+    setter(f);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
+    if (busy) return;
     if (!title.trim()) { toast.err('Vui lòng nhập tiêu đề tài liệu.'); return; }
     if (!file && !body.trim()) {
       toast.err('Cần đính kèm tệp HOẶC nhập nội dung bài viết.');
       return;
     }
+    const problem = materialFileProblem(file) || materialFileProblem(cover);
+    if (problem) { toast.err(problem, 8000); return; }
 
     const fd = new FormData();
     fd.append('title', title.trim());
@@ -546,13 +563,13 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
         </div>
 
         <div className="grid sm:grid-cols-2 sm:gap-3">
-          <Field label="Tệp tài liệu" hint="PDF, Word, PowerPoint, Excel, video — tối đa 15MB.">
+          <Field label="Tệp tài liệu" hint={`PDF, Word, PowerPoint, Excel, video — tối đa ${MAX_MATERIAL_MB} MB.`}>
             <input
               key={`f${fileKey}`}
               type="file"
               className="input !py-2"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.zip"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.mp4,.mov,.webm,.m4v,.zip"
+              onChange={(e) => pickChecked(e, setFile)}
             />
           </Field>
           <Field label="Ảnh minh hoạ" hint="Hiển thị trên thẻ tài liệu ngoài danh sách.">
@@ -561,7 +578,7 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
               type="file"
               className="input !py-2"
               accept="image/*"
-              onChange={(e) => setCover(e.target.files?.[0] || null)}
+              onChange={(e) => pickChecked(e, setCover)}
             />
           </Field>
         </div>

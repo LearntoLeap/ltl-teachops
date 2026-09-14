@@ -8,9 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { compressImage, humanSize, pickImages } from '../lib/gps.js';
 import { useToast } from './Toast.jsx';
-
-// Khớp MAX_VIDEO_MB mặc định của máy chủ.
-const DEFAULT_MAX_VIDEO_MB = 100;
+import { MAX_FIELD_VIDEO_MB } from '../lib/limits.js';
 
 export default function PhotoInput({
   value = [],            // [{blob, name, url, size, kind}]
@@ -21,7 +19,7 @@ export default function PhotoInput({
   capture = 'environment',  // mở camera sau; null = chỉ chọn từ thư viện
   hint,
   allowVideo = false,
-  maxVideoMb = DEFAULT_MAX_VIDEO_MB,
+  maxVideoMb = MAX_FIELD_VIDEO_MB,
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
