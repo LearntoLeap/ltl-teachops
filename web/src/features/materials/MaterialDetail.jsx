@@ -4,7 +4,7 @@
  * và bình luận góp ý. Tự đánh dấu đã đọc khi mở.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtAgo, fmtDateTime, fmtSize, initials, LABEL } from '../../lib/format.js';
@@ -13,6 +13,7 @@ import {
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
+import DeleteMaterialSheet from './DeleteMaterialSheet.jsx';
 
 /** Số hiệu phiên bản — chịu được vài kiểu đặt tên trường từ server. */
 const verNo = (v, fallback) => v.version_no ?? v.version ?? fallback;
@@ -82,6 +83,7 @@ function VersionSheet({ open, onClose, materialId, onDone }) {
 /* -------------------------------- Màn hình -------------------------------- */
 export default function MaterialDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const auth = useAuth();
   const toast = useToast();
 
@@ -95,6 +97,7 @@ export default function MaterialDetail() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
 
+  const [delOpen, setDelOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -207,8 +210,9 @@ export default function MaterialDetail() {
             </div>
           )}
 
-          {latest && (
-            <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+          <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+            {latest && (
+              <>
               <button
                 className="btn-primary"
                 disabled={downloadingId === (latest.file_id || latest.file?.id)}
@@ -220,8 +224,14 @@ export default function MaterialDetail() {
               <span className="text-[12.5px] text-ink-muted truncate max-w-[240px]">
                 v{verNo(latest, versions.length)} · {latest.file_name} {fmtSize(latest.size_bytes) && `· ${fmtSize(latest.size_bytes)}`}
               </span>
-            </div>
-          )}
+              </>
+            )}
+            {canAddVersion && (
+              <button className="btn-line !text-rose-700 ml-auto" onClick={() => setDelOpen(true)}>
+                🗑 Xoá tài liệu
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -343,6 +353,17 @@ export default function MaterialDetail() {
       </div>
 
       {/* ------------------------------ Sheet phụ ------------------------------ */}
+      <DeleteMaterialSheet
+        open={delOpen}
+        items={[{ id, title: mat.title }]}
+        canHardDelete={auth.isAdmin || auth.isManager}
+        onClose={() => setDelOpen(false)}
+        onDone={(okIds) => {
+          setDelOpen(false);
+          if (okIds.length) navigate('/hoc-lieu', { replace: true });
+        }}
+      />
+
       <VersionSheet
         open={verOpen}
         onClose={() => setVerOpen(false)}

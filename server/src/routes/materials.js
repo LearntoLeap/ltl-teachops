@@ -20,7 +20,7 @@ import { assertPerm, requirePerm } from '../lib/rbac.js';
 import { visibleSchoolIds, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
 import { str, int, uuid, uuidList, bool, enumOf, paging } from '../lib/validate.js';
 import { consumeMultipart, deleteFile, absPath, contentDisposition } from '../lib/storage.js';
-import { driveReadStream } from '../lib/drive.js';
+import { driveReadStream, trashOnDrive } from '../lib/drive.js';
 import { notify, notifySchoolManagers, notifyFieldStaff } from '../lib/notify.js';
 import { xlsxBuffer, formatVN, LABELS } from '../lib/xlsx.js';
 import { audit } from '../lib/audit.js';
@@ -740,18 +740,45 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
-   * DELETE /api/materials/:id — xoá mềm (is_archived = true).
+   * DELETE /api/materials/:id — mặc định GỠ khỏi kho (is_archived = true, khôi phục được).
+   * ?hard=1 — XOÁ HẲN (admin/Phòng chuyên môn): xoá bản ghi + tệp trên máy chủ, và đưa bản
+   * trên Google Drive vào thùng rác (Drive còn giữ ~30 ngày).
    * ---------------------------------------------------------------------- */
   app.delete('/api/materials/:id', async (req, reply) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const m = await getMaterialForUser(req.user, id);
     assertCanManage(req.user, m);
+    const hard = bool(req.query.hard, 'hard', { def: false });
 
-    await query('update materials set is_archived = true where id = $1', [id]);
+    if (!hard) {
+      await query('update materials set is_archived = true where id = $1', [id]);
+      audit(req, {
+        action: 'delete', entity: 'materials', entityId: id,
+        summary: `Gỡ học liệu "${m.title}" khỏi kho (còn khôi phục được)`,
+        before: { is_archived: m.is_archived }, after: { is_archived: true },
+      });
+      return reply.code(204).send();
+    }
+
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      throw forbidden('Chỉ Quản trị viên hoặc Phòng chuyên môn được xoá hẳn học liệu.');
+    }
+    const files = await rows(
+      `select id, drive_file_id from files
+        where id = $1 or id in (select file_id from material_versions where material_id = $2)`,
+      [m.cover_file_id, id]
+    );
+    // Xoá bản ghi trước (cascade phiên bản/bình luận) rồi mới gỡ tệp — material_versions
+    // tham chiếu files với on delete restrict.
+    await query('delete from materials where id = $1', [id]);
+    for (const file of files) {
+      await trashOnDrive(file.drive_file_id).catch(() => {});
+      await deleteFile(file.id).catch(() => {});
+    }
     audit(req, {
       action: 'delete', entity: 'materials', entityId: id,
-      summary: `Gỡ học liệu "${m.title}" (lưu trữ mềm)`,
-      before: { is_archived: m.is_archived }, after: { is_archived: true },
+      summary: `XOÁ HẲN học liệu "${m.title}" kèm ${files.length} tệp (bản trên Drive vào thùng rác)`,
+      before: m,
     });
     return reply.code(204).send();
   });

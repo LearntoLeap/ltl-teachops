@@ -484,6 +484,20 @@ export async function fetchFromDrive(driveFileId, range) {
 }
 
 /**
+ * Đưa tệp trên Drive vào THÙNG RÁC (Drive giữ ~30 ngày, còn khôi phục được) khi
+ * học liệu bị xoá hẳn. Không xoá vĩnh viễn để tránh mất tệp do bấm nhầm.
+ */
+export async function trashOnDrive(driveFileId) {
+  if (!driveFileId || !(await driveEnabled())) return false;
+  const res = await driveFetch(`${API_URL}/files/${driveFileId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed: true }),
+  });
+  return res.ok;
+}
+
+/**
  * Luồng đọc tệp từ Drive, chỉ thật sự gọi Drive khi bắt đầu đọc — để đóng gói ZIP
  * nhiều tệp mà không mở hàng loạt kết nối cùng lúc.
  */

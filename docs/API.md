@@ -149,7 +149,7 @@ Server tự suy `class_id`, `school_id`, `roster_size`, `marked_by` từ `schedu
 | GET | `/` | mọi vai trò — `?area=&level=&subject=&school_id=&class_id=&q=` |
 | POST | `/` | `area=official`: admin, manager · `area=teacher`: mọi vai trò |
 | GET | `/:id` | mọi vai trò (có `versions[]`, `comments[]`) |
-| PATCH/DELETE | `/:id` | chủ sở hữu, hoặc admin/manager |
+| PATCH/DELETE | `/:id` | chủ sở hữu, hoặc admin/manager. `DELETE` mặc định gỡ khỏi kho (`is_archived`), khôi phục được; `DELETE /:id?hard=1` (admin/manager) xoá hẳn bản ghi + tệp trên máy chủ và đưa bản trên Drive vào thùng rác |
 | POST | `/:id/versions` | chủ sở hữu, hoặc admin/manager — `multipart`: `file`, `change_note?` |
 | POST | `/:id/approve` | admin, manager — `{decision, note?}` |
 | GET/POST | `/:id/comments` | mọi vai trò trong phạm vi |

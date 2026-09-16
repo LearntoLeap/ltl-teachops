@@ -23,6 +23,7 @@ import { useToast } from '../../components/Toast.jsx';
 import MaterialsBulkUpload from './MaterialsBulkUpload.jsx';
 import MaterialsDownload from './MaterialsDownload.jsx';
 import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
+import DeleteMaterialSheet from './DeleteMaterialSheet.jsx';
 
 const LIMIT = 30;
 
@@ -180,7 +181,7 @@ function MaterialCard({ m, area, checked, onToggle }) {
  * MaterialTable — chế độ xem danh sách: mỗi tài liệu một dòng, thấy được
  * nhiều mục cùng lúc và so sánh nhanh theo khối / tiết / loại.
  */
-function MaterialTable({ items, area, selected, onToggle, onTogglePage }) {
+function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManage, onDelete }) {
   const quickDownload = useQuickDownload();
   const allOnPage = items.length > 0 && items.every((m) => selected.has(m.id));
   return (
@@ -201,7 +202,7 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage }) {
               <th className="th !w-[130px]">Loại</th>
               <th className="th !w-[150px]">Giải pháp</th>
               <th className="th !w-[130px]">Người đăng</th>
-              <th className="th !w-[44px]"></th>
+              <th className="th !w-[76px]"></th>
             </tr>
           </thead>
           <tbody>
@@ -244,11 +245,16 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage }) {
                     <span className="block text-[11px]">{fmtAgo(m.updated_at || m.created_at)}</span>
                   )}
                 </td>
-                <td className="td !px-1 text-center">
+                <td className="td !px-1 text-center whitespace-nowrap">
                   {m.latest_version?.file_id && (
                     <button type="button" title={`Tải ${m.latest_version.file_name || 'tệp'} về máy`}
                       className="h-8 w-8 rounded-lg text-[17px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
                       onClick={() => quickDownload(m)}>⬇</button>
+                  )}
+                  {canManage(m) && (
+                    <button type="button" title="Xoá tài liệu này"
+                      className="h-8 w-8 rounded-lg text-[15px] text-ink-muted hover:bg-rose-50 hover:text-rose-700"
+                      onClick={() => onDelete([{ id: m.id, title: m.title }])}>🗑</button>
                   )}
                 </td>
               </tr>
@@ -257,7 +263,7 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage }) {
         </table>
       </div>
       <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
-        {items.length} tài liệu — bấm tên để mở chi tiết · tích ô vuông để chọn tải nhiều bài · ⬇ tải nhanh một tệp
+        {items.length} tài liệu — bấm tên để mở chi tiết · tích ô vuông để chọn tải hoặc xoá nhiều bài · ⬇ tải nhanh · 🗑 xoá
       </div>
     </div>
   );
@@ -616,12 +622,15 @@ export default function MaterialsHome() {
   const [formOpen, setFormOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [dlOpen, setDlOpen] = useState(false);
+  const [deleting, setDeleting] = useState(null);   // [{id, title}] đang chờ xác nhận xoá
   // Chọn từng bài để tải về — giữ qua các trang và khi đổi bộ lọc.
   const [selected, setSelected] = useState(() => new Map());
 
   const canOfficial = auth.can('material.official.write');
   const canTeacher = auth.can('material.teacher.write');
   const canWrite = area === 'official' ? canOfficial : canTeacher;
+  // Chủ sở hữu, Phòng chuyên môn và Quản trị viên được xoá.
+  const canManage = (m) => m.owner_id === auth.user?.id || auth.isAdmin || auth.isManager;
 
   const toggleOne = (m) => setSelected((s) => {
     const n = new Map(s);
@@ -791,7 +800,8 @@ export default function MaterialsHome() {
           <div className={loading ? 'opacity-60 pointer-events-none' : ''}>
             {view === 'list' ? (
               <MaterialTable items={items} area={area} selected={selected}
-                onToggle={toggleOne} onTogglePage={togglePage} />
+                onToggle={toggleOne} onTogglePage={togglePage}
+                canManage={canManage} onDelete={setDeleting} />
             ) : (
               <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((m) => (
@@ -812,11 +822,27 @@ export default function MaterialsHome() {
             <span className="text-[13.5px]">Đã chọn <b>{selected.size}</b> tài liệu</span>
             <button className="rounded-xl bg-white text-brand-900 font-semibold text-[13px] px-3 py-1.5 hover:bg-brand-50"
               onClick={() => setDlOpen(true)}>⬇ Tải các mục đã chọn</button>
+            <button className="rounded-xl bg-rose-500 text-white font-semibold text-[13px] px-3 py-1.5 hover:bg-rose-600"
+              onClick={() => setDeleting([...selected].map(([id, title]) => ({ id, title })))}>🗑 Xoá</button>
             <button className="text-[13px] text-white/80 hover:text-white px-2"
               onClick={() => setSelected(new Map())}>Bỏ chọn</button>
           </div>
         </div>
       )}
+
+      <DeleteMaterialSheet
+        open={!!deleting}
+        items={deleting || []}
+        canHardDelete={auth.isAdmin || auth.isManager}
+        onClose={() => setDeleting(null)}
+        onDone={(okIds) => {
+          setDeleting(null);
+          if (okIds.length) {
+            setSelected((s) => { const n = new Map(s); okIds.forEach((id) => n.delete(id)); return n; });
+            load();
+          }
+        }}
+      />
 
       <MaterialsDownload
         open={dlOpen}
