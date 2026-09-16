@@ -754,14 +754,15 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
-   * DELETE /api/materials/:id — mặc định GỠ khỏi kho (is_archived = true, khôi phục được).
-   * ?hard=1 — XOÁ HẲN (admin/Phòng chuyên môn): xoá bản ghi + tệp trên máy chủ, và đưa bản
-   * trên Google Drive vào thùng rác (Drive còn giữ ~30 ngày).
+   * DELETE /api/materials/:id — CHỈ Quản trị viên và Phòng chuyên môn (material.delete).
+   * Mặc định GỠ khỏi kho (is_archived = true, khôi phục được).
+   * ?hard=1 — XOÁ HẲN: xoá bản ghi + tệp trên máy chủ, đưa bản trên Google Drive vào thùng rác
+   * (Drive còn giữ ~30 ngày). Giáo viên/trợ giảng đăng nhầm thì báo Phòng chuyên môn xoá giúp.
    * ---------------------------------------------------------------------- */
   app.delete('/api/materials/:id', async (req, reply) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const m = await getMaterialForUser(req.user, id);
-    assertCanManage(req.user, m);
+    assertPerm(req.user, 'material.delete');
     const hard = bool(req.query.hard, 'hard', { def: false });
 
     if (!hard) {
@@ -774,9 +775,6 @@ export default async function routes(app) {
       return reply.code(204).send();
     }
 
-    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
-      throw forbidden('Chỉ Quản trị viên hoặc Phòng chuyên môn được xoá hẳn học liệu.');
-    }
     const files = await rows(
       `select id, drive_file_id from files
         where id = $1 or id in (select file_id from material_versions where material_id = $2)`,

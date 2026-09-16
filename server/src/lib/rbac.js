@@ -54,6 +54,8 @@ const PERMISSIONS = {
   'material.official.write': ['admin', 'manager'],
   'material.teacher.write':  ['admin', 'manager', 'teacher', 'assistant'],
   'material.approve':        ['admin', 'manager'],
+  // Xoá học liệu: chỉ Phòng chuyên môn và Quản trị viên (giáo viên đăng nhầm thì báo để xoá giúp).
+  'material.delete':         ['admin', 'manager'],
   'material.view':           ['admin', 'manager', 'teacher', 'assistant'],
 
   // Danh mục giải pháp

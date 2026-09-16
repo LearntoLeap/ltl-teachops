@@ -123,6 +123,7 @@ export default function MaterialDetail() {
   const ownerId = mat.owner?.id ?? mat.owner_id;
   const ownerName = mat.owner_name || mat.owner?.full_name || '';
   const canAddVersion = ownerId === auth.user?.id || auth.isAdmin || auth.isManager;
+  const canDelete = auth.can('material.delete');
   const canApprove = auth.can('material.approve') && mat.area === 'teacher' && mat.approval_status === 'pending';
 
   const versions = [...(mat.versions || [])]
@@ -226,7 +227,7 @@ export default function MaterialDetail() {
               </span>
               </>
             )}
-            {canAddVersion && (
+            {canDelete && (
               <button className="btn-line !text-rose-700 ml-auto" onClick={() => setDelOpen(true)}>
                 🗑 Xoá tài liệu
               </button>
@@ -356,7 +357,7 @@ export default function MaterialDetail() {
       <DeleteMaterialSheet
         open={delOpen}
         items={[{ id, title: mat.title }]}
-        canHardDelete={auth.isAdmin || auth.isManager}
+        canHardDelete={canDelete}
         onClose={() => setDelOpen(false)}
         onDone={(okIds) => {
           setDelOpen(false);

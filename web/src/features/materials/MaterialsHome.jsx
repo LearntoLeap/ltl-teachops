@@ -664,8 +664,9 @@ export default function MaterialsHome() {
   const canOfficial = auth.can('material.official.write');
   const canTeacher = auth.can('material.teacher.write');
   const canWrite = area === 'official' ? canOfficial : canTeacher;
-  // Chủ sở hữu, Phòng chuyên môn và Quản trị viên được xoá.
-  const canManage = (m) => m.owner_id === auth.user?.id || auth.isAdmin || auth.isManager;
+  // Chỉ Phòng chuyên môn và Quản trị viên được xoá học liệu.
+  const canDelete = auth.can('material.delete');
+  const canManage = () => canDelete;
 
   const toggleOne = (m) => setSelected((s) => {
     const n = new Map(s);
@@ -874,8 +875,10 @@ export default function MaterialsHome() {
             <span className="text-[13.5px]">Đã chọn <b>{selected.size}</b> tài liệu</span>
             <button className="rounded-xl bg-white text-brand-900 font-semibold text-[13px] px-3 py-1.5 hover:bg-brand-50"
               onClick={() => setDlOpen(true)}>⬇ Tải các mục đã chọn</button>
-            <button className="rounded-xl bg-rose-500 text-white font-semibold text-[13px] px-3 py-1.5 hover:bg-rose-600"
-              onClick={() => setDeleting([...selected].map(([id, title]) => ({ id, title })))}>🗑 Xoá</button>
+            {canDelete && (
+              <button className="rounded-xl bg-rose-500 text-white font-semibold text-[13px] px-3 py-1.5 hover:bg-rose-600"
+                onClick={() => setDeleting([...selected].map(([id, title]) => ({ id, title })))}>🗑 Xoá</button>
+            )}
             <button className="text-[13px] text-white/80 hover:text-white px-2"
               onClick={() => setSelected(new Map())}>Bỏ chọn</button>
           </div>
@@ -891,7 +894,7 @@ export default function MaterialsHome() {
       <DeleteMaterialSheet
         open={!!deleting}
         items={deleting || []}
-        canHardDelete={auth.isAdmin || auth.isManager}
+        canHardDelete={canDelete}
         onClose={() => setDeleting(null)}
         onDone={(okIds) => {
           setDeleting(null);
