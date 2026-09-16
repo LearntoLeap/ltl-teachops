@@ -14,6 +14,16 @@ import {
 import { useToast } from '../../components/Toast.jsx';
 import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
 import DeleteMaterialSheet from './DeleteMaterialSheet.jsx';
+import EditMaterialSheet from './EditMaterialSheet.jsx';
+
+/** GET /api/solutions trả về dạng cây — làm phẳng để đổ vào <select>. */
+function flattenSolutions(nodes, depth = 0, out = []) {
+  for (const n of nodes || []) {
+    out.push({ id: n.id, label: `${'— '.repeat(depth)}${n.name || n.title || ''}` });
+    if (n.children?.length) flattenSolutions(n.children, depth + 1, out);
+  }
+  return out;
+}
 
 /** Số hiệu phiên bản — chịu được vài kiểu đặt tên trường từ server. */
 const verNo = (v, fallback) => v.version_no ?? v.version ?? fallback;
@@ -98,6 +108,9 @@ export default function MaterialDetail() {
   const [rejectNote, setRejectNote] = useState('');
 
   const [delOpen, setDelOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [types, setTypes] = useState([]);
+  const [solutions, setSolutions] = useState([]);
   const [commentText, setCommentText] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -116,6 +129,14 @@ export default function MaterialDetail() {
   useEffect(() => {
     api.post(`/api/materials/${id}/read`).catch(() => {});
   }, [id]);
+
+  // Danh mục cho form sửa — hỏng thì để trống, không chặn việc xem tài liệu.
+  useEffect(() => {
+    api.get('/api/materials/types').then((d) => setTypes(d?.items || [])).catch(() => {});
+    api.get('/api/solutions')
+      .then((d) => setSolutions(flattenSolutions(Array.isArray(d) ? d : d?.items || [])))
+      .catch(() => {});
+  }, []);
 
   if (error && !mat) return <ErrorBox error={error} onRetry={load} />;
   if (!mat) return <PageLoading />;
@@ -227,8 +248,13 @@ export default function MaterialDetail() {
               </span>
               </>
             )}
+            {canAddVersion && (
+              <button className="btn-line ml-auto" onClick={() => setEditOpen(true)}>
+                ✏️ Sửa thông tin
+              </button>
+            )}
             {canDelete && (
-              <button className="btn-line !text-rose-700 ml-auto" onClick={() => setDelOpen(true)}>
+              <button className={`btn-line !text-rose-700${canAddVersion ? '' : ' ml-auto'}`} onClick={() => setDelOpen(true)}>
                 🗑 Xoá tài liệu
               </button>
             )}
@@ -354,6 +380,15 @@ export default function MaterialDetail() {
       </div>
 
       {/* ------------------------------ Sheet phụ ------------------------------ */}
+      <EditMaterialSheet
+        open={editOpen}
+        material={mat}
+        types={types}
+        solutions={solutions}
+        onClose={() => setEditOpen(false)}
+        onDone={() => { setEditOpen(false); load(); }}
+      />
+
       <DeleteMaterialSheet
         open={delOpen}
         items={[{ id, title: mat.title }]}

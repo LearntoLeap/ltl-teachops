@@ -26,6 +26,7 @@ import { MAX_MATERIAL_MB, materialFileProblem } from '../../lib/limits.js';
 import DeleteMaterialSheet from './DeleteMaterialSheet.jsx';
 import MaterialPreview from './MaterialPreview.jsx';
 import MaterialsLessonView from './MaterialsLessonView.jsx';
+import EditMaterialSheet from './EditMaterialSheet.jsx';
 
 const LIMIT = 30;
 
@@ -107,7 +108,7 @@ function useQuickDownload() {
 }
 
 /* ------------------------------ Thẻ tài liệu ------------------------------ */
-function MaterialCard({ m, area, checked, onToggle, canManage, onPreview, onDownload, onDelete }) {
+function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPreview, onEdit, onDownload, onDelete }) {
   const ownerName = m.owner_name || m.owner?.full_name || '';
   const at = m.updated_at || m.latest_version?.created_at || m.created_at;
   const lessonLine = [
@@ -194,6 +195,10 @@ function MaterialCard({ m, area, checked, onToggle, canManage, onPreview, onDown
             <button type="button" title="Tải về" onClick={() => onDownload(m)}
               className="h-7 w-7 rounded-lg text-[14px] text-brand-700 hover:bg-brand-50">⬇</button>
           )}
+          {canEdit(m) && (
+            <button type="button" title="Sửa thông tin" onClick={() => onEdit(m)}
+              className="h-7 w-7 rounded-lg text-[13px] text-ink-muted hover:bg-brand-50 hover:text-brand-800">✏️</button>
+          )}
           {canManage(m) && (
             <button type="button" title="Xoá tài liệu này"
               onClick={() => onDelete([{ id: m.id, title: m.title }])}
@@ -210,7 +215,7 @@ function MaterialCard({ m, area, checked, onToggle, canManage, onPreview, onDown
  * MaterialTable — chế độ xem danh sách: mỗi tài liệu một dòng, thấy được
  * nhiều mục cùng lúc và so sánh nhanh theo khối / tiết / loại.
  */
-function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManage, onDelete, onPreview }) {
+function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManage, canEdit, onDelete, onPreview, onEdit }) {
   const quickDownload = useQuickDownload();
   const allOnPage = items.length > 0 && items.every((m) => selected.has(m.id));
   return (
@@ -231,7 +236,7 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
               <th className="th !w-[130px]">Loại</th>
               <th className="th !w-[150px]">Giải pháp</th>
               <th className="th !w-[130px]">Người đăng</th>
-              <th className="th !w-[108px]"></th>
+              <th className="th !w-[140px]"></th>
             </tr>
           </thead>
           <tbody>
@@ -278,6 +283,11 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
                   <button type="button" title="Xem trước"
                     className="h-8 w-8 rounded-lg text-[15px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
                     onClick={() => onPreview(m)}>👁</button>
+                  {canEdit(m) && (
+                    <button type="button" title="Sửa thông tin (tiết, tên tài liệu…)"
+                      className="h-8 w-8 rounded-lg text-[14px] text-ink-muted hover:bg-brand-50 hover:text-brand-800"
+                      onClick={() => onEdit(m)}>✏️</button>
+                  )}
                   {m.latest_version?.file_id && (
                     <button type="button" title={`Tải ${m.latest_version.file_name || 'tệp'} về máy`}
                       className="h-8 w-8 rounded-lg text-[17px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
@@ -295,7 +305,8 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
         </table>
       </div>
       <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
-        {items.length} tài liệu — bấm tên để mở chi tiết · tích ô vuông để chọn tải hoặc xoá nhiều bài · ⬇ tải nhanh · 🗑 xoá
+        {items.length} tài liệu — bấm tên để mở chi tiết · 👁 xem trước · ✏️ sửa thông tin · ⬇ tải nhanh
+        {canManage() ? ' · 🗑 xoá · tích ô vuông để chọn tải hoặc xoá nhiều bài' : ' · tích ô vuông để chọn tải nhiều bài'}
       </div>
     </div>
   );
@@ -650,6 +661,7 @@ export default function MaterialsHome() {
   const [view, setView] = useState(() => localStorage.getItem('teachops.mat-view') || 'list');
   const [sort, setSort] = useState(() => localStorage.getItem('teachops.mat-sort') || 'moi-nhat');
   const [previewing, setPreviewing] = useState(null);
+  const [editing, setEditing] = useState(null);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -667,6 +679,8 @@ export default function MaterialsHome() {
   // Chỉ Phòng chuyên môn và Quản trị viên được xoá học liệu.
   const canDelete = auth.can('material.delete');
   const canManage = () => canDelete;
+  // Sửa thông tin: chủ sở hữu vẫn sửa được bài của mình.
+  const canEdit = (m) => m.owner_id === auth.user?.id || auth.isAdmin || auth.isManager;
 
   const toggleOne = (m) => setSelected((s) => {
     const n = new Map(s);
@@ -847,21 +861,23 @@ export default function MaterialsHome() {
             {view === 'list' && (
               <MaterialTable items={items} area={area} selected={selected}
                 onToggle={toggleOne} onTogglePage={togglePage}
-                canManage={canManage} onDelete={setDeleting} onPreview={setPreviewing} />
+                canManage={canManage} canEdit={canEdit} onDelete={setDeleting}
+                onPreview={setPreviewing} onEdit={setEditing} />
             )}
             {view === 'card' && (
               <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {items.map((m) => (
                   <MaterialCard key={m.id} m={m} area={area}
                     checked={selected.has(m.id)} onToggle={toggleOne}
-                    canManage={canManage} onPreview={setPreviewing}
+                    canManage={canManage} canEdit={canEdit}
+                    onPreview={setPreviewing} onEdit={setEditing}
                     onDownload={quickDownload} onDelete={setDeleting} />
                 ))}
               </div>
             )}
             {view === 'lesson' && (
-              <MaterialsLessonView items={items} area={area} canManage={canManage}
-                onPreview={setPreviewing} onDownload={quickDownload} onDelete={setDeleting} />
+              <MaterialsLessonView items={items} area={area} canManage={canManage} canEdit={canEdit}
+                onPreview={setPreviewing} onEdit={setEditing} onDownload={quickDownload} onDelete={setDeleting} />
             )}
           </div>
         )
@@ -884,6 +900,15 @@ export default function MaterialsHome() {
           </div>
         </div>
       )}
+
+      <EditMaterialSheet
+        open={!!editing}
+        material={editing}
+        types={types}
+        solutions={solutions}
+        onClose={() => setEditing(null)}
+        onDone={() => { setEditing(null); load(); }}
+      />
 
       <MaterialPreview
         open={!!previewing}

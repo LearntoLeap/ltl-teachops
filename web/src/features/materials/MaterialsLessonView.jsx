@@ -27,7 +27,7 @@ function group(items) {
     }));
 }
 
-export default function MaterialsLessonView({ items, area, canManage, onPreview, onDownload, onDelete }) {
+export default function MaterialsLessonView({ items, area, canManage, canEdit, onPreview, onEdit, onDownload, onDelete }) {
   const groups = group(items);
   const [closed, setClosed] = useState(() => new Set());
   const toggle = (k) => setClosed((s) => {
@@ -84,6 +84,10 @@ export default function MaterialsLessonView({ items, area, canManage, onPreview,
                             {m.latest_version?.file_id && (
                               <button type="button" title="Tải về" onClick={() => onDownload(m)}
                                 className="h-7 w-7 rounded-lg text-[14px] text-brand-700 hover:bg-brand-50">⬇</button>
+                            )}
+                            {canEdit(m) && (
+                              <button type="button" title="Sửa thông tin" onClick={() => onEdit(m)}
+                                className="h-7 w-7 rounded-lg text-[13px] text-ink-muted hover:bg-brand-50 hover:text-brand-800">✏️</button>
                             )}
                             {canManage(m) && (
                               <button type="button" title="Xoá tài liệu này"
