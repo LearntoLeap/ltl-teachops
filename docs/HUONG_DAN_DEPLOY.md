@@ -105,13 +105,13 @@ Phải nhận được: `{"ok":true,"service":"teachops-api","time":"..."}`
 
 ### Chỉnh thêm cho API (quan trọng)
 
-API nhận ảnh (15MB), video minh chứng (100MB) và học liệu (tối đa 300MB) và có luồng thông báo thời gian thực (SSE).
+API nhận ảnh (15MB), video minh chứng (100MB) và học liệu (tối đa 500MB) và có luồng thông báo thời gian thực (SSE).
 Nginx mặc định sẽ chặn/đệm hai thứ này. Vào **Website** → site vừa tạo →
 **Conf** (hoặc **Config File**), thêm vào trong khối `server { ... }`:
 
 ```nginx
-# Học liệu tối đa 300MB — nới giới hạn mặc định 1MB của Nginx
-client_max_body_size 310m;
+# Học liệu tối đa 500MB — nới giới hạn mặc định 1MB của Nginx
+client_max_body_size 510m;
 
 # Thông báo thời gian thực (SSE): tắt đệm để tin nhắn tới ngay
 location /api/notifications/stream {
@@ -168,7 +168,7 @@ cd /opt/ltl-teachops && bash infra/backup.sh
 |---|---|
 | `curl .../api/health` không phản hồi | API chưa chạy. Xem `docker compose logs --tail 60 api` |
 | Trang web báo lỗi CORS | `CORS_ORIGINS` trong `.env` thiếu tên miền web. Thêm vào rồi `docker compose up -d --force-recreate api` |
-| Tải tệp báo "không gửi được tệp" / lỗi 413 | Thiếu `client_max_body_size 310m;` trong cấu hình Nginx (Bước 4) |
+| Tải tệp báo "không gửi được tệp" / lỗi 413 | Thiếu `client_max_body_size 510m;` trong cấu hình Nginx (Bước 4) |
 | Chuông thông báo không tự cập nhật | Thiếu khối `location /api/notifications/stream` (Bước 4) |
 | aaPanel xin SSL thất bại | DNS chưa trỏ đúng về IP VPS, hoặc cổng 80 đang bị chặn. Kiểm tra Bước 0 |
 | Quên mật khẩu Admin | `grep SEED_ADMIN /opt/ltl-teachops/.env` — chỉ dùng được nếu chưa từng đổi mật khẩu; đã đổi rồi thì dùng chức năng Quên mật khẩu |

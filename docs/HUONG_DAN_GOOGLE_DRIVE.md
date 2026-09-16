@@ -92,7 +92,7 @@ lượt để đẩy hết ảnh cũ.
 | Tự dọn bản gốc trên máy chủ | Bật | Tắt ⇒ VPS giữ mọi tệp, Drive chỉ là bản sao lưu |
 | Giữ bản gốc trên máy chủ thêm (ngày) | 7 | Trong khoảng này ảnh mở nhanh nhất (lúc duyệt chấm công). 0 = dọn ngay khi đã lên Drive |
 | Video minh chứng tối đa | 100 MB | Biến `MAX_VIDEO_MB` trong `.env` |
-| Học liệu tối đa mỗi tệp | 300 MB | Biến `MAX_MATERIAL_MB`; Nginx phải cho phép lớn hơn (`client_max_body_size 310m`) |
+| Học liệu tối đa mỗi tệp | 500 MB | Biến `MAX_MATERIAL_MB`; Nginx phải cho phép lớn hơn (`client_max_body_size 510m`) |
 
 Video được nhận ở: **Điểm danh** (ảnh/video lớp), **Báo hỏng thiết bị**, **Góp ý**, **Học liệu**.
 Chấm công (selfie, ảnh thiết bị) và kiểm kê định kỳ vẫn **chỉ nhận ảnh**.
@@ -121,7 +121,7 @@ Trang Lưu trữ Drive hiển thị: đã lên Drive / đang chờ / đã giải
 | Đang chạy tốt, sau ~7 ngày báo `invalid_grant` | Ứng dụng OAuth còn ở chế độ *Testing* | Bước 1.2 → **Publish app**, rồi bấm **Kết nối lại** |
 | Báo `invalid_grant` sau khi đổi mật khẩu Google | Google thu hồi quyền khi đổi mật khẩu | Bấm **Kết nối lại** (đúng tài khoản cũ) |
 | "Tài khoản … khác tài khoản đang giữ ảnh/video" | Đăng nhập nhầm tài khoản ở Bước 3 | Kết nối lại bằng tài khoản ghi trong thông báo |
-| Tải tệp báo lỗi 413 / "không gửi được tệp" | Nginx chặn tệp lớn | Thêm `client_max_body_size 310m;` vào cấu hình site API |
+| Tải tệp báo lỗi 413 / "không gửi được tệp" | Nginx chặn tệp lớn | Thêm `client_max_body_size 510m;` vào cấu hình site API |
 | Tệp "lỗi quá 5 lần" | Mạng/Drive lỗi kéo dài, hoặc tệp hỏng | Xem lỗi gần nhất; sửa xong chạy `docker compose exec api node src/scripts/drive-sync.js` |
 
 Đẩy dồn + dọn thủ công bằng dòng lệnh (trên VPS):

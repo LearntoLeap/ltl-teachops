@@ -6,7 +6,7 @@
 export const MB = 1024 * 1024;
 export const MAX_IMAGE_MB = 15;          // ảnh (máy chủ tự nén) và tài liệu ở mục khác
 export const MAX_FIELD_VIDEO_MB = 100;   // video minh chứng: điểm danh, báo hỏng, góp ý
-export const MAX_MATERIAL_MB = 300;      // học liệu: slide, giáo án, video bài giảng
+export const MAX_MATERIAL_MB = 500;      // học liệu: slide, giáo án, video bài giảng
 
 const fmt = (bytes) => `${(bytes / MB).toFixed(bytes >= 10 * MB ? 0 : 1)} MB`;
 

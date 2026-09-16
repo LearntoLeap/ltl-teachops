@@ -38,7 +38,7 @@ export const env = {
   // Video minh chứng hiện trường (điểm danh, báo hỏng, góp ý) — ghi luồng xuống đĩa.
   maxVideoBytes: Number(process.env.MAX_VIDEO_MB || 100) * 1024 * 1024,
   // Học liệu (slide nhúng video, giáo án, video bài giảng) — giới hạn riêng, lớn hơn.
-  maxMaterialBytes: Number(process.env.MAX_MATERIAL_MB || 300) * 1024 * 1024,
+  maxMaterialBytes: Number(process.env.MAX_MATERIAL_MB || 500) * 1024 * 1024,
 
   seedAdmin: {
     email: process.env.SEED_ADMIN_EMAIL || '',

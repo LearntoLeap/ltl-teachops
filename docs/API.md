@@ -231,7 +231,7 @@ Mọi endpoint `.xlsx` nhận `?from=&to=&school_id=&class_id=&user_id=`.
 Ảnh được nén phía client xuống cạnh dài ≤ 1600px, JPEG chất lượng 0.8 trước khi tải lên.
 
 Video và tài liệu được ghi luồng thẳng xuống đĩa. Giới hạn: ảnh 15MB (`MAX_UPLOAD_MB`), video minh chứng 100MB
-(`MAX_VIDEO_MB`), **học liệu 300MB** (`MAX_MATERIAL_MB`, cả tài liệu lẫn video, ở `POST /api/materials` + `/:id/versions`).
+(`MAX_VIDEO_MB`), **học liệu 500MB** (`MAX_MATERIAL_MB`, cả tài liệu lẫn video, ở `POST /api/materials` + `/:id/versions`).
 
 **Video** (`mp4/mov/webm/3gp/m4v`) chỉ được nhận ở:
 `POST /api/attendance` + `PATCH /api/attendance/:id` (`photos`), `POST /api/devices/issues`,

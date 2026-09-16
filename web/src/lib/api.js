@@ -164,7 +164,7 @@ async function request(path, opts = {}, _retried = false) {
     if (e.name === 'AbortError') throw e;
     // Đang gửi tệp mà đứt kết nối: hay gặp nhất là tệp vượt giới hạn bị chặn ở proxy.
     throw new ApiError(0, 'NETWORK', formData
-      ? 'Không gửi được tệp lên máy chủ — kiểm tra đường truyền, hoặc tệp có thể vượt dung lượng cho phép (tài liệu/video học liệu tối đa 300 MB, video minh chứng 100 MB).'
+      ? 'Không gửi được tệp lên máy chủ — kiểm tra đường truyền, hoặc tệp có thể vượt dung lượng cho phép (tài liệu/video học liệu tối đa 500 MB, video minh chứng 100 MB).'
       : 'Không kết nối được máy chủ. Kiểm tra đường truyền và thử lại.');
   }
 

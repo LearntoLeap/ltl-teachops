@@ -10,9 +10,9 @@
 {$API_DOMAIN} {
 	encode zstd gzip
 
-	# Học liệu tới 300MB (MAX_MATERIAL_MB), video minh chứng 100MB — nới giới hạn body.
+	# Học liệu tới 500MB (MAX_MATERIAL_MB), video minh chứng 100MB — nới giới hạn body.
 	request_body {
-		max_size 310MB
+		max_size 510MB
 	}
 
 	# SSE cần tắt buffer để thông báo tới ngay.
