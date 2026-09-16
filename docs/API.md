@@ -146,7 +146,7 @@ Server tự suy `class_id`, `school_id`, `roster_size`, `marked_by` từ `schedu
 
 | Method | Path | Quyền |
 |---|---|---|
-| GET | `/` | mọi vai trò — `?area=&level=&subject=&school_id=&class_id=&q=` |
+| GET | `/` | mọi vai trò — `?area=&level=&subject=&school_id=&class_id=&q=&sort=`. `sort`: `moi-nhat` (mặc định) · `tiet` (khối → môn → tiết → loại) · `khoi` · `ten` (A→Z) · `loai` · `cu-nhat`. Mỗi mục trả `latest_version.mime` để client biết có xem trước được không |
 | POST | `/` | `area=official`: admin, manager · `area=teacher`: mọi vai trò |
 | GET | `/:id` | mọi vai trò (có `versions[]`, `comments[]`) |
 | PATCH/DELETE | `/:id` | chủ sở hữu, hoặc admin/manager. `DELETE` mặc định gỡ khỏi kho (`is_archived`), khôi phục được; `DELETE /:id?hard=1` (admin/manager) xoá hẳn bản ghi + tệp trên máy chủ và đưa bản trên Drive vào thùng rác |

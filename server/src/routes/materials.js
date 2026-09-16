@@ -35,6 +35,19 @@ const MAX_ZIP_BYTES = 1024 * 1024 * 1024;
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o || {}, k);
 
 /**
+ * Cách sắp xếp danh sách học liệu. Sắp ở máy chủ để phân trang vẫn đúng thứ tự.
+ * 'tiet' dùng cho màn hình xem theo tiết dạy: khối → môn → tiết → loại tài liệu.
+ */
+const SORTS = {
+  'moi-nhat': 'm.created_at desc',
+  tiet: 'm.grade nulls last, m.subject nulls last, m.lesson_no nulls last, mt.sort_order nulls last, m.title',
+  khoi: 'm.grade nulls last, m.lesson_no nulls last, m.title',
+  ten: 'm.title, m.grade nulls last',
+  loai: 'mt.sort_order nulls last, m.grade nulls last, m.lesson_no nulls last, m.title',
+  'cu-nhat': 'm.created_at',
+};
+
+/**
  * Điều kiện lọc dùng chung cho danh sách và tải ZIP — cùng bộ lọc nên tải về đúng
  * những gì đang thấy. Chọn giải pháp gốc ⇒ gồm luôn các giải pháp con của nó.
  * `p(v)` đẩy tham số và trả về placeholder ($n).
@@ -244,7 +257,7 @@ export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * GET /api/materials — danh sách, mọi vai trò (đã lọc hiển thị theo §5.4).
    * ?area=&level=&subject=&school_id=&class_id=&solution_id=&grade=&type_id=&type_ids=
-   *  &q=&mine=1&page=&limit=  (solution_id gốc ⇒ gồm cả giải pháp con)
+   *  &q=&mine=1&sort=&page=&limit=  (solution_id gốc ⇒ gồm cả giải pháp con)
    * ---------------------------------------------------------------------- */
   app.get('/api/materials', async (req) => {
     const me = req.user;
@@ -259,6 +272,7 @@ export default async function routes(app) {
     const allParams = [...params, ...visParams];
 
     const total = await scalar(`select count(*)::int from materials m where ${where}`, allParams);
+    const order = SORTS[enumOf(req.query.sort, 'sort', Object.keys(SORTS)) || 'moi-nhat'];
 
     const meIdx = allParams.push(me.id);
     const limIdx = allParams.push(limit);
@@ -270,7 +284,7 @@ export default async function routes(app) {
               so.name as solution_name,
               mt.name as type_name, mt.icon as type_icon,
               lv.id as lv_id, lv.version as lv_version, lv.file_id as lv_file_id,
-              f.file_name as lv_file_name, f.size_bytes as lv_size_bytes,
+              f.file_name as lv_file_name, f.size_bytes as lv_size_bytes, f.mime as lv_mime,
               (select count(*)::int from material_comments mc where mc.material_id = m.id) as comment_count,
               (mr.material_id is null and m.created_at > now() - interval '30 days') as is_new
          from materials m
@@ -287,15 +301,15 @@ export default async function routes(app) {
          left join files f on f.id = lv.file_id
          left join material_reads mr on mr.material_id = m.id and mr.user_id = $${meIdx}
         where ${where}
-        order by m.created_at desc
+        order by ${order}
         limit $${limIdx} offset $${offIdx}`,
       allParams
     );
 
-    const items = raw.map(({ lv_id, lv_version, lv_file_id, lv_file_name, lv_size_bytes, ...rest }) => ({
+    const items = raw.map(({ lv_id, lv_version, lv_file_id, lv_file_name, lv_size_bytes, lv_mime, ...rest }) => ({
       ...rest,
       latest_version: lv_id
-        ? { id: lv_id, version: lv_version, file_id: lv_file_id, file_name: lv_file_name, size: lv_size_bytes }
+        ? { id: lv_id, version: lv_version, file_id: lv_file_id, file_name: lv_file_name, size: lv_size_bytes, mime: lv_mime }
         : null,
     }));
     return { items, total, page, limit };
