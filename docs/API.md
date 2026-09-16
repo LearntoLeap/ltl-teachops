@@ -249,13 +249,14 @@ Tệp đã chuyển hẳn sang Google Drive (`local_deleted_at`): `GET /:id` l�
 | GET | `/api/drive/connect` | → `{url}` trang đăng nhập Google (scope `drive.file`, `state` = JWT 15 phút) |
 | GET | `/api/drive/oauth/callback` | **Công khai** — Google chuyển về; đổi mã lấy refresh token, tạo thư mục gốc, chuyển về `APP_PUBLIC_URL/luu-tru-drive?ket_noi=ok\|loi&ly_do=` |
 | POST | `/api/drive/disconnect` | Thu hồi quyền; tệp trên Drive giữ nguyên |
-| PATCH | `/api/drive/settings` | `{keep_local_days (0-365), offload (bool)}` |
+| PATCH | `/api/drive/settings` | `{keep_local_days (0-365), offload (bool), offload_materials (bool), material_min_mb (1-1000)}` |
 | POST | `/api/drive/sync` | Đẩy ngay tối đa 100 tệp + dọn bản gốc đủ hạn → `{sync, offload, status}` |
 
 Job nền (mỗi `DRIVE_SYNC_MINUTES`): đẩy tệp mới quá 2 phút theo cây `<Trường>/<YYYY-MM>/<Nghiệp vụ>`,
-rồi xoá bản gốc ảnh/video hiện trường đã lên Drive quá `keep_local_days` ngày — chỉ khi Drive xác nhận
-md5 khớp và tệp chưa vào thùng rác (không thì đưa lại hàng đợi đẩy). Học liệu, ảnh bìa, ảnh đại diện
-không bị dọn. Xem docs/HUONG_DAN_GOOGLE_DRIVE.md.
+rồi xoá bản gốc trên VPS của: (a) ảnh/video hiện trường quá `keep_local_days` ngày, (b) tệp học liệu
+từ `material_min_mb` MB trở lên khi `offload_materials` bật — chỉ khi Drive xác nhận md5 khớp và tệp chưa
+vào thùng rác (không thì đưa lại hàng đợi đẩy). Ảnh bìa, ảnh đại diện, tệp giải pháp không bị dọn.
+`GET /api/materials/zip` tự lấy lại các tệp đã chuyển từ Drive khi đóng gói. Xem docs/HUONG_DAN_GOOGLE_DRIVE.md.
 
 ## 14. Nhật ký — `/api/audit` (admin)
 

@@ -63,6 +63,7 @@ export default function DriveStorage() {
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [keepDays, setKeepDays] = useState('');
+  const [minMb, setMinMb] = useState('');
   const [busy, setBusy] = useState('');
   const [confirmOff, setConfirmOff] = useState(false);
 
@@ -72,6 +73,7 @@ export default function DriveStorage() {
       const d = await api.get('/api/drive');
       setSt(d);
       setKeepDays(String(d.keep_local_days ?? 7));
+      setMinMb(String(d.material_min_mb ?? 20));
     } catch (e) {
       setError(e);
     }
@@ -120,6 +122,17 @@ export default function DriveStorage() {
   const toggleOffload = () => run('offload', async () => {
     const d = await api.patch('/api/drive/settings', { offload: !st.offload });
     setSt((s) => ({ ...s, ...d }));
+  });
+
+  const toggleMaterials = () => run('materials', async () => {
+    const d = await api.patch('/api/drive/settings', { offload_materials: !st.offload_materials });
+    setSt((s) => ({ ...s, ...d }));
+  });
+
+  const saveMinMb = () => run('minmb', async () => {
+    const d = await api.patch('/api/drive/settings', { material_min_mb: Number(minMb) });
+    setSt((s) => ({ ...s, ...d }));
+    toast.ok('Đã lưu cài đặt.');
   });
 
   const disconnect = () => run('disconnect', async () => {
@@ -258,7 +271,7 @@ export default function DriveStorage() {
           <p className="text-[13px] text-ink-soft mb-3">
             Sau khi ảnh/video đã nằm an toàn trên Drive (kiểm tra khớp từng byte), bản gốc trên máy chủ được xoá —
             app vẫn mở xem bình thường (lấy từ Drive), ảnh thu nhỏ vẫn giữ để danh sách hiện nhanh.
-            Học liệu, ảnh bìa và ảnh đại diện luôn giữ trên máy chủ.
+            Ảnh bìa và ảnh đại diện luôn giữ trên máy chủ.
           </p>
           <label className="flex items-center gap-2.5 mb-3 cursor-pointer">
             <input type="checkbox" className="h-4 w-4 accent-[#8A3F97]" checked={!!st.offload}
@@ -276,10 +289,32 @@ export default function DriveStorage() {
               </button>
             </div>
           </Field>
+          <div className="border-t border-line pt-3 mb-3">
+            <label className="flex items-center gap-2.5 mb-2 cursor-pointer">
+              <input type="checkbox" className="h-4 w-4 accent-[#8A3F97]" checked={!!st.offload_materials}
+                onChange={toggleMaterials} disabled={!!busy || !st.offload} />
+              <span className="text-[13.5px] font-semibold">Chuyển cả học liệu lớn lên Drive</span>
+            </label>
+            <p className="text-[12.5px] text-ink-soft mb-2">
+              Slide, giáo án, video bài giảng nặng sẽ nằm trên Drive; máy chủ chỉ giữ tệp nhỏ để mở nhanh.
+              Khi tải ZIP, hệ thống tự lấy lại tệp từ Drive nên người dùng không thấy khác biệt.
+            </p>
+            <Field label="Chỉ chuyển tệp học liệu từ (MB) trở lên">
+              <div className="flex gap-2">
+                <input className="input !w-28" type="number" min="1" max="1000" value={minMb}
+                  onChange={(e) => setMinMb(e.target.value)} disabled={!st.offload || !st.offload_materials} />
+                <button className="btn-line" onClick={saveMinMb}
+                  disabled={!!busy || !st.offload || !st.offload_materials || minMb === String(st.material_min_mb)}>
+                  {busy === 'minmb' ? <Spinner className="h-4 w-4" /> : 'Lưu'}
+                </button>
+              </div>
+            </Field>
+          </div>
+
           <div className="rounded-xl bg-canvas border border-line px-3 py-2.5 text-[12.5px] text-ink-soft">
             📁 Trên Drive, tệp được xếp: <b>Trường › Tháng › Chấm công / Điểm danh / Kiểm kê thiết bị / Sự cố thiết bị / Góp ý</b>,
             tên tệp gồm ngày giờ, lớp và người gửi — tra cứu trực tiếp trên Drive rất nhanh.
-            <br />🎥 Video tối đa {st.max_video_mb} MB mỗi tệp.
+            <br />🎥 Video minh chứng tối đa {st.max_video_mb} MB · 📚 học liệu tối đa {st.max_material_mb} MB mỗi tệp.
           </div>
         </div>
       </div>

@@ -22,6 +22,7 @@
  */
 import fs from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import env from '../env.js';
@@ -50,6 +51,9 @@ export async function driveConfig() {
     rootFolderId: s.root_folder_id || null,
     keepLocalDays: Number.isInteger(s.keep_local_days) ? s.keep_local_days : env.drive.keepLocalDays,
     offload: s.offload !== false,
+    // Học liệu lớn cũng chuyển lên Drive; tệp nhỏ giữ trên VPS để mở và tải ZIP nhanh.
+    offloadMaterials: s.offload_materials !== false,
+    materialMinBytes: (Number.isInteger(s.material_min_mb) ? s.material_min_mb : 20) * 1024 * 1024,
   };
 }
 
@@ -416,14 +420,20 @@ async function offloadBatch({ limit = 100, ensureThumb } = {}) {
        from files f
       where f.drive_file_id is not null and f.local_deleted_at is null
         and f.created_at < now() - make_interval(days => $1)
-        and (f.mime like 'image/%' or f.mime like 'video/%')
-        and not exists (select 1 from material_versions v where v.file_id = f.id)
-        and not exists (select 1 from materials m where m.cover_file_id = f.id)
-        and not exists (select 1 from users u where u.avatar_file_id = f.id)
-        and not exists (select 1 from solution_items si where si.file_id = f.id)
-      order by f.created_at
+        and (
+          -- Ảnh/video hiện trường: dọn hết khi quá hạn.
+          ((f.mime like 'image/%' or f.mime like 'video/%')
+            and not exists (select 1 from material_versions v where v.file_id = f.id)
+            and not exists (select 1 from materials m where m.cover_file_id = f.id)
+            and not exists (select 1 from users u where u.avatar_file_id = f.id)
+            and not exists (select 1 from solution_items si where si.file_id = f.id))
+          -- Học liệu: chỉ dọn tệp lớn; tệp nhỏ giữ lại cho nhanh.
+          or ($3 and f.size_bytes >= $4
+              and exists (select 1 from material_versions v where v.file_id = f.id))
+        )
+      order by f.size_bytes desc
       limit $2`,
-    [Math.max(0, c.keepLocalDays), limit]
+    [Math.max(0, c.keepLocalDays), limit, c.offloadMaterials, c.materialMinBytes]
   );
 
   let freed = 0;
@@ -473,6 +483,18 @@ export async function fetchFromDrive(driveFileId, range) {
   return driveFetch(`${API_URL}/files/${driveFileId}?alt=media`, { headers: range ? { Range: range } : {} });
 }
 
+/**
+ * Luồng đọc tệp từ Drive, chỉ thật sự gọi Drive khi bắt đầu đọc — để đóng gói ZIP
+ * nhiều tệp mà không mở hàng loạt kết nối cùng lúc.
+ */
+export function driveReadStream(driveFileId) {
+  return Readable.from((async function* pull() {
+    const res = await fetchFromDrive(driveFileId);
+    if (!res.ok) throw new Error(`Google Drive trả lỗi ${res.status} khi lấy tệp.`);
+    yield* Readable.fromWeb(res.body);
+  })());
+}
+
 /* ------------------------------- Tình trạng -------------------------------- */
 
 export async function driveStatus() {
@@ -504,6 +526,8 @@ export async function driveStatus() {
     root_folder_link: c.rootFolderId ? `https://drive.google.com/drive/folders/${c.rootFolderId}` : null,
     keep_local_days: c.keepLocalDays,
     offload: c.offload,
+    offload_materials: c.offloadMaterials,
+    material_min_mb: Math.round(c.materialMinBytes / 1024 / 1024),
     ...s,
     offloaded_bytes: Number(s.offloaded_bytes),
     local_bytes: Number(s.local_bytes),

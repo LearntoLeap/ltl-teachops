@@ -9,7 +9,8 @@ Sau khi tệp đã nằm an toàn trên Drive (kiểm tra khớp **md5** từng 
 
 - App vẫn mở xem bình thường — máy chủ lấy tệp từ Drive rồi chuyển tiếp (có tua video).
 - Ảnh thu nhỏ vẫn giữ trên VPS nên danh sách, lưới ảnh vẫn hiện nhanh.
-- **Học liệu, ảnh bìa, ảnh đại diện luôn giữ trên VPS** (cần mở nhanh và tải ZIP).
+- **Học liệu lớn** (mặc định từ 20 MB) cũng được chuyển lên Drive; khi tải ZIP hệ thống tự lấy lại từ Drive.
+- **Học liệu nhỏ, ảnh bìa, ảnh đại diện luôn giữ trên VPS** (mở nhanh, tải ZIP nhanh).
 - Tệp trên Drive bị xoá / đưa vào thùng rác trước khi dọn ⇒ app **không xoá** bản VPS mà tự đẩy lại.
 
 **Cấu trúc trên Drive** — ứng dụng tự tạo, không cần làm tay:
@@ -91,6 +92,8 @@ lượt để đẩy hết ảnh cũ.
 |---|---|---|
 | Tự dọn bản gốc trên máy chủ | Bật | Tắt ⇒ VPS giữ mọi tệp, Drive chỉ là bản sao lưu |
 | Giữ bản gốc trên máy chủ thêm (ngày) | 7 | Trong khoảng này ảnh mở nhanh nhất (lúc duyệt chấm công). 0 = dọn ngay khi đã lên Drive |
+| Chuyển cả học liệu lớn lên Drive | Bật | Tắt ⇒ học liệu luôn nằm trên VPS |
+| Chỉ chuyển học liệu từ (MB) | 20 | Tệp nhỏ hơn giữ trên VPS cho nhanh |
 | Video minh chứng tối đa | 100 MB | Biến `MAX_VIDEO_MB` trong `.env` |
 | Học liệu tối đa mỗi tệp | 500 MB | Biến `MAX_MATERIAL_MB`; Nginx phải cho phép lớn hơn (`client_max_body_size 510m`) |
 

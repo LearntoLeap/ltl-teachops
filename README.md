@@ -34,7 +34,8 @@ Không có đăng ký công khai — mọi tài khoản do Admin tạo, bắt bu
 - **Offline-first**: mất mạng vẫn chấm công/điểm danh được, tự đồng bộ khi có sóng.
 - **Video minh chứng** (≤100MB) ở điểm danh, báo hỏng thiết bị, góp ý — quay thẳng từ điện thoại.
 - **Kho ảnh/video trên Google Drive**: Admin kết nối ngay trong app; tệp tự xếp theo
-  Trường › Tháng › Nghiệp vụ, bản gốc trên VPS tự dọn sau N ngày (xác minh md5) để tiết kiệm dung lượng.
+  Trường › Tháng › Nghiệp vụ. Bản gốc ảnh/video hiện trường và **học liệu lớn (≥20MB)** tự dọn khỏi VPS
+  sau khi Drive xác nhận md5 — app vẫn mở xem và tải ZIP bình thường (lấy lại từ Drive).
 
 **Lịch dạy** — 3 cách xem: danh sách, **thời khoá biểu tuần** (bảng × khung giờ), **lịch tháng**.
 Phòng chuyên môn/Admin xếp lịch lẻ hoặc lặp tuần; giáo viên tự thêm buổi bị thiếu (hệ thống ép

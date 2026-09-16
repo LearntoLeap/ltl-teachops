@@ -20,6 +20,7 @@ import { assertPerm, requirePerm } from '../lib/rbac.js';
 import { visibleSchoolIds, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
 import { str, int, uuid, uuidList, bool, enumOf, paging } from '../lib/validate.js';
 import { consumeMultipart, deleteFile, absPath, contentDisposition } from '../lib/storage.js';
+import { driveReadStream } from '../lib/drive.js';
 import { notify, notifySchoolManagers, notifyFieldStaff } from '../lib/notify.js';
 import { xlsxBuffer, formatVN, LABELS } from '../lib/xlsx.js';
 import { audit } from '../lib/audit.js';
@@ -140,7 +141,7 @@ async function zipCandidates(req) {
             ow.full_name as owner_name,
             mt.name as type_name,
             so.name as solution_name, sp.name as solution_parent_name,
-            f.storage_path, f.size_bytes
+            f.storage_path, f.size_bytes, f.drive_file_id, f.local_deleted_at
        from materials m
        join users ow on ow.id = m.owner_id
        left join material_types mt on mt.id = m.type_id
@@ -553,10 +554,20 @@ export default async function routes(app) {
       if (m.storage_path) {
         const abs = absPath(m);
         const st = await stat(abs).catch(() => null);
+        const ext = path.extname(m.storage_path).toLowerCase();
         if (st) {
-          entryPath = uniq(base, path.extname(m.storage_path).toLowerCase());
+          entryPath = uniq(base, ext);
           entries.push({ abs, path: entryPath, mtime: new Date(m.updated_at) });
           bytes += st.size;
+        } else if (m.drive_file_id) {
+          // Học liệu lớn đã chuyển sang Drive để nhẹ máy chủ — lấy lại khi đóng gói.
+          entryPath = uniq(base, ext);
+          entries.push({
+            drive: m.drive_file_id, size: Number(m.size_bytes || 0),
+            path: entryPath, mtime: new Date(m.updated_at),
+          });
+          bytes += Number(m.size_bytes || 0);
+          note = 'Lấy từ Google Drive';
         } else {
           note = 'Thiếu tệp trên máy chủ';
         }
@@ -621,7 +632,11 @@ export default async function routes(app) {
     for (const e of entries) {
       // Tài liệu văn phòng/PDF vốn đã nén — lưu nguyên để tải nhanh, đỡ tốn CPU máy chủ.
       if (e.abs) zip.addFile(e.abs, e.path, { compress: false, mtime: e.mtime });
-      else zip.addBuffer(Buffer.from(e.text, 'utf8'), e.path, { mtime: e.mtime });
+      else if (e.drive) {
+        // Lazy: chỉ gọi Drive khi tới lượt tệp này, không mở hàng loạt kết nối một lúc.
+        zip.addReadStreamLazy(e.path, { compress: false, mtime: e.mtime, size: e.size },
+          (cb) => cb(null, driveReadStream(e.drive)));
+      } else zip.addBuffer(Buffer.from(e.text, 'utf8'), e.path, { mtime: e.mtime });
     }
     zip.end();
 

@@ -48,6 +48,7 @@ export default async function routes(app) {
     ...(await driveStatus()),
     redirect_uri: redirectUri(req),
     max_video_mb: Math.round(env.maxVideoBytes / 1024 / 1024),
+    max_material_mb: Math.round(env.maxMaterialBytes / 1024 / 1024),
   }));
 
   /* PUT /api/drive/config — {client_id, client_secret}: OAuth client từ Google Cloud. */
@@ -159,6 +160,12 @@ export default async function routes(app) {
       patch.keep_local_days = int(b.keep_local_days, 'Số ngày giữ bản gốc trên VPS', { required: true, min: 0, max: 365 });
     }
     if ('offload' in b) patch.offload = bool(b.offload, 'offload', { required: true });
+    if ('offload_materials' in b) {
+      patch.offload_materials = bool(b.offload_materials, 'offload_materials', { required: true });
+    }
+    if ('material_min_mb' in b) {
+      patch.material_min_mb = int(b.material_min_mb, 'Ngưỡng dung lượng học liệu (MB)', { required: true, min: 1, max: 1000 });
+    }
     if (!Object.keys(patch).length) throw badRequest('Không có thông tin nào để cập nhật.');
     await saveDriveSettings(patch, req.user.id);
     audit(req, {
