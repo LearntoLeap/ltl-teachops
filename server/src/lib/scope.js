@@ -127,7 +127,8 @@ export async function assertScheduleAccess(user, scheduleId) {
     `select sch.*, sc.name as school_name, sc.lat as school_lat, sc.lng as school_lng,
             sc.gps_radius_m, sc.grace_minutes,
             c.name as class_name, c.roster_size, c.level,
-            t.full_name as teacher_name, a.full_name as assistant_name,
+            coalesce(t.full_name, sch.teacher_manual_name)   as teacher_name,
+            coalesce(a.full_name, sch.assistant_manual_name) as assistant_name,
             r.name as room_name
        from schedules sch
        join schools sc on sc.id = sch.school_id

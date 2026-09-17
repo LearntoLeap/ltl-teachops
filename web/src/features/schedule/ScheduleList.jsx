@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtDateLong, fmtRange, fmtTime, LABEL, monthRange, today } from '../../lib/format.js';
+import { PERIODS, periodLabel, periodOfStart } from '../../lib/periods.js';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field,
   PageHeader, PageLoading, Segmented, Sheet, Spinner,
@@ -71,9 +72,11 @@ function useSchoolResources(schoolId, { light = false } = {}) {
     Promise.all([
       api.get('/api/classes', { school_id: schoolId, limit: 200 }),
       api.get('/api/rooms', { school_id: schoolId, limit: 200 }),
-      // GV/TG không có quyền xem danh bạ — buổi tự gắn chính họ
-      light ? Promise.resolve([]) : api.get('/api/users', { role: 'teacher', school_id: schoolId, limit: 200 }),
-      light ? Promise.resolve([]) : api.get('/api/users', { role: 'assistant', school_id: schoolId, limit: 200 }),
+      // GV/TG không có quyền xem danh bạ — buổi tự gắn chính họ.
+      // link=any: lấy mọi người trong phạm vi, kèm cờ at_school để biết ai đang
+      // dạy ở trường này. Không lọc cứng, nếu không trường mới sẽ không có ai để chọn.
+      light ? Promise.resolve([]) : api.get('/api/users', { role: 'teacher', school_id: schoolId, link: 'any', is_active: true, limit: 200 }),
+      light ? Promise.resolve([]) : api.get('/api/users', { role: 'assistant', school_id: schoolId, link: 'any', is_active: true, limit: 200 }),
     ]).then(([c, r, t, a]) => {
       if (!alive) return;
       setRes({ classes: listOf(c), rooms: listOf(r), teachers: listOf(t), assistants: listOf(a), loading: false });
@@ -89,6 +92,59 @@ function useSchoolResources(schoolId, { light = false } = {}) {
 }
 
 /* ------------------------------ Thành phần nhỏ ----------------------------- */
+
+/**
+ * Chọn giáo viên / trợ giảng: lấy từ danh bạ, hoặc GÕ TAY tên người chưa có
+ * tài khoản trong hệ thống (rất hay gặp với trợ giảng thời vụ).
+ *
+ * Người đang dạy ở trường đang chọn được xếp lên nhóm đầu để bấm cho nhanh;
+ * người ở nơi khác vẫn chọn được, nếu không thì trường mới mở sẽ không có ai.
+ */
+function StaffPicker({ label, required = false, people, loading, disabled, id, name, onId, onName }) {
+  const here = people.filter((u) => u.at_school);
+  const elsewhere = people.filter((u) => !u.at_school);
+  const typing = !id && name !== '';
+
+  const opt = (u) => (
+    <option key={u.id} value={u.id}>
+      {u.full_name || u.name}{u.region_name ? ` — ${u.region_name}` : ''}
+    </option>
+  );
+
+  return (
+    <Field label={label} required={required}>
+      <select
+        className="input"
+        value={typing ? '__manual__' : id}
+        disabled={disabled || loading}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === '__manual__') { onId(''); onName(name || ' '); return; }
+          onId(v);
+          onName('');
+        }}>
+        <option value="">{loading ? 'Đang tải…' : `— Chọn ${label.toLowerCase()} —`}</option>
+        {here.length > 0 && (
+          <optgroup label="Đang dạy ở trường này">{here.map(opt)}</optgroup>
+        )}
+        {elsewhere.length > 0 && (
+          <optgroup label={here.length ? 'Người khác' : 'Tất cả'}>{elsewhere.map(opt)}</optgroup>
+        )}
+        <option value="__manual__">✍️ Gõ tên (chưa có tài khoản)</option>
+      </select>
+
+      {typing && (
+        <input
+          className="input mt-1.5"
+          autoFocus
+          value={name.trim() === '' ? '' : name}
+          onChange={(e) => onName(e.target.value)}
+          placeholder={`Họ tên ${label.toLowerCase()}`}
+        />
+      )}
+    </Field>
+  );
+}
 
 /** Chấm tròn trạng thái đã chấm công / đã điểm danh. */
 function Dot({ on, label }) {
@@ -121,7 +177,8 @@ function ScheduleCard({ s, onOpen }) {
       className={`card w-full text-left p-3.5 transition hover:border-brand-300 ${cancelled ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between gap-2">
         <span className={`font-bold text-[15px] ${cancelled ? 'line-through text-ink-muted' : 'text-brand-800'}`}>
-          {fmtRange(s.start_time, s.end_time)}
+          <b className="text-brand-800">{periodLabel(s)}</b>
+          <span className="text-ink-muted font-normal"> · {fmtRange(s.start_time, s.end_time)}</span>
         </span>
         <span className="flex items-center gap-1.5">
           {s.self_added && (
@@ -343,7 +400,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                       ${sItem.status === 'cancelled'
                         ? 'bg-slate-100 text-slate-400 line-through'
                         : 'bg-brand-50 text-brand-900 hover:bg-brand-100 ring-1 ring-inset ring-brand-100'}`}>
-                    {fmtTime(sItem.start_time)} {classNameOf(sItem)}
+                    {periodLabel(sItem)} {classNameOf(sItem)}
                     <span className="font-normal text-brand-700/80"> · {schoolNameOf(sItem)}</span>
                     {teacherNameOf(sItem) && (
                       <span className="font-normal text-ink-muted"> · {teacherNameOf(sItem).split(' ').slice(-2).join(' ')}</span>
@@ -381,9 +438,11 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
     room_id: schedule?.room_id || '',
     teacher_id: schedule?.teacher_id || '',
     assistant_id: schedule?.assistant_id || '',
+    // Tên gõ tay — dùng khi người dạy chưa có tài khoản trong hệ thống.
+    teacher_manual_name: schedule?.teacher_manual_name || '',
+    assistant_manual_name: schedule?.assistant_manual_name || '',
     date: schedule?.session_date ? String(schedule.session_date).slice(0, 10) : (initialDate || today()),
-    start_time: schedule ? fmtTime(schedule.start_time) : (initialStart || ''),
-    end_time: schedule ? fmtTime(schedule.end_time) : '',
+    period: String(schedule?.period || periodOfStart(schedule?.start_time) || periodOfStart(initialStart) || ''),
     subject: schedule?.subject || '',
     note: schedule?.note || '',
     weekdays: [],
@@ -396,7 +455,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
   const setField = (k) => (e) => {
     const v = e.target.value;
     setF((s) => (k === 'school_id'
-      ? { ...s, school_id: v, class_id: '', room_id: '', teacher_id: '', assistant_id: '' }
+      ? { ...s, school_id: v, class_id: '', room_id: '', teacher_id: '', assistant_id: '', teacher_manual_name: '', assistant_manual_name: '' }
       : { ...s, [k]: v }));
   };
 
@@ -412,26 +471,26 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
     const need = [];
     if (!f.school_id) need.push('trường');
     if (!f.class_id) need.push('lớp');
-    if (!selfOnly && !f.teacher_id) need.push('giáo viên');
+    if (!selfOnly && !f.teacher_id && !f.teacher_manual_name.trim()) need.push('giáo viên');
     if (bulk) {
       if (!f.weekdays.length) need.push('thứ trong tuần');
       if (!f.from) need.push('từ ngày');
       if (!f.to) need.push('đến ngày');
     } else if (!f.date) need.push('ngày');
-    if (!f.start_time) need.push('giờ bắt đầu');
-    if (!f.end_time) need.push('giờ kết thúc');
+    if (!f.period) need.push('tiết dạy');
     if (need.length) { toast.err(`Vui lòng chọn/nhập: ${need.join(', ')}.`); return; }
-    if (f.end_time <= f.start_time) { toast.err('Giờ kết thúc phải sau giờ bắt đầu.'); return; }
     if (bulk && f.to < f.from) { toast.err('"Đến ngày" phải sau hoặc bằng "Từ ngày".'); return; }
 
     const template = {
       school_id: f.school_id,
       class_id: f.class_id,
       room_id: f.room_id || undefined,
-      teacher_id: f.teacher_id,
+      teacher_id: f.teacher_id || undefined,
       assistant_id: f.assistant_id || undefined,
-      start_time: f.start_time,
-      end_time: f.end_time,
+      // Chọn được tài khoản thì bỏ tên gõ tay — tránh hai nguồn sự thật.
+      teacher_manual_name: f.teacher_id ? undefined : (f.teacher_manual_name.trim() || undefined),
+      assistant_manual_name: f.assistant_id ? undefined : (f.assistant_manual_name.trim() || undefined),
+      period: Number(f.period),
       subject: f.subject.trim() || undefined,
       note: f.note.trim() || undefined,
     };
@@ -535,8 +594,8 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
             <span>🎓 <b>{res.classes.length}</b> lớp</span>
             <span>🤖 <b>{res.rooms.length}</b> phòng STEM</span>
-            <span>🧑‍🏫 <b>{res.teachers.length}</b> giáo viên</span>
-            <span>🤝 <b>{res.assistants.length}</b> trợ giảng</span>
+            <span>🧑‍🏫 <b>{res.teachers.filter((u) => u.at_school).length}</b> giáo viên</span>
+            <span>🤝 <b>{res.assistants.filter((u) => u.at_school).length}</b> trợ giảng</span>
           </div>
           {res.classes.length > 0 && (
             <div className="text-[11.5px] text-ink-muted">
@@ -548,27 +607,30 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
       )}
 
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-x-3 ${selfOnly ? 'hidden' : ''}`}>
-        <Field label="Giáo viên" required={!selfOnly}>
-          <select className="input" value={f.teacher_id} onChange={setField('teacher_id')} disabled={!f.school_id || res.loading}>
-            <option value="">{res.loading ? 'Đang tải…' : '— Chọn giáo viên —'}</option>
-            {res.teachers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name || u.name}{u.region_name ? ` — ${u.region_name}` : ''}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Trợ giảng">
-          <select className="input" value={f.assistant_id} onChange={setField('assistant_id')} disabled={!f.school_id || res.loading}>
-            <option value="">— Không chọn —</option>
-            {res.assistants.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name || u.name}{u.region_name ? ` — ${u.region_name}` : ''}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <StaffPicker
+          label="Giáo viên" required={!selfOnly} people={res.teachers} loading={res.loading}
+          disabled={!f.school_id}
+          id={f.teacher_id} name={f.teacher_manual_name}
+          onId={(v) => setF((x) => ({ ...x, teacher_id: v, teacher_manual_name: v ? '' : x.teacher_manual_name }))}
+          onName={(v) => setF((x) => ({ ...x, teacher_manual_name: v }))}
+        />
+        <StaffPicker
+          label="Trợ giảng" people={res.assistants} loading={res.loading}
+          disabled={!f.school_id}
+          id={f.assistant_id} name={f.assistant_manual_name}
+          onId={(v) => setF((x) => ({ ...x, assistant_id: v, assistant_manual_name: v ? '' : x.assistant_manual_name }))}
+          onName={(v) => setF((x) => ({ ...x, assistant_manual_name: v }))}
+        />
       </div>
+
+      {/* GV/TG tự thêm buổi: không xem được danh bạ nên chỉ gõ tên trợ giảng. */}
+      {selfOnly && (
+        <Field label="Trợ giảng đi cùng" hint="Gõ tên nếu buổi này có trợ giảng hỗ trợ.">
+          <input className="input" value={f.assistant_manual_name}
+            onChange={(e) => setF((x) => ({ ...x, assistant_manual_name: e.target.value }))}
+            placeholder="VD: Lê Minh Châu" />
+        </Field>
+      )}
 
       {bulk ? (
         <>
@@ -608,14 +670,30 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
         </Field>
       )}
 
-      <div className="grid grid-cols-2 gap-x-3">
-        <Field label="Giờ bắt đầu" required>
-          <input type="time" className="input" value={f.start_time} onChange={setField('start_time')} />
-        </Field>
-        <Field label="Giờ kết thúc" required>
-          <input type="time" className="input" value={f.end_time} onChange={setField('end_time')} />
-        </Field>
-      </div>
+      <Field label="Tiết dạy" required hint="Chọn tiết — giờ vào/ra lấy theo khung tiết của trường.">
+        <div className="flex flex-wrap gap-1.5">
+          {PERIODS.map((p) => {
+            const on = String(f.period) === String(p.no);
+            return (
+              <button key={p.no} type="button"
+                onClick={() => setF((x) => ({ ...x, period: String(p.no) }))}
+                title={`${p.start}–${p.end}`}
+                className={`h-10 min-w-[44px] px-2 rounded-xl text-[13.5px] font-semibold ring-1 ring-inset transition
+                  ${on ? 'bg-brand-grad text-white ring-transparent shadow-card-sm'
+                       : 'bg-white text-ink-soft ring-line hover:ring-brand-300 hover:text-brand-800'}`}>
+                {p.no}
+              </button>
+            );
+          })}
+        </div>
+        {f.period && (
+          <div className="text-[12.5px] text-ink-muted mt-1.5">
+            Tiết {f.period} · {PERIODS.find((p) => String(p.no) === String(f.period))?.start}
+            –{PERIODS.find((p) => String(p.no) === String(f.period))?.end}
+            {Number(f.period) <= 5 ? ' (buổi sáng)' : ' (buổi chiều)'}
+          </div>
+        )}
+      </Field>
 
       <Field label="Môn / chủ đề">
         <input className="input" value={f.subject} onChange={setField('subject')} placeholder="VD: Robotics — Bài 5" />
@@ -900,7 +978,10 @@ export default function ScheduleList() {
           <>
             <div className="flex items-center justify-between mb-1">
               <div className="text-[17px] font-bold text-brand-800">
-                {fmtRange(detail.start_time, detail.end_time)}
+                {periodLabel(detail)}
+                <span className="text-[14px] font-semibold text-ink-muted ml-2">
+                  {fmtRange(detail.start_time, detail.end_time)}
+                </span>
               </div>
               <Badge tone={STATUS_TONE[detail.status] || 'neutral'}>
                 {LABEL.scheduleStatus[detail.status] || detail.status || '—'}

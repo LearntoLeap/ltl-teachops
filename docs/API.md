@@ -43,7 +43,7 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
-| GET | `/` | admin, manager | Lọc `?role=&school_id=&q=&is_active=` |
+| GET | `/` | admin, manager | Lọc `?role=&school_id=&q=&is_active=`. `?link=any` (kèm `school_id`): KHÔNG lọc bỏ người chưa gắn trường, chỉ trả thêm cờ `at_school` và xếp người ở trường lên đầu — dùng cho ô chọn người khi xếp lịch |
 | POST | `/` | admin | Tạo tài khoản + sinh mật khẩu tạm + gửi email |
 | GET | `/:id` | admin, manager | |
 | PATCH | `/:id` | admin | Sửa tên/SĐT/vai trò/trạng thái |
@@ -90,9 +90,21 @@ Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 | GET | `/` | mọi vai trò | `?from=&to=&school_id=&class_id=&user_id=&status=` |
 | GET | `/today` | mọi vai trò | Buổi hôm nay của tôi + trạng thái chấm công/điểm danh |
 | POST | `/` | admin, manager | Tạo một buổi |
+| | | | Buổi dạy nhận `period` (tiết 1–10) thay cho `start_time`/`end_time`; và `teacher_manual_name`/`assistant_manual_name` cho người chưa có tài khoản |
 | POST | `/bulk` | admin, manager | `{template, weekdays:[], from, to}` — sinh lịch lặp theo tuần |
 | POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}` |
 | GET/PATCH/DELETE | `/:id` | PATCH/DELETE: admin, manager | |
+
+**Tiết dạy.** Gửi `period` (1–10) thì server suy ra `start_time`/`end_time` theo khung tiết
+(`server/src/lib/periods.js` — 45 phút/tiết, sáng 1–5, chiều 6–10) rồi lưu cả ba. Vẫn nhận
+`start_time`/`end_time` trực tiếp cho nhập bảng và buổi ngoài khung tiết; khi đó `period` = null.
+Sửa `period` qua `PATCH` sẽ kéo giờ đổi theo.
+
+**Người dạy chưa có tài khoản.** `teacher_manual_name` / `assistant_manual_name` là tên gõ tay,
+dùng khi chưa cấp tài khoản (hay gặp với trợ giảng thời vụ, và với GV/TG tự thêm buổi vì họ
+không có quyền xem danh bạ). Chọn được tài khoản thì server tự xoá tên gõ tay — một nguồn sự
+thật. Mọi truy vấn trả `teacher_name`/`assistant_name` đều là
+`coalesce(users.full_name, *_manual_name)`, nên lịch, điểm danh và báo cáo hiển thị như nhau.
 
 ## 5. Chấm công — `/api/timesheets`
 

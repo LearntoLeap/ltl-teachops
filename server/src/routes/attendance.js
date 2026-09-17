@@ -36,8 +36,8 @@ const BASE_SELECT = `
          c.name  as class_name, c.level,
          sc.name as school_name, sc.code as school_code,
          mu.full_name as marked_by_name,
-         tu.full_name as teacher_name,
-         au.full_name as assistant_name,
+         coalesce(tu.full_name, s.teacher_manual_name)   as teacher_name,
+         coalesce(au.full_name, s.assistant_manual_name) as assistant_name,
          p.photos
     from attendance a
     join schedules s on s.id  = a.schedule_id
@@ -157,8 +157,8 @@ export default async function routes(app) {
                 v.teacher_id, v.assistant_id,
                 c.name  as class_name,
                 sc.name as school_name, sc.code as school_code,
-                tu.full_name as teacher_name,
-                au.full_name as assistant_name
+                coalesce(tu.full_name, v.teacher_manual_name)   as teacher_name,
+                coalesce(au.full_name, v.assistant_manual_name) as assistant_name
            from v_attendance_pending v
            join classes c   on c.id  = v.class_id
            join schools sc  on sc.id = v.school_id

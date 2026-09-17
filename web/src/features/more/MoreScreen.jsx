@@ -33,6 +33,7 @@ function menuItems(auth) {
   items.push({ to: '/gop-y', icon: '📨', label: 'Góp ý' });
   if (auth.can('report.view')) items.push({ to: '/bao-cao', icon: '📊', label: 'Báo cáo' });
   if (auth.can('org.manage')) items.push({ to: '/to-chuc', icon: '🏫', label: 'Trường & Lớp' });
+  if (auth.can('users.view')) items.push({ to: '/nhan-su', icon: '🧑‍🏫', label: 'Giáo viên & Trợ giảng' });
   if (auth.can('users.manage')) items.push({ to: '/tai-khoan', icon: '👥', label: 'Tài khoản' });
   if (auth.can('audit.view')) items.push({ to: '/nhat-ky', icon: '🧾', label: 'Nhật ký' });
   if (auth.can('drive.manage')) items.push({ to: '/luu-tru-drive', icon: '☁️', label: 'Lưu trữ Drive' });

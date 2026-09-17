@@ -97,6 +97,9 @@ export default async function routes(app) {
     const schoolId = uuid(q.school_id, 'school_id');
     const search = str(q.q, 'q', { max: 200 });
     const isActive = bool(q.is_active, 'is_active');
+    // link=any: KHÔNG lọc bỏ người chưa gắn với trường, chỉ đánh dấu ai đang ở đó.
+    // Dùng cho ô chọn người khi xếp lịch — trường mới vẫn phải chọn được người.
+    const linkAny = enumOf(q.link, 'link', ['any', 'school']) === 'any';
     const { page, limit, offset } = paging(q);
 
     const conds = ['true'];
@@ -114,11 +117,19 @@ export default async function routes(app) {
     }
 
     // Lọc theo trường: kiểm tồn tại + phạm vi trước (ngoài phạm vi ⇒ 404)
+    let atSchoolSql = 'false';
+    let atSchoolParam = null;
     if (schoolId) {
       await assertSchoolAccess(req.user, schoolId);
-      conds.push(userSchoolLinkSql(next));
-      params.push([schoolId]);
-      next += 1;
+      if (linkAny) {
+        // Không lọc — để dành tham số cho cột at_school ở truy vấn danh sách.
+        atSchoolParam = [schoolId];
+      } else {
+        atSchoolSql = userSchoolLinkSql(next);
+        conds.push(atSchoolSql);
+        params.push([schoolId]);
+        next += 1;
+      }
     }
 
     if (role) {
@@ -140,9 +151,18 @@ export default async function routes(app) {
     const where = conds.join(' and ');
     const total = await scalar(`select count(*) from users u where ${where}`, params);
 
+    // Tham số riêng cho truy vấn danh sách: thêm school_id ở CUỐI để tính at_school.
+    const itemParams = [...params];
+    if (atSchoolParam) {
+      atSchoolSql = userSchoolLinkSql(next);
+      itemParams.push(atSchoolParam);
+      next += 1;
+    }
+
     // school_names: tên các trường trong phạm vi user_schools (dành cho tài khoản manager)
     const items = await rows(
-      `select ${USER_COLS}, coalesce(sn.names, array[]::text[]) as school_names
+      `select ${USER_COLS}, coalesce(sn.names, array[]::text[]) as school_names,
+              ${atSchoolSql} as at_school
          from users u
          left join regions rg on rg.id = u.region_id
          left join lateral (
@@ -151,9 +171,9 @@ export default async function routes(app) {
             where us.user_id = u.id
          ) sn on true
         where ${where}
-        order by u.full_name asc, u.created_at desc
+        order by (case when ${atSchoolSql} then 0 else 1 end), u.full_name asc, u.created_at desc
         limit $${next} offset $${next + 1}`,
-      [...params, limit, offset]
+      [...itemParams, limit, offset]
     );
 
     return { items, total, page, limit };
@@ -557,8 +577,9 @@ export default async function routes(app) {
               s.school_id, sc.name as school_name,
               s.class_id, c.name as class_name, c.level,
               s.room_id, r.name as room_name,
-              s.teacher_id, t.full_name as teacher_name,
-              s.assistant_id, a.full_name as assistant_name,
+              s.period,
+              s.teacher_id, coalesce(t.full_name, s.teacher_manual_name)   as teacher_name,
+              s.assistant_id, coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
               case when s.teacher_id = $1 then 'teacher' else 'assistant' end as session_role
          from schedules s
          join schools sc on sc.id = s.school_id

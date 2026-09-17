@@ -33,6 +33,7 @@ const Reports        = lazy(() => import('./features/reports/Reports.jsx'));
 const OrgHome        = lazy(() => import('./features/admin/OrgHome.jsx'));
 const SchoolDetail   = lazy(() => import('./features/admin/SchoolDetail.jsx'));
 const UsersAdmin     = lazy(() => import('./features/admin/UsersAdmin.jsx'));
+const StaffDirectory = lazy(() => import('./features/admin/StaffDirectory.jsx'));
 const AuditLog       = lazy(() => import('./features/admin/AuditLog.jsx'));
 const DriveStorage   = lazy(() => import('./features/admin/DriveStorage.jsx'));
 const OutboxScreen   = lazy(() => import('./features/outbox/OutboxScreen.jsx'));
@@ -99,6 +100,7 @@ export default function App() {
           <Route path="/gop-y" element={<FeedbackHome />} />
           <Route path="/gop-y/:id" element={<FeedbackDetail />} />
           <Route path="/bao-cao" element={<Guard perm="report.view"><Reports /></Guard>} />
+          <Route path="/nhan-su" element={<Guard perm="users.view"><StaffDirectory /></Guard>} />
           <Route path="/to-chuc" element={<Guard perm="org.manage"><OrgHome /></Guard>} />
           <Route path="/to-chuc/:schoolId" element={<Guard perm="org.manage"><SchoolDetail /></Guard>} />
           <Route path="/tai-khoan" element={<Guard perm="users.manage"><UsersAdmin /></Guard>} />

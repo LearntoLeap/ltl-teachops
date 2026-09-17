@@ -154,7 +154,8 @@ export default async function routes(app) {
         rows(
           `select s.id, s.start_time, s.end_time, s.subject,
                   c.name as class_name, sc.name as school_name, r.name as room_name,
-                  t.full_name as teacher_name, a.full_name as assistant_name,
+                  coalesce(t.full_name, s.teacher_manual_name)   as teacher_name,
+                  coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
                   (ts.id is not null) as has_timesheet,
                   (att.id is not null) as has_attendance
              from schedules s
@@ -288,7 +289,8 @@ export default async function routes(app) {
         rows(
           `select p.schedule_id, p.session_date, p.start_time,
                   sc.name as school_name, c.name as class_name,
-                  t.full_name as teacher_name, a.full_name as assistant_name
+                  coalesce(t.full_name, p.teacher_manual_name)   as teacher_name,
+                  coalesce(a.full_name, p.assistant_manual_name) as assistant_name
              from v_attendance_pending p
              join schools sc on sc.id = p.school_id
              join classes c on c.id = p.class_id

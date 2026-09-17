@@ -50,6 +50,7 @@ function navGroups(auth) {
       items: [
         auth.can('report.view') && { to: '/bao-cao', icon: '📊', label: 'Báo cáo' },
         auth.can('org.manage') && { to: '/to-chuc', icon: '🏫', label: 'Trường & Lớp' },
+        auth.can('users.view') && { to: '/nhan-su', icon: '🧑‍🏫', label: 'Giáo viên & Trợ giảng' },
         auth.can('users.manage') && { to: '/tai-khoan', icon: '👥', label: 'Tài khoản' },
         auth.can('audit.view') && { to: '/nhat-ky', icon: '🧾', label: 'Nhật ký' },
         auth.can('drive.manage') && { to: '/luu-tru-drive', icon: '☁️', label: 'Lưu trữ Drive' },

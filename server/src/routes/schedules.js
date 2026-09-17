@@ -18,16 +18,18 @@ import {
 import { badRequest, conflict, unprocessable } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
+import { periodTimes, MIN_PERIOD, MAX_PERIOD } from '../lib/periods.js';
 
 const SCHEDULE_STATUSES = ['scheduled', 'done', 'cancelled'];
 const MAX_BULK_SESSIONS = 120;
 
 /** Các cột "ngày giờ/người" — khoá lại khi buổi đã có người check-in. */
-const TIMING_FIELDS = ['session_date', 'start_time', 'end_time', 'teacher_id', 'assistant_id'];
+const TIMING_FIELDS = ['session_date', 'start_time', 'end_time', 'period', 'teacher_id', 'assistant_id'];
 /** Các cột đưa vào nhật ký before/after (không đổ nguyên bản ghi join). */
 const AUDIT_FIELDS = [
   'session_date', 'start_time', 'end_time', 'room_id',
   'teacher_id', 'assistant_id', 'subject', 'status', 'note',
+  'period', 'teacher_manual_name', 'assistant_manual_name',
 ];
 
 const hhmm = (t) => String(t || '').slice(0, 5);
@@ -40,8 +42,8 @@ const DETAIL_SELECT = `
   select s.*,
          sc.name as school_name,
          c.name  as class_name,
-         t.full_name as teacher_name,
-         a.full_name as assistant_name,
+         coalesce(t.full_name, s.teacher_manual_name)   as teacher_name,
+         coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
          r.name  as room_name,
          exists (select 1 from timesheets ts  where ts.schedule_id  = s.id) as has_timesheet,
          exists (select 1 from attendance att where att.schedule_id = s.id) as has_attendance
@@ -119,9 +121,26 @@ async function validateSessionCore(user, b) {
   const roomId = uuid(b.room_id, 'room_id');
   const teacherId = uuid(b.teacher_id, 'teacher_id');
   const assistantId = uuid(b.assistant_id, 'assistant_id');
-  const startTime = timeStr(b.start_time, 'start_time', { required: true });
-  const endTime = timeStr(b.end_time, 'end_time', { required: true });
   const subject = str(b.subject, 'subject', { max: 200 });
+
+  // Xếp lịch theo TIẾT: giờ suy ra từ khung tiết. Vẫn nhận start/end trực tiếp
+  // cho nhập bảng và các bản ghi cũ.
+  const period = int(b.period, 'Tiết', { min: MIN_PERIOD, max: MAX_PERIOD });
+  let startTime;
+  let endTime;
+  if (period) {
+    const t = periodTimes(period);
+    startTime = t.start;
+    endTime = t.end;
+  } else {
+    startTime = timeStr(b.start_time, 'start_time', { required: true });
+    endTime = timeStr(b.end_time, 'end_time', { required: true });
+  }
+
+  // Tên gõ tay — dùng khi người dạy chưa có tài khoản trong hệ thống.
+  // Chọn được tài khoản rồi thì tên gõ tay bị bỏ, tránh hai nguồn sự thật.
+  const teacherManual = teacherId ? null : str(b.teacher_manual_name, 'Tên giáo viên', { max: 120 });
+  const assistantManual = assistantId ? null : str(b.assistant_manual_name, 'Tên trợ giảng', { max: 120 });
 
   if (endTime <= startTime) throw badRequest('Giờ kết thúc phải sau giờ bắt đầu.');
   if (teacherId && assistantId && teacherId === assistantId) {
@@ -136,7 +155,8 @@ async function validateSessionCore(user, b) {
 
   return {
     schoolId, classId, roomId, teacherId, assistantId,
-    startTime, endTime, subject, school, cls, teacher, assistant,
+    startTime, endTime, period, teacherManual, assistantManual,
+    subject, school, cls, teacher, assistant,
   };
 }
 
@@ -205,8 +225,8 @@ export default async function routes(app) {
       `select s.*,
               sc.name as school_name,
               c.name  as class_name,
-              t.full_name as teacher_name,
-              a.full_name as assistant_name,
+              coalesce(t.full_name, s.teacher_manual_name)   as teacher_name,
+              coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
               r.name  as room_name,
               ts.check_in_at, ts.check_out_at, ts.label,
               (att.id is not null) as attendance_done
@@ -258,11 +278,15 @@ export default async function routes(app) {
     const created = await one(
       `insert into schedules
          (school_id, class_id, room_id, teacher_id, assistant_id,
-          session_date, start_time, end_time, subject, note, created_by, self_added)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          session_date, start_time, end_time, period,
+          teacher_manual_name, assistant_manual_name,
+          subject, note, created_by, self_added)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        returning *`,
       [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
-        sessionDate, core.startTime, core.endTime, core.subject, note, req.user.id,
+        sessionDate, core.startTime, core.endTime, core.period,
+        core.teacherManual, core.assistantManual,
+        core.subject, note, req.user.id,
         // GV/TG tự thêm buổi bị thiếu ⇒ đánh dấu để Phòng chuyên môn rà soát
         selfOnly]
     );
@@ -322,10 +346,12 @@ export default async function routes(app) {
           await c.query(
             `insert into schedules
                (school_id, class_id, room_id, teacher_id, assistant_id,
-                session_date, start_time, end_time, subject, created_by)
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                session_date, start_time, end_time, period,
+                teacher_manual_name, assistant_manual_name, subject, created_by)
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
-             sessionDate, core.startTime, core.endTime, core.subject, req.user.id]
+             sessionDate, core.startTime, core.endTime, core.period,
+             core.teacherManual, core.assistantManual, core.subject, req.user.id]
           );
         });
         created++;
@@ -406,10 +432,12 @@ export default async function routes(app) {
         await q(
           `insert into schedules
              (school_id, class_id, room_id, teacher_id, assistant_id,
-              session_date, start_time, end_time, subject, created_by)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              session_date, start_time, end_time, period,
+              teacher_manual_name, assistant_manual_name, subject, created_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
-            date, core.startTime, core.endTime, core.subject, req.user.id]
+            date, core.startTime, core.endTime, core.period,
+            core.teacherManual, core.assistantManual, core.subject, req.user.id]
         );
         created += 1;
       }
@@ -475,11 +503,26 @@ export default async function routes(app) {
 
     const patch = {};
     if (b.session_date !== undefined) patch.session_date = dateStr(b.session_date, 'session_date', { required: true });
+    // Đổi tiết ⇒ giờ bắt đầu/kết thúc tự đổi theo khung tiết.
+    if (b.period !== undefined) {
+      patch.period = int(b.period, 'Tiết', { min: MIN_PERIOD, max: MAX_PERIOD });
+      if (patch.period) {
+        const t = periodTimes(patch.period);
+        patch.start_time = t.start;
+        patch.end_time = t.end;
+      }
+    }
     if (b.start_time !== undefined) patch.start_time = timeStr(b.start_time, 'start_time', { required: true });
     if (b.end_time !== undefined) patch.end_time = timeStr(b.end_time, 'end_time', { required: true });
     if (b.room_id !== undefined) patch.room_id = uuid(b.room_id, 'room_id');                  // null = bỏ phòng
     if (b.teacher_id !== undefined) patch.teacher_id = uuid(b.teacher_id, 'teacher_id');      // null = bỏ phân công
     if (b.assistant_id !== undefined) patch.assistant_id = uuid(b.assistant_id, 'assistant_id');
+    if (b.teacher_manual_name !== undefined) {
+      patch.teacher_manual_name = str(b.teacher_manual_name, 'Tên giáo viên', { max: 120 });
+    }
+    if (b.assistant_manual_name !== undefined) {
+      patch.assistant_manual_name = str(b.assistant_manual_name, 'Tên trợ giảng', { max: 120 });
+    }
     if (b.subject !== undefined) patch.subject = str(b.subject, 'subject', { max: 200 });
     if (b.note !== undefined) patch.note = str(b.note, 'note');
     if (b.status !== undefined) patch.status = enumOf(b.status, 'status', SCHEDULE_STATUSES, { required: true });
@@ -502,8 +545,14 @@ export default async function routes(app) {
       throw badRequest('Giáo viên và trợ giảng phải là hai người khác nhau.');
     }
 
-    if (patch.teacher_id) await assertActiveStaff(patch.teacher_id, 'teacher', 'Giáo viên');
-    if (patch.assistant_id) await assertActiveStaff(patch.assistant_id, 'assistant', 'Trợ giảng');
+    if (patch.teacher_id) {
+      await assertActiveStaff(patch.teacher_id, 'teacher', 'Giáo viên');
+      patch.teacher_manual_name = null;
+    }
+    if (patch.assistant_id) {
+      await assertActiveStaff(patch.assistant_id, 'assistant', 'Trợ giảng');
+      patch.assistant_manual_name = null;
+    }
     if (patch.room_id) await assertRoomInSchool(patch.room_id, s.school_id);
 
     // Đổi người/ngày/giờ ⇒ kiểm trùng lịch như khi tạo mới (loại trừ chính buổi này)
