@@ -21,10 +21,44 @@ import { useToast } from '../../components/Toast.jsx';
 /* ------------------------- Trích trường dữ liệu an toàn ------------------------- */
 const asItems = (res) => (Array.isArray(res) ? res : res?.items || []);
 const clsName = (x) => x?.class_name || x?.class?.name || x?.schedule?.class_name || 'Lớp';
+
+const SESSION_VN = { morning: 'Buổi sáng', afternoon: 'Buổi chiều' };
+const sessionOf = (startTime) => (String(startTime || '').slice(0, 5) < '12:00' ? 'morning' : 'afternoon');
+
+/**
+ * Gom buổi dạy hôm nay theo (trường × buổi) — đơn vị chấm công.
+ * Mỗi nhóm là MỘT lần chấm công vào và MỘT lần ra, kèm danh sách tiết để nhắc giờ.
+ */
+function groupShifts(items, shifts) {
+  const map = new Map();
+  for (const s of items) {
+    if (s.status === 'cancelled') continue;
+    const session = sessionOf(s.start_time);
+    const key = `${s.school_id}|${session}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        school_id: s.school_id,
+        school_name: s.school_name || s.school?.name || 'Trường',
+        session,
+        periods: [],
+      });
+    }
+    map.get(key).periods.push(s);
+  }
+  for (const g of map.values()) {
+    g.periods.sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
+    g.ts = (shifts || []).find((t) => t.school_id === g.school_id && t.work_session === g.session) || null;
+  }
+  return [...map.values()].sort((a, b) => a.session.localeCompare(b.session) || a.school_name.localeCompare(b.school_name));
+}
 const schName = (x) => x?.school_name || x?.school?.name || x?.schedule?.school_name || '';
 const roomName = (x) => x?.room_name || x?.room?.name || '';
 const personName = (x) => x?.user_name || x?.user?.full_name || x?.full_name || '';
-const rowDate = (t) => t?.session_date || t?.date || t?.work_date || t?.schedule?.date || t?.check_in_at || '';
+const rowDate = (t) => t?.work_date || t?.session_date || t?.date || t?.schedule?.date || t?.check_in_at || '';
+/** Nhãn buổi của một dòng chấm công; dữ liệu cũ thì suy từ giờ check-in. */
+const shiftName = (t) => SESSION_VN[t?.work_session]
+  || (String(fmtTime(t?.check_in_at) || '').slice(0, 5) < '12:00' ? 'Buổi sáng' : 'Buổi chiều');
 const rowRange = (t) => fmtRange(
   t?.start_time || t?.schedule?.start_time,
   t?.end_time || t?.schedule?.end_time,
@@ -94,10 +128,11 @@ function TimesheetTable({ items, showUser = false }) {
             <tr>
               <th className="th">Ngày</th>
               {showUser && <th className="th">Người dạy</th>}
-              <th className="th">Lớp · Trường</th>
+              <th className="th">Buổi · Trường</th>
               <th className="th">Vào – Ra</th>
               <th className="th">Trạng thái</th>
               <th className="th text-right">Trễ</th>
+              <th className="th text-right">Tiết</th>
               <th className="th">Duyệt</th>
             </tr>
           </thead>
@@ -107,7 +142,7 @@ function TimesheetTable({ items, showUser = false }) {
                 <td className="td whitespace-nowrap">{fmtDate(rowDate(t))}</td>
                 {showUser && <td className="td whitespace-nowrap">{personName(t) || '—'}</td>}
                 <td className="td">
-                  <div className="font-medium">{clsName(t)}</div>
+                  <div className="font-medium">{shiftName(t)}</div>
                   <div className="text-[12px] text-ink-muted">{schName(t)}</div>
                 </td>
                 <td className="td whitespace-nowrap">
@@ -116,6 +151,9 @@ function TimesheetTable({ items, showUser = false }) {
                 <td className="td"><AttendBadge label={t.label} /></td>
                 <td className="td text-right whitespace-nowrap">
                   {Number(t.late_minutes) > 0 ? `${fmtNumber(t.late_minutes)} ph` : ''}
+                </td>
+                <td className="td text-right whitespace-nowrap text-ink-muted">
+                  {t.planned_periods ?? '—'}
                 </td>
                 <td className="td"><ApprovalBadge status={t.approval_status} /></td>
               </tr>
@@ -132,11 +170,21 @@ function TimesheetTable({ items, showUser = false }) {
 function TodaySection() {
   const navigate = useNavigate();
   const [items, setItems] = useState(null);
+  const [shifts, setShifts] = useState([]);   // chấm công của tôi hôm nay, theo buổi
   const [err, setErr] = useState(null);
 
   const load = useCallback(async () => {
     setErr(null);
-    try { setItems(asItems(await api.get('/api/schedules/today'))); }
+    try {
+      const day = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+      const [today, mine] = await Promise.all([
+        api.get('/api/schedules/today'),
+        // Chấm công của chính mình hôm nay — khớp theo (trường, buổi), không theo tiết.
+        api.get('/api/timesheets', { from: day, to: day, limit: 50 }).catch(() => ({ items: [] })),
+      ]);
+      setItems(asItems(today));
+      setShifts(asItems(mine));
+    }
     catch (e) { setErr(e); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -160,30 +208,43 @@ function TodaySection() {
 
       {!err && items !== null && items.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {items.map((s) => {
-            // /api/schedules/today trả trạng thái chấm công PHẲNG trên chính dòng buổi
-            // (check_in_at / check_out_at / label) — fallback về s cho trường hợp đó.
-            const ts = s.timesheet || s.my_timesheet || s;
-            const cancelled = s.status === 'cancelled';
+          {groupShifts(items, shifts).map((g) => {
+            const ts = g.ts;
             const done = !!(ts?.check_in_at && ts?.check_out_at);
             const inOnly = !!(ts?.check_in_at && !ts?.check_out_at);
+            const go = () => navigate(`/cham-cong/${g.school_id}?buoi=${g.session}`);
             return (
-              <div key={s.id} className="card p-4">
+              <div key={g.key} className="card p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-[17px] font-extrabold text-brand-800">
-                      {fmtRange(s.start_time, s.end_time)}
+                      {SESSION_VN[g.session]}
                     </div>
-                    <div className="font-semibold mt-0.5 truncate">{clsName(s)}</div>
-                    <div className="text-[12.5px] text-ink-muted truncate">
-                      {schName(s)}{roomName(s) ? ` · ${roomName(s)}` : ''}
+                    <div className="font-semibold mt-0.5 truncate">{g.school_name}</div>
+                    <div className="text-[12.5px] text-ink-muted">
+                      {g.periods.length} tiết · có mặt trước{' '}
+                      <b>{fmtTime(g.periods[0]?.start_time)}</b>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
-                    {cancelled && <Badge tone="absent">{LABEL.scheduleStatus.cancelled}</Badge>}
-                    {!cancelled && <AttendBadge label={ts?.label} />}
-                    {!cancelled && <ApprovalBadge status={ts?.approval_status} />}
+                    <AttendBadge label={ts?.label} />
+                    <ApprovalBadge status={ts?.approval_status} />
                   </div>
+                </div>
+
+                {/* Lịch dạy chỉ để NHẮC — chấm công không gắn với tiết nào. */}
+                <div className="mt-2.5 rounded-xl bg-canvas border border-line px-3 py-2 grid gap-1">
+                  {g.periods.map((p) => (
+                    <div key={p.id} className="flex items-center gap-2 text-[12.5px]">
+                      <span className="font-semibold text-brand-800 w-[52px] shrink-0">
+                        {p.period ? `Tiết ${p.period}` : fmtTime(p.start_time)}
+                      </span>
+                      <span className="truncate">{clsName(p)}</span>
+                      <span className="text-ink-muted ml-auto shrink-0">
+                        {p.has_attendance ? '✓ đã điểm danh' : 'chưa điểm danh'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
 
                 {(ts?.check_in_at || ts?.check_out_at) && (
@@ -192,21 +253,15 @@ function TodaySection() {
                   </div>
                 )}
 
-                {!cancelled && (
-                  <div className="mt-3">
-                    {done ? (
-                      <button className="btn-line w-full" onClick={() => navigate(`/cham-cong/${s.id}`)}>
-                        ✅ Đã hoàn tất · Xem chi tiết
-                      </button>
-                    ) : (
-                      <button
-                        className="btn-primary w-full !py-3 text-[15px]"
-                        onClick={() => navigate(`/cham-cong/${s.id}`)}>
-                        {inOnly ? '🏁 Check-out' : '📍 Check-in'}
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div className="mt-3">
+                  {done ? (
+                    <button className="btn-line w-full" onClick={go}>✅ Đã chấm công đủ · Xem chi tiết</button>
+                  ) : (
+                    <button className="btn-primary w-full !py-3 text-[15px]" onClick={go}>
+                      {inOnly ? '🏁 Chấm công ra' : '📍 Chấm công vào'}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -607,7 +662,7 @@ function ReconcileTab() {
                     <tr>
                       <th className="th">Ngày</th>
                       <th className="th">Buổi</th>
-                      <th className="th">Lớp · Trường</th>
+                      <th className="th">Trường</th>
                       <th className="th">Người phụ trách</th>
                       <th className="th">Vào – Ra</th>
                       <th className="th">Trạng thái</th>
@@ -618,10 +673,12 @@ function ReconcileTab() {
                     {rows.map((r, i) => (
                       <tr key={r.id || `${r.schedule_id || i}-${r.user_id || ''}`}>
                         <td className="td whitespace-nowrap">{fmtDate(rowDate(r))}</td>
-                        <td className="td whitespace-nowrap">{rowRange(r) || '—'}</td>
+                        <td className="td whitespace-nowrap">{shiftName(r)}</td>
                         <td className="td">
-                          <div className="font-medium">{clsName(r)}</div>
-                          <div className="text-[12px] text-ink-muted">{schName(r)}</div>
+                          <div className="font-medium">{schName(r)}</div>
+                          <div className="text-[12px] text-ink-muted">
+                            {r.planned_periods ? `${r.planned_periods} tiết theo lịch` : 'Không có tiết trong lịch'}
+                          </div>
                         </td>
                         <td className="td whitespace-nowrap">{personName(r) || '—'}</td>
                         <td className="td whitespace-nowrap">
@@ -684,7 +741,7 @@ export default function TimesheetHome() {
       <PageHeader
         title="Chấm công"
         sub={auth.isFieldStaff
-          ? 'Check-in khi đến trường, check-out khi kết thúc buổi dạy.'
+          ? 'Đến trường chấm công vào, ra về chấm công ra — mỗi ca sáng/chiều một lần.'
           : 'Duyệt chấm công lệch vị trí và đối chiếu kế hoạch – thực tế.'} />
       {auth.isFieldStaff ? <FieldView /> : <ManagerView />}
     </>

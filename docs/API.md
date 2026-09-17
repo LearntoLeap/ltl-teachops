@@ -125,34 +125,42 @@ thật. Mọi truy vấn trả `teacher_name`/`assistant_name` đều là
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
 | GET | `/` | theo phạm vi | `?from=&to=&user_id=&school_id=&label=&approval_status=` |
-| GET | `/my/:schedule_id` | teacher, assistant | Trạng thái chấm công của tôi cho buổi đó |
+| GET | `/my-shift` | teacher, assistant | `?school_id=&date=&session=morning\|afternoon` → `{item, date, session, school, planned}` — `planned` là tiết đầu buổi, CHỈ để nhắc giờ |
 | POST | `/check-in` | teacher, assistant | *(xem dưới)* |
 | POST | `/check-out` | teacher, assistant | *(xem dưới)* |
 | POST | `/:id/approve` | admin, manager | `{decision:'approved'\|'rejected', reason?}` |
 | PATCH | `/:id` | admin | Sửa tay (ghi `audit_log`) |
 | GET | `/reconcile` | admin, manager | Bảng đối chiếu kế hoạch ↔ thực tế |
 
+> **Chấm công là của BUỔI, không của tiết.** Giáo viên đến trường chấm công vào
+> một lần, ra về chấm công ra một lần, cho mỗi ca sáng/chiều. Kiểm thiết bị đầu
+> buổi và cuối buổi nằm ở đây. Khoá duy nhất: `(user_id, work_date, work_session,
+> school_id)`. Lịch dạy chỉ dùng để NHẮC giờ và để tính "đến đúng giờ chưa" — so
+> với tiết đầu tiên của buổi; buổi không có tiết nào vẫn chấm công được nhưng
+> được đánh dấu `unscheduled` để Phòng chuyên môn soát lại.
+>
+> **Việc dạy từng tiết nằm ở điểm danh**: trong mỗi tiết, giáo viên CHECK TẠI LỚP
+> và đếm sĩ số (`POST /api/attendance` — ghi `checked_in_at`, GPS, sĩ số có mặt).
+> Điểm danh xong thì tiết chuyển sang `done`.
+
 **`POST /check-in`** — `multipart/form-data`
 
 | Trường | Bắt buộc | Ghi chú |
 |---|---|---|
-| `schedule_id` | ✅ | |
+| `school_id` | ✅ | Trường đang có mặt |
+| `date`, `session` | — | Mặc định theo giờ Việt Nam hiện tại |
 | `lat`, `lng`, `accuracy` | ✅ | Từ `navigator.geolocation` |
 | `photo` | ✅ | Ảnh thiết bị đầu buổi |
+| `selfie` | ✅ | Ảnh xác minh đúng người có mặt |
 | `device_count` | ✅ | Số thiết bị đếm tay |
 | `note` | ⚠️ | **Bắt buộc** nếu ngoài bán kính, thiếu → `422` |
 | `client_time`, `queued_at` | — | Dùng cho bản ghi đồng bộ trễ |
 
-Server tính `distance_m`, `late_minutes`, `label`, `gps_flagged`. Đã check-in rồi → `409`.
-
-> **Tiết nối tiếp trong buổi**: nếu người dạy ĐÃ check-in một tiết khác cùng buổi
-> (sáng < 12:00 ≤ chiều) cùng trường cùng ngày, thì GPS và ảnh **không bắt buộc** —
-> chỉ cần `device_count`; bản ghi lưu `linked_from` trỏ về tiết đầu, không gắn cờ GPS.
-> `GET /my/:schedule_id` trả thêm `block_checked_in: boolean` để client hiện form rút gọn.
+Server tính `distance_m`, `late_minutes`, `label`, `gps_flagged`. Đã chấm công buổi đó rồi → `409`.
 
 **`POST /check-out`** — `multipart/form-data`
 
-`schedule_id`, `lat`, `lng`, `device_ok` (bool), `photo` (tuỳ chọn), `damage_note` + `damage_photo` (**bắt buộc nếu `device_ok=false`**, thiếu → `422`), `note`.
+`school_id`, `date`, `session`, `lat`, `lng`, `device_ok` (bool), `photo` (tuỳ chọn), `damage_note` + `damage_photo` (**bắt buộc nếu `device_ok=false`**, thiếu → `422`), `note`.
 Khi `device_ok=false` server tự tạo `device_issues` (`source='checkout'`) và thông báo cho `manager` của trường.
 
 ## 6. Điểm danh — `/api/attendance`

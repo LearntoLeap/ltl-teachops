@@ -90,7 +90,7 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="/lich" element={<ScheduleList />} />
           <Route path="/cham-cong" element={<TimesheetHome />} />
-          <Route path="/cham-cong/:scheduleId" element={<CheckInOut />} />
+          <Route path="/cham-cong/:schoolId" element={<CheckInOut />} />
           <Route path="/diem-danh" element={<AttendanceHome />} />
           <Route path="/diem-danh/:scheduleId" element={<AttendanceMark />} />
           <Route path="/thiet-bi" element={<DevicesHome />} />

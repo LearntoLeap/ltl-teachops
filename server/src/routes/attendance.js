@@ -10,8 +10,9 @@ import { one, rows, scalar, tx } from '../db.js';
 import { requirePerm, isFieldStaff } from '../lib/rbac.js';
 import { schoolFilter, assertScheduleAccess, roleInSchedule, visibleSchoolIds } from '../lib/scope.js';
 import { badRequest, forbidden, notFound, conflict, unprocessable } from '../lib/errors.js';
-import { str, uuid, int, dateStr, isoTime, paging } from '../lib/validate.js';
+import { str, uuid, int, num, dateStr, isoTime, paging } from '../lib/validate.js';
 import { consumeMultipart } from '../lib/storage.js';
+import { distanceMeters, isValidCoord } from '../lib/geo.js';
 import { audit } from '../lib/audit.js';
 import { notify } from '../lib/notify.js';
 
@@ -216,6 +217,18 @@ export default async function routes(app) {
         );
       }
 
+      // Check TẠI LỚP: vị trí lúc dạy tiết này. Không bắt buộc (lớp trong nhà,
+      // GPS hay chập chờn) nhưng có thì đối chiếu với toạ độ trường.
+      const lat = num(fields.lat, 'lat', { min: -90, max: 90 });
+      const lng = num(fields.lng, 'lng', { min: -180, max: 180 });
+      const hasCoord = isValidCoord(lat, lng);
+      let distance = null;
+      let gpsFlagged = false;
+      if (hasCoord && isValidCoord(sch.school_lat, sch.school_lng)) {
+        distance = distanceMeters(lat, lng, sch.school_lat, sch.school_lng);
+        gpsFlagged = distance > (sch.gps_radius_m || 1000);
+      }
+
       const absentNames = str(fields.absent_names, 'absent_names', { max: 2000 });
       const note = str(fields.note, 'note', { max: 2000 });
       const clientTime = isoTime(fields.client_time, 'client_time');
@@ -226,12 +239,14 @@ export default async function routes(app) {
         const r = await c.query(
           `insert into attendance
              (schedule_id, class_id, school_id, marked_by, roster_size, present_count,
-              absent_names, note, client_time, queued_at, synced_late)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+              absent_names, note, client_time, queued_at, synced_late,
+              checked_in_at, check_in_lat, check_in_lng, check_in_distance_m, gps_flagged)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), $12, $13, $14, $15)
            returning *`,
           [
             scheduleId, sch.class_id, sch.school_id, req.user.id, rosterSize, presentCount,
             absentNames, note, clientTime, queuedAt, syncedLate,
+            hasCoord ? lat : null, hasCoord ? lng : null, distance, gpsFlagged,
           ]
         );
         const att = r.rows[0];
@@ -250,6 +265,8 @@ export default async function routes(app) {
           photos.map((f) => f.id),
         ]);
 
+        // Tiết đã dạy xong — tín hiệu thật là đã điểm danh tại lớp.
+        await c.query("update schedules set status = 'done' where id = $1 and status = 'scheduled'", [scheduleId]);
         return att;
       });
 
@@ -258,7 +275,8 @@ export default async function routes(app) {
         entity: 'attendance',
         entityId: created.id,
         summary:
-          `Điểm danh lớp ${sch.class_name} — ${sch.school_name} ngày ${vnDate(sch.session_date)}: ` +
+          `Check tại lớp ${sch.class_name} — ${sch.school_name} ngày ${vnDate(sch.session_date)}` +
+          `${sch.period ? ` (tiết ${sch.period})` : ''}: ` +
           `${presentCount}/${rosterSize} học sinh có mặt` +
           (sessionRole ? '' : ' (điểm danh thay)'),
         after: { ...created, photo_ids: photos.map((f) => f.id) },

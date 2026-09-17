@@ -10,7 +10,7 @@
 import { one, rows, scalar, tx, query } from '../db.js';
 import { badRequest, forbidden, notFound, conflict, unprocessable } from '../lib/errors.js';
 import { requirePerm, isFieldStaff } from '../lib/rbac.js';
-import { schoolFilter, assertScheduleAccess, roleInSchedule, visibleSchoolIds } from '../lib/scope.js';
+import { schoolFilter, assertSchoolAccess, visibleSchoolIds } from '../lib/scope.js';
 import { str, uuid, int, num, bool, enumOf, dateStr, isoTime, paging, dateRange } from '../lib/validate.js';
 import { distanceMeters, isValidCoord, labelCheckIn, workMinutes } from '../lib/geo.js';
 import { consumeMultipart } from '../lib/storage.js';
@@ -20,6 +20,40 @@ import { notify, notifySchoolManagers } from '../lib/notify.js';
 const LABELS = ['ontime', 'late', 'absent'];
 const APPROVALS = ['pending', 'approved', 'rejected'];
 const SYNC_LATE_MS = 10 * 60_000; // đồng bộ offline trễ quá 10 phút ⇒ synced_late
+
+const SESSIONS = ['morning', 'afternoon'];
+const SESSION_VN = { morning: 'buổi sáng', afternoon: 'buổi chiều' };
+
+/** Hôm nay theo giờ Việt Nam ('YYYY-MM-DD') — mốc nghiệp vụ của chấm công. */
+function vnToday() {
+  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+}
+
+/** Đang là buổi sáng hay chiều theo giờ Việt Nam (mốc 12:00). */
+function vnSessionNow() {
+  return new Date(Date.now() + 7 * 3600_000).getUTCHours() < 12 ? 'morning' : 'afternoon';
+}
+
+/**
+ * Lịch dạy của buổi đó — CHỈ để nhắc giờ và tính "đến đúng giờ chưa".
+ * Chấm công không thuộc về tiết nào; tiết đầu buổi chỉ cho biết mấy giờ phải có mặt.
+ */
+async function plannedShift(userId, schoolId, date, session) {
+  const first = await one(
+    `select s.id, s.start_time, count(*) over () ::int as periods
+       from schedules s
+      where s.school_id = $1 and s.session_date = $2 and s.status <> 'cancelled'
+        and (s.teacher_id = $3 or s.assistant_id = $3)
+        and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session = $4
+      order by s.start_time limit 1`,
+    [schoolId, date, userId, session]
+  );
+  return {
+    schedule_id: first?.id ?? null,
+    start_time: first ? String(first.start_time).slice(0, 5) : null,
+    periods: first?.periods ?? 0,
+  };
+}
 
 /** 'YYYY-MM-DD' → 'DD/MM/YYYY' cho nội dung thông báo/nhật ký. */
 function vnDate(d) {
@@ -76,33 +110,36 @@ export default async function routes(app) {
       // GV/TG chỉ xem chấm công của chính mình — bỏ qua ?user_id client gửi lên.
       conds.push(`t.user_id = ${p(user.id)}`);
     } else {
-      const f = await schoolFilter(user, 's.school_id', params.length + 1);
+      const f = await schoolFilter(user, 't.school_id', params.length + 1);
       conds.push(f.sql);
       params.push(...f.params);
       const userId = uuid(q.user_id, 'user_id');
       if (userId) conds.push(`t.user_id = ${p(userId)}`);
     }
-    if (schoolId) conds.push(`s.school_id = ${p(schoolId)}`);
+    if (schoolId) conds.push(`t.school_id = ${p(schoolId)}`);
     if (label) conds.push(`t.label = ${p(label)}`);
     if (approval) conds.push(`t.approval_status = ${p(approval)}`);
-    if (from) conds.push(`s.session_date >= ${p(from)}`);
-    if (to) conds.push(`s.session_date <= ${p(to)}`);
+    if (from) conds.push(`t.work_date >= ${p(from)}`);
+    if (to) conds.push(`t.work_date <= ${p(to)}`);
 
+    // Chấm công thuộc về (người, ngày, buổi, trường) — không còn đi qua tiết nào.
     const baseSql = `
         from timesheets t
-        join schedules s on s.id = t.schedule_id
-        join schools sc on sc.id = s.school_id
-        join classes c on c.id = s.class_id
+        join schools sc on sc.id = t.school_id
         join users u on u.id = t.user_id
        where ${conds.join(' and ')}`;
 
     const total = Number(await scalar(`select count(*) ${baseSql}`, params)) || 0;
     const items = await rows(
-      `select t.*, s.session_date, s.start_time, s.end_time, s.subject,
-              s.status as schedule_status, s.school_id, s.class_id,
-              sc.name as school_name, c.name as class_name, u.full_name as user_name
+      `select t.*, sc.name as school_name, u.full_name as user_name,
+              (select count(*) from schedules s
+                where s.school_id = t.school_id and s.session_date = t.work_date
+                  and s.status <> 'cancelled'
+                  and (s.teacher_id = t.user_id or s.assistant_id = t.user_id)
+                  and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session
+                      = t.work_session)::int as planned_periods
          ${baseSql}
-        order by s.session_date desc, s.start_time, sc.name
+        order by t.work_date desc, t.work_session, sc.name
         limit ${p(limit)} offset ${p(offset)}`,
       params
     );
@@ -127,17 +164,17 @@ export default async function routes(app) {
     conds.push(f.sql);
     params.push(...f.params);
 
-    conds.push(`v.session_date >= ${p(from)}`);
-    conds.push(`v.session_date <= ${p(to)}`);
+    conds.push(`v.work_date >= ${p(from)}`);
+    conds.push(`v.work_date <= ${p(to)}`);
     if (schoolId) conds.push(`v.school_id = ${p(schoolId)}`);
     if (userId) conds.push(`v.user_id = ${p(userId)}`);
 
-    const baseSql = ` from v_timesheet_reconcile v where ${conds.join(' and ')}`;
+    const baseSql = ` from v_work_shifts v where ${conds.join(' and ')}`;
 
     const total = Number(await scalar(`select count(*)${baseSql}`, params)) || 0;
     // Tổng hợp trên TOÀN BỘ tập lọc (không chỉ trang hiện tại).
     const summary = await one(
-      `select count(*)::int                                          as total_sessions,
+      `select count(*)::int                                          as total_shifts,
               count(*) filter (where v.label = 'ontime')::int        as ontime,
               count(*) filter (where v.label = 'late')::int          as late,
               count(*) filter (where v.label = 'absent')::int        as absent,
@@ -150,7 +187,7 @@ export default async function routes(app) {
 
     const items = await rows(
       `select v.*${baseSql}
-        order by v.session_date desc, v.start_time, v.school_name, v.class_name
+        order by v.work_date desc, v.work_session, v.school_name, v.full_name
         limit ${p(limit)} offset ${p(offset)}`,
       params
     );
@@ -158,144 +195,132 @@ export default async function routes(app) {
   });
 
   /* =========================================================================
-   * GET /api/timesheets/my/:schedule_id — trạng thái chấm công của tôi cho buổi đó
+   * GET /api/timesheets/my-shift — trạng thái chấm công BUỔI của tôi
+   *   ?school_id= (bắt buộc) &date=YYYY-MM-DD &session=morning|afternoon
+   *   Không gửi date/session ⇒ lấy theo giờ Việt Nam hiện tại.
    * ======================================================================= */
-  app.get('/api/timesheets/my/:schedule_id', { preHandler: requirePerm('timesheet.self') }, async (req) => {
-    const scheduleId = uuid(req.params.schedule_id, 'schedule_id', { required: true });
-    const sch = await assertScheduleAccess(req.user, scheduleId);
+  app.get('/api/timesheets/my-shift', { preHandler: requirePerm('timesheet.self') }, async (req) => {
+    const schoolId = uuid(req.query.school_id, 'school_id', { required: true });
+    const school = await assertSchoolAccess(req.user, schoolId);
+    const date = dateStr(req.query.date, 'date') || vnToday();
+    const session = enumOf(req.query.session, 'session', SESSIONS) || vnSessionNow();
+
     const item = await one(
-      'select * from timesheets where schedule_id = $1 and user_id = $2',
-      [sch.id, req.user.id]
+      `select * from timesheets
+        where user_id = $1 and school_id = $2 and work_date = $3 and work_session = $4`,
+      [req.user.id, schoolId, date, session]
     );
+    const planned = await plannedShift(req.user.id, schoolId, date, session);
 
-    // Tiết nối tiếp? — đã check-in một tiết khác CÙNG buổi (sáng/chiều) cùng
-    // trường hôm đó ⇒ client hiện form rút gọn (không GPS/ảnh bắt buộc).
-    const block = String(sch.start_time) < '12:00:00' ? 'morning' : 'afternoon';
-    const first = await one(
-      `select t.id from timesheets t
-         join schedules s2 on s2.id = t.schedule_id
-        where t.user_id = $1 and t.check_in_at is not null
-          and s2.school_id = $2 and s2.session_date = $3 and s2.id <> $4
-          and (case when s2.start_time < '12:00:00' then 'morning' else 'afternoon' end) = $5
-        limit 1`,
-      [req.user.id, sch.school_id, sch.session_date, sch.id, block]
-    );
-
-    return { item, block_checked_in: !!first }; // item = null nếu chưa chấm công
+    return {
+      item,                      // null = chưa chấm công buổi này
+      date,
+      session,
+      school: { id: school.id, name: school.name, gps_radius_m: school.gps_radius_m },
+      planned,                   // { start_time, periods } — lịch dạy chỉ để NHẮC giờ
+    };
   });
 
   /* =========================================================================
-   * POST /api/timesheets/check-in — multipart
+   * POST /api/timesheets/check-in — multipart. CHẤM CÔNG ĐẦU BUỔI.
+   *
+   * Một lần cho cả buổi (sáng/chiều), KHÔNG gắn với tiết nào. Kèm kiểm thiết bị
+   * đầu buổi. Lịch dạy chỉ dùng để biết giờ dự kiến có mặt ⇒ tính đúng giờ/trễ.
    * ======================================================================= */
   app.post('/api/timesheets/check-in', { preHandler: requirePerm('timesheet.self') }, async (req, reply) => {
     const user = req.user;
-
-    // 1. Nhận multipart trước (schedule_id nằm trong fields nên chưa biết trường nào).
     const { fields, files } = await consumeMultipart(req, { userId: user.id });
 
-    // 2. Buổi dạy + vai trò trong buổi — CHỈ người được phân công mới check-in,
-    //    admin/manager không check-in hộ.
-    const scheduleId = uuid(fields.schedule_id, 'schedule_id', { required: true });
-    const sch = await assertScheduleAccess(user, scheduleId);
-    const role = roleInSchedule(user, sch);
-    if (!role) throw forbidden('Bạn không được phân công buổi này.');
-    await tagFilesSchool(files, sch.school_id);
+    const schoolId = uuid(fields.school_id, 'school_id', { required: true });
+    const school = await assertSchoolAccess(user, schoolId);
+    await tagFilesSchool(files, schoolId);
 
-    // 3. Buổi đã huỷ thì không chấm công.
-    if (sch.status === 'cancelled') throw unprocessable('Buổi này đã huỷ.');
+    const date = dateStr(fields.date, 'date') || vnToday();
+    const session = enumOf(fields.session, 'session', SESSIONS) || vnSessionNow();
 
-    // 4. Chặn check-in trùng.
     const existing = await one(
-      'select id, check_in_at from timesheets where schedule_id = $1 and user_id = $2',
-      [sch.id, user.id]
+      `select id, check_in_at from timesheets
+        where user_id = $1 and school_id = $2 and work_date = $3 and work_session = $4`,
+      [user.id, schoolId, date, session]
     );
-    if (existing?.check_in_at) throw conflict('Bạn đã check-in buổi này rồi.');
+    if (existing?.check_in_at) {
+      throw conflict(`Bạn đã chấm công ${SESSION_VN[session]} hôm nay ở ${school.name} rồi.`);
+    }
 
-    // 4b. TIẾT NỐI TIẾP: đã check-in một tiết TRƯỚC ĐÓ trong cùng buổi
-    //     (sáng/chiều) cùng trường cùng ngày ⇒ các tiết sau chỉ cần cập nhật
-    //     số thiết bị (GPS + ảnh không bắt buộc) — theo quy trình vận hành LtL.
-    const block = String(sch.start_time) < '12:00:00' ? 'morning' : 'afternoon';
-    const linkedFirst = await one(
-      `select t.id, t.check_in_at from timesheets t
-         join schedules s2 on s2.id = t.schedule_id
-        where t.user_id = $1 and t.check_in_at is not null
-          and s2.school_id = $2 and s2.session_date = $3 and s2.id <> $4
-          and (case when s2.start_time < '12:00:00' then 'morning' else 'afternoon' end) = $5
-        order by t.check_in_at asc limit 1`,
-      [user.id, sch.school_id, sch.session_date, sch.id, block]
-    );
-
-    // 5. Toạ độ GPS: bắt buộc với tiết ĐẦU buổi; tiết nối tiếp thì tuỳ chọn.
+    // GPS bắt buộc — đây là bằng chứng có mặt tại trường.
     const lat = num(fields.lat, 'lat', { min: -90, max: 90 });
     const lng = num(fields.lng, 'lng', { min: -180, max: 180 });
     const accuracy = num(fields.accuracy, 'accuracy', { min: 0, max: 1_000_000 });
-    const hasCoord = isValidCoord(lat, lng);
-    if (!hasCoord && !linkedFirst) {
+    if (!isValidCoord(lat, lng)) {
       throw badRequest('Không nhận được toạ độ GPS hợp lệ. Vui lòng bật định vị rồi thử lại.');
     }
 
-    // 6. Ảnh thiết bị + số thiết bị: ảnh bắt buộc với tiết đầu buổi.
+    // Ảnh thiết bị đầu buổi + selfie xác minh đúng người.
     const photo = files.photo?.[0];
-    if (!photo && !linkedFirst) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
-    // Ảnh selfie xác minh đúng người dạy có mặt — bắt buộc ở tiết đầu buổi.
+    if (!photo) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
     const selfie = files.selfie?.[0];
-    if (!selfie && !linkedFirst) throw unprocessable('Bắt buộc chụp ảnh selfie tại lớp để xác minh.');
+    if (!selfie) throw unprocessable('Bắt buộc chụp ảnh selfie tại trường để xác minh.');
     const deviceCount = int(fields.device_count, 'device_count', { required: true, min: 0, max: 100_000 });
     const note = str(fields.note, 'note', { max: 2000 });
 
-    // 7. Khoảng cách tới trường + cờ GPS.
+    // Đối chiếu vị trí với toạ độ trường.
     let distance = null;
     let gpsFlagged = false;
     let approvalStatus = 'approved';
     let autoNote = null;
 
-    if (hasCoord && isValidCoord(sch.school_lat, sch.school_lng)) {
-      distance = distanceMeters(lat, lng, sch.school_lat, sch.school_lng);
-    }
-    if (linkedFirst) {
-      // Tiết nối tiếp: đã xác minh vị trí ở tiết đầu buổi — không đối chiếu lại.
-      autoNote = '[Hệ thống] Tiết nối tiếp trong buổi — vị trí đã xác minh ở tiết đầu.';
-    } else if (distance === null) {
-      // Trường chưa cấu hình toạ độ ⇒ không đối chiếu được, KHÔNG gắn cờ —
-      // chỉ ghi chú tự động để Phòng chuyên môn/kế toán biết.
-      autoNote = '[Hệ thống] Trường chưa cấu hình toạ độ GPS.';
-    } else if (distance > sch.gps_radius_m) {
-      if (!note) {
-        throw unprocessable(
-          `Bạn đang cách trường ${distance}m — ngoài bán kính cho phép ${sch.gps_radius_m}m. Vui lòng ghi rõ lý do.`
-        );
+    if (isValidCoord(school.lat, school.lng)) {
+      distance = distanceMeters(lat, lng, school.lat, school.lng);
+      if (distance > school.gps_radius_m) {
+        if (!note) {
+          throw unprocessable(
+            `Bạn đang cách trường ${distance}m — ngoài bán kính cho phép ${school.gps_radius_m}m. Vui lòng ghi rõ lý do.`
+          );
+        }
+        gpsFlagged = true;
+        approvalStatus = 'pending';
       }
-      gpsFlagged = true;
-      approvalStatus = 'pending'; // chờ Phòng chuyên môn duyệt tay
+    } else {
+      autoNote = '[Hệ thống] Trường chưa cấu hình toạ độ GPS.';
+    }
+
+    // Giờ dự kiến = tiết đầu tiên của buổi theo lịch. Không có lịch ⇒ vẫn chấm
+    // công được, nhưng đánh dấu để Phòng chuyên môn soát lại.
+    const planned = await plannedShift(user.id, schoolId, date, session);
+    const checkInAt = new Date();
+    const { lateMinutes, label } = planned.start_time
+      ? labelCheckIn(checkInAt, date, planned.start_time, school.grace_minutes)
+      : { lateMinutes: 0, label: 'ontime' };
+    if (!planned.start_time) {
+      autoNote = [autoNote, '[Hệ thống] Buổi này không có tiết nào trong lịch dạy.'].filter(Boolean).join(' — ');
     }
     const checkInNote = [note, autoNote].filter(Boolean).join(' — ') || null;
 
-    // 8. Nhãn giờ tính bằng GIỜ SERVER so với lịch (grace_minutes theo từng trường).
-    const checkInAt = new Date();
-    const { lateMinutes, label } = labelCheckIn(checkInAt, sch.session_date, sch.start_time, sch.grace_minutes);
-
-    // 9. Ghi bản ghi — upsert theo unique(schedule_id, user_id): nếu job cuối ngày đã tạo
-    //    bản ghi 'absent' (chưa check-in) thì cập nhật đè lên chính bản ghi đó.
-    //    Điều kiện "check_in_at is null" chặn luôn race hai request song song.
     const clientTime = isoTime(fields.client_time, 'client_time');
     const queuedAt = isoTime(fields.queued_at, 'queued_at');
     const syncedLate = !!(queuedAt && checkInAt.getTime() - new Date(queuedAt).getTime() > SYNC_LATE_MS);
+    const sessionRole = user.role === 'assistant' ? 'assistant' : 'teacher';
 
     const saved = await one(
       `insert into timesheets
-         (schedule_id, user_id, role, check_in_at, check_in_lat, check_in_lng, check_in_accuracy,
-          check_in_distance_m, check_in_photo_id, check_in_device_count, check_in_note,
-          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late,
-          linked_from, check_in_selfie_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
-       on conflict (schedule_id, user_id) do update set
+         (user_id, school_id, work_date, work_session, schedule_id, role,
+          planned_start_time, unscheduled,
+          check_in_at, check_in_lat, check_in_lng, check_in_accuracy, check_in_distance_m,
+          check_in_photo_id, check_in_selfie_id, check_in_device_count, check_in_note,
+          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+       on conflict (user_id, work_date, work_session, school_id) do update set
+         schedule_id           = excluded.schedule_id,
          role                  = excluded.role,
+         planned_start_time    = excluded.planned_start_time,
+         unscheduled           = excluded.unscheduled,
          check_in_at           = excluded.check_in_at,
          check_in_lat          = excluded.check_in_lat,
          check_in_lng          = excluded.check_in_lng,
          check_in_accuracy     = excluded.check_in_accuracy,
          check_in_distance_m   = excluded.check_in_distance_m,
          check_in_photo_id     = excluded.check_in_photo_id,
+         check_in_selfie_id    = excluded.check_in_selfie_id,
          check_in_device_count = excluded.check_in_device_count,
          check_in_note         = excluded.check_in_note,
          gps_flagged           = excluded.gps_flagged,
@@ -304,84 +329,80 @@ export default async function routes(app) {
          approval_status       = excluded.approval_status,
          client_time           = excluded.client_time,
          queued_at             = excluded.queued_at,
-         synced_late           = excluded.synced_late,
-         linked_from           = excluded.linked_from,
-         check_in_selfie_id    = excluded.check_in_selfie_id
+         synced_late           = excluded.synced_late
        where timesheets.check_in_at is null
        returning *`,
-      [sch.id, user.id, role, checkInAt,
-       hasCoord ? lat : null, hasCoord ? lng : null, hasCoord ? accuracy : null,
-       distance, photo?.id ?? null, deviceCount, checkInNote,
-       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate,
-       linkedFirst?.id ?? null, selfie?.id ?? null]
+      [user.id, schoolId, date, session, planned.schedule_id, sessionRole,
+       planned.start_time, !planned.start_time,
+       checkInAt, lat, lng, accuracy, distance,
+       photo.id, selfie.id, deviceCount, checkInNote,
+       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate]
     );
-    if (!saved) throw conflict('Bạn đã check-in buổi này rồi.');
+    if (!saved) throw conflict('Bạn đã chấm công buổi này rồi.');
 
-    // Dữ liệu lương ⇒ luôn có vết nhật ký.
     audit(req, {
       action: 'create',
       entity: 'timesheets',
       entityId: saved.id,
-      summary: `Check-in ${label === 'late' ? `trễ ${lateMinutes} phút` : 'đúng giờ'} — lớp ${sch.class_name}, ` +
-               `${sch.school_name} ngày ${vnDate(sch.session_date)}${gpsFlagged ? ' (ngoài bán kính GPS)' : ''}.`,
+      summary: `Chấm công vào ${SESSION_VN[session]} — ${school.name} ngày ${vnDate(date)}, `
+        + `${label === 'late' ? `trễ ${lateMinutes} phút` : 'đúng giờ'}`
+        + `${gpsFlagged ? ' (ngoài bán kính GPS)' : ''}.`,
       after: saved,
     });
 
-    // Ngoài bán kính ⇒ báo Phòng chuyên môn phụ trách trường vào duyệt.
     if (gpsFlagged) {
-      notifySchoolManagers(sch.school_id, {
+      notifySchoolManagers(schoolId, {
         kind: 'timesheet_flagged',
         title: 'Chấm công ngoài bán kính GPS',
-        body: `${user.full_name} check-in cách trường ${sch.school_name} ${distance}m ` +
-              `(cho phép ${sch.gps_radius_m}m) — lớp ${sch.class_name} ngày ${vnDate(sch.session_date)}.`,
+        body: `${user.full_name} chấm công vào cách trường ${school.name} ${distance}m `
+          + `(cho phép ${school.gps_radius_m}m) — ${SESSION_VN[session]} ngày ${vnDate(date)}.`,
         link: '/cham-cong?duyet=1',
         refId: saved.id,
       }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo timesheet_flagged'));
     }
 
     reply.code(201);
-    return { ...saved, distance_m: saved.check_in_distance_m, linked: !!linkedFirst };
+    return { ...saved, distance_m: saved.check_in_distance_m, planned };
   });
 
   /* =========================================================================
-   * POST /api/timesheets/check-out — multipart
+   * POST /api/timesheets/check-out — multipart. CHẤM CÔNG CUỐI BUỔI.
+   * Kèm kiểm thiết bị cuối buổi; có hỏng thì tự mở phiếu báo hỏng.
    * ======================================================================= */
   app.post('/api/timesheets/check-out', { preHandler: requirePerm('timesheet.self') }, async (req) => {
     const user = req.user;
     const { fields, files } = await consumeMultipart(req, { userId: user.id });
 
-    const scheduleId = uuid(fields.schedule_id, 'schedule_id', { required: true });
-    const sch = await assertScheduleAccess(user, scheduleId);
-    const role = roleInSchedule(user, sch);
-    if (!role) throw forbidden('Bạn không được phân công buổi này.');
-    await tagFilesSchool(files, sch.school_id);
+    const schoolId = uuid(fields.school_id, 'school_id', { required: true });
+    const school = await assertSchoolAccess(user, schoolId);
+    await tagFilesSchool(files, schoolId);
 
-    // 1. Phải ĐÃ check-in và CHƯA check-out.
+    const date = dateStr(fields.date, 'date') || vnToday();
+    const session = enumOf(fields.session, 'session', SESSIONS) || vnSessionNow();
+
     const ts = await one(
-      'select * from timesheets where schedule_id = $1 and user_id = $2',
-      [sch.id, user.id]
+      `select * from timesheets
+        where user_id = $1 and school_id = $2 and work_date = $3 and work_session = $4`,
+      [user.id, schoolId, date, session]
     );
-    if (!ts || !ts.check_in_at) throw unprocessable('Bạn chưa check-in buổi này.');
-    if (ts.check_out_at) throw conflict('Bạn đã check-out buổi này rồi.');
+    if (!ts || !ts.check_in_at) throw unprocessable(`Bạn chưa chấm công vào ${SESSION_VN[session]} hôm nay.`);
+    if (ts.check_out_at) throw conflict(`Bạn đã chấm công ra ${SESSION_VN[session]} rồi.`);
 
-    // 2. Ép kiểu dữ liệu gửi lên.
     const deviceOk = bool(fields.device_ok, 'device_ok', { required: true });
     const damageNote = str(fields.damage_note, 'damage_note', { max: 2000 });
     const note = str(fields.note, 'note', { max: 2000 });
     const lat = num(fields.lat, 'lat', { min: -90, max: 90 });
     const lng = num(fields.lng, 'lng', { min: -180, max: 180 });
     const hasCoord = isValidCoord(lat, lng);
-    const distance = hasCoord && isValidCoord(sch.school_lat, sch.school_lng)
-      ? distanceMeters(lat, lng, sch.school_lat, sch.school_lng)
+    const distance = hasCoord && isValidCoord(school.lat, school.lng)
+      ? distanceMeters(lat, lng, school.lat, school.lng)
       : null;
 
-    // 3. Thiết bị hỏng ⇒ bắt buộc mô tả + ảnh minh chứng.
     const damagePhotos = files.damage_photo || [];
     if (deviceOk === false && (!damageNote || !damagePhotos.length)) {
       throw unprocessable('Có thiết bị hỏng: bắt buộc mô tả và chụp ảnh minh chứng.');
     }
 
-    // 4. Số phút làm việc thực tế theo giờ server.
     const checkOutAt = new Date();
     const minutes = workMinutes(ts.check_in_at, checkOutAt);
     const clientTime = isoTime(fields.client_time, 'client_time');
@@ -389,7 +410,17 @@ export default async function routes(app) {
     const syncedLate = !!(queuedAt && checkOutAt.getTime() - new Date(queuedAt).getTime() > SYNC_LATE_MS);
     const photoId = files.photo?.[0]?.id || null;
 
-    // Cập nhật chấm công + tạo sự cố thiết bị + đóng buổi — trọn gói một giao dịch.
+    // Phòng STEM của tiết đầu buổi — để phiếu báo hỏng chỉ đúng chỗ.
+    const room = await one(
+      `select s.room_id, r.name as room_name from schedules s
+         left join stem_rooms r on r.id = s.room_id
+        where s.school_id = $1 and s.session_date = $2 and s.status <> 'cancelled'
+          and (s.teacher_id = $3 or s.assistant_id = $3)
+          and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session = $4
+        order by s.start_time limit 1`,
+      [schoolId, date, user.id, session]
+    );
+
     const { saved, issue } = await tx(async (c) => {
       const r = await c.query(
         `update timesheets set
@@ -406,7 +437,7 @@ export default async function routes(app) {
          minutes, clientTime, queuedAt, syncedLate, ts.id]
       );
       const savedRow = r.rows[0];
-      if (!savedRow) throw conflict('Bạn đã check-out buổi này rồi.'); // race hai request song song
+      if (!savedRow) throw conflict('Bạn đã chấm công ra buổi này rồi.');
 
       let issueRow = null;
       if (deviceOk === false) {
@@ -415,7 +446,8 @@ export default async function routes(app) {
              (school_id, room_id, device_name, description, priority, status, source, source_id, reported_by)
            values ($1, $2, $3, $4, 'high', 'new', 'checkout', $5, $6)
            returning *`,
-          [sch.school_id, sch.room_id, `Thiết bị phòng ${sch.room_name || sch.class_name}`,
+          [schoolId, room?.room_id ?? null,
+           `Thiết bị ${room?.room_name ? `phòng ${room.room_name}` : `${school.name}`}`,
            damageNote, savedRow.id, user.id]
         );
         issueRow = ir.rows[0];
@@ -426,9 +458,6 @@ export default async function routes(app) {
           );
         }
       }
-
-      // Buổi đã dạy xong (không đụng tới buổi đã huỷ).
-      await c.query(`update schedules set status = 'done' where id = $1 and status = 'scheduled'`, [sch.id]);
       return { saved: savedRow, issue: issueRow };
     });
 
@@ -436,17 +465,17 @@ export default async function routes(app) {
       action: 'update',
       entity: 'timesheets',
       entityId: saved.id,
-      summary: `Check-out lớp ${sch.class_name} — ${sch.school_name} ngày ${vnDate(sch.session_date)} ` +
-               `(${minutes} phút làm việc)${deviceOk === false ? ', có thiết bị hỏng' : ''}.`,
+      summary: `Chấm công ra ${SESSION_VN[session]} — ${school.name} ngày ${vnDate(date)} `
+        + `(${minutes} phút làm việc)${deviceOk === false ? ', có thiết bị hỏng' : ''}.`,
       before: ts,
       after: saved,
     });
 
     if (issue) {
-      notifySchoolManagers(sch.school_id, {
+      notifySchoolManagers(schoolId, {
         kind: 'device_issue',
-        title: 'Thiết bị hỏng sau buổi dạy',
-        body: `${user.full_name} báo hỏng thiết bị tại ${sch.school_name} — lớp ${sch.class_name}: ${damageNote}`,
+        title: 'Thiết bị hỏng cuối buổi',
+        body: `${user.full_name} báo hỏng thiết bị tại ${school.name}: ${damageNote}`,
         link: '/thiet-bi',
         refId: issue.id,
       }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo device_issue'));
@@ -469,12 +498,9 @@ export default async function routes(app) {
     }
 
     const before = await one(
-      `select t.*, s.school_id, s.session_date, sc.name as school_name,
-              c.name as class_name, u.full_name as user_name
+      `select t.*, sc.name as school_name, u.full_name as user_name
          from timesheets t
-         join schedules s on s.id = t.schedule_id
-         join schools sc on sc.id = s.school_id
-         join classes c on c.id = s.class_id
+         join schools sc on sc.id = t.school_id
          join users u on u.id = t.user_id
         where t.id = $1`,
       [id]
@@ -500,7 +526,7 @@ export default async function routes(app) {
       entity: 'timesheets',
       entityId: id,
       summary: `${decision === 'approved' ? 'Duyệt' : 'Từ chối'} chấm công của ${before.user_name} — ` +
-               `lớp ${before.class_name}, ${before.school_name} ngày ${vnDate(before.session_date)}.`,
+               `${SESSION_VN[before.work_session]} ${before.school_name} ngày ${vnDate(before.work_date)}.`,
       before: {
         approval_status: before.approval_status,
         approved_by: before.approved_by,
@@ -520,8 +546,8 @@ export default async function routes(app) {
       kind: 'timesheet_reviewed',
       title: decision === 'approved' ? 'Chấm công đã được duyệt' : 'Chấm công bị từ chối',
       body: decision === 'approved'
-        ? `Chấm công buổi ${before.class_name} ngày ${vnDate(before.session_date)} đã được xác nhận.`
-        : `Chấm công buổi ${before.class_name} ngày ${vnDate(before.session_date)} bị từ chối — lý do: ${reason}`,
+        ? `Chấm công ${SESSION_VN[before.work_session]} ngày ${vnDate(before.work_date)} đã được xác nhận.`
+        : `Chấm công ${SESSION_VN[before.work_session]} ngày ${vnDate(before.work_date)} bị từ chối — lý do: ${reason}`,
       link: '/cham-cong',
       refId: id,
     }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo timesheet_reviewed'));
@@ -537,13 +563,10 @@ export default async function routes(app) {
     const b = req.body || {};
 
     const before = await one(
-      `select t.*, u.full_name as user_name, s.session_date,
-              c.name as class_name, sc.name as school_name
+      `select t.*, u.full_name as user_name, sc.name as school_name
          from timesheets t
          join users u on u.id = t.user_id
-         join schedules s on s.id = t.schedule_id
-         join classes c on c.id = s.class_id
-         join schools sc on sc.id = s.school_id
+         join schools sc on sc.id = t.school_id
         where t.id = $1`,
       [id]
     );
@@ -586,8 +609,8 @@ export default async function routes(app) {
       action: 'update',
       entity: 'timesheets',
       entityId: id,
-      summary: `Sửa tay chấm công của ${before.user_name} — lớp ${before.class_name}, ` +
-               `${before.school_name} ngày ${vnDate(before.session_date)}.`,
+      summary: `Sửa tay chấm công của ${before.user_name} — ${SESSION_VN[before.work_session]}, ` +
+               `${before.school_name} ngày ${vnDate(before.work_date)}.`,
       before,
       after: saved,
     });

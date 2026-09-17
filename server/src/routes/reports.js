@@ -29,7 +29,6 @@ const YES = 'Có';
 const DASH = '—';
 
 /** Vai trò trong buổi (class_role) — LABELS của xlsx.js không có map này. */
-const SESSION_ROLE = { teacher: 'Giáo viên', assistant: 'Trợ giảng' };
 
 /**
  * Mệnh đề phạm vi trường + lọc school_id client gửi (nếu có).
@@ -50,45 +49,55 @@ async function schoolScope(user, col, next, schoolId) {
 
 /* ------------------- Cột & dòng dùng chung cho chấm công ------------------- */
 
+const SESSION_VN = { morning: 'Sáng', afternoon: 'Chiều' };
+
+/**
+ * Bảng chấm công — MỘT DÒNG MỖI BUỔI (sáng/chiều) của mỗi người, không phải mỗi
+ * tiết. Giáo viên đến trường chấm công vào, ra về chấm công ra; kiểm thiết bị
+ * đầu và cuối buổi nằm luôn ở đây.
+ */
 const TIMESHEET_COLUMNS = [
   { header: 'Ngày', key: 'date', width: 12, align: 'center' },
+  { header: 'Buổi', key: 'session', width: 8, align: 'center' },
   { header: 'Trường', key: 'school', width: 26 },
-  { header: 'Lớp', key: 'clazz', width: 10, align: 'center' },
   { header: 'Họ tên', key: 'name', width: 24 },
-  { header: 'Vai trò buổi', key: 'role', width: 12, align: 'center' },
-  { header: 'Giờ theo lịch', key: 'planned', width: 13, align: 'center' },
-  { header: 'Check-in', key: 'check_in', width: 10, align: 'center' },
-  { header: 'Check-out', key: 'check_out', width: 10, align: 'center' },
+  { header: 'Giờ phải có mặt', key: 'planned', width: 13, align: 'center' },
+  { header: 'Chấm công vào', key: 'check_in', width: 12, align: 'center' },
+  { header: 'Chấm công ra', key: 'check_out', width: 12, align: 'center' },
   { header: 'Nhãn', key: 'label', width: 10, align: 'center' },
   { header: 'Phút trễ', key: 'late', width: 9, align: 'right' },
   { header: 'Phút làm việc', key: 'work', width: 12, align: 'right' },
+  { header: 'Tiết theo lịch', key: 'periods', width: 11, align: 'right' },
+  { header: 'Thiết bị đầu buổi', key: 'dev_in', width: 12, align: 'right' },
+  { header: 'Thiết bị cuối buổi', key: 'dev_out', width: 13, align: 'center' },
   { header: 'GPS lệch', key: 'gps', width: 9, align: 'center' },
   { header: 'Duyệt', key: 'approval', width: 11, align: 'center' },
-  { header: 'Điểm danh', key: 'attendance', width: 10, align: 'center' },
 ];
 
 function timesheetRow(v) {
   return {
-    date: formatVNDate(v.session_date),
+    date: formatVNDate(v.work_date),
+    session: SESSION_VN[v.work_session] || '',
     school: v.school_name,
-    clazz: v.class_name,
     name: v.full_name,
-    role: SESSION_ROLE[v.session_role] || '',
-    planned: `${hhmm(v.start_time)}–${hhmm(v.end_time)}`,
+    planned: v.planned_start_time ? hhmm(v.planned_start_time) : DASH,
     check_in: formatVNTime(v.check_in_at),
     check_out: formatVNTime(v.check_out_at),
     label: LABELS.label[v.label] || '',
     late: v.late_minutes ?? 0,
     work: v.work_minutes ?? 0,
+    periods: v.planned_periods ?? 0,
+    dev_in: v.check_in_device_count ?? DASH,
+    dev_out: v.device_ok === null || v.device_ok === undefined
+      ? DASH : (v.device_ok ? 'Nguyên vẹn' : 'Có hỏng'),
     gps: v.gps_flagged ? YES : DASH,
     approval: LABELS.approval[v.approval_status] || DASH,
-    attendance: v.attendance_done ? 'Đã' : 'Chưa',
   };
 }
 
-/** Chi tiết chấm công từ v_timesheet_reconcile — dùng cho timesheets.xlsx và sheet 2 của payroll.xlsx. */
-async function fetchTimesheetDetail(user, { from, to, schoolId, classId, userId }) {
-  const where = ['v.session_date between $1 and $2'];
+/** Chấm công theo buổi — dùng cho timesheets.xlsx và sheet "Chi tiết" của payroll.xlsx. */
+async function fetchTimesheetDetail(user, { from, to, schoolId, userId }) {
+  const where = ['v.work_date between $1 and $2'];
   const params = [from, to];
   let next = 3;
 
@@ -98,13 +107,12 @@ async function fetchTimesheetDetail(user, { from, to, schoolId, classId, userId 
   next = sf.next;
 
   if (schoolId) { where.push(`v.school_id = $${next}`); params.push(schoolId); next += 1; }
-  if (classId)  { where.push(`v.class_id = $${next}`);  params.push(classId);  next += 1; }
   if (userId)   { where.push(`v.user_id = $${next}`);   params.push(userId);   next += 1; }
 
   return rows(
-    `select v.* from v_timesheet_reconcile v
+    `select v.* from v_work_shifts v
       where ${where.join(' and ')}
-      order by v.session_date, v.school_name, v.start_time, v.full_name`,
+      order by v.work_date, v.work_session, v.school_name, v.full_name`,
     params
   );
 }
@@ -244,10 +252,9 @@ export default async function routes(app) {
           `select count(*) filter (where v.check_in_at is not null)::int as checked_in,
                   count(*) filter (where v.label = 'ontime')::int as ontime,
                   count(*) filter (where v.label = 'late')::int as late,
-                  count(*) filter (where v.label = 'absent'
-                                     and (v.session_date + v.end_time) <= ${VN_NOW})::int as absent
-             from v_timesheet_reconcile v
-            where v.session_date = $1 and ${s2.sql}`,
+                  count(*) filter (where v.check_in_at is null)::int as absent
+             from v_work_shifts v
+            where v.work_date = $1 and ${s2.sql}`,
           [today, ...s2.params]
         ),
         // Sự cố thiết bị chưa khắc phục, đếm theo trạng thái
@@ -374,13 +381,12 @@ export default async function routes(app) {
         `select count(*)::int as sessions,
                 count(*) filter (where v.label = 'ontime')::int as ontime,
                 count(*) filter (where v.label = 'late')::int as late,
-                count(*) filter (where v.label = 'absent'
-                                   and (v.session_date + v.end_time) <= ${VN_NOW})::int as absent,
+                count(*) filter (where v.check_in_at is null)::int as absent,
                 coalesce(sum(v.work_minutes), 0)::int as work_minutes
-           from v_timesheet_reconcile v
+           from v_work_shifts v
           where v.user_id = $1
-            and v.session_date >= date_trunc('month', $2::date)::date
-            and v.session_date <= (date_trunc('month', $2::date) + interval '1 month - 1 day')::date`,
+            and v.work_date >= date_trunc('month', $2::date)::date
+            and v.work_date <= (date_trunc('month', $2::date) + interval '1 month - 1 day')::date`,
         [me, today]
       ),
       one(
@@ -425,7 +431,8 @@ export default async function routes(app) {
       assertPerm(req.user, 'export.scope'); // xuất người khác / toàn phạm vi
     }
 
-    const data = await fetchTimesheetDetail(req.user, { from, to, schoolId, classId, userId });
+    const data = await fetchTimesheetDetail(req.user, { from, to, schoolId, userId });
+    void classId;   // chấm công theo buổi không gắn với lớp
 
     if (!isPreview(reply)) audit(req, {
       action: 'export',
@@ -435,7 +442,7 @@ export default async function routes(app) {
 
     return sendXlsx(reply, {
       fileName: `bang-cham-cong-${from}-${to}`,
-      title: 'BẢNG CHẤM CÔNG',
+      title: 'BẢNG CHẤM CÔNG THEO BUỔI',
       subtitle: `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`,
       columns: TIMESHEET_COLUMNS,
       rows: data.map(timesheetRow),
@@ -451,7 +458,7 @@ export default async function routes(app) {
     const classId = uuid(req.query.class_id, 'class_id');
     const userId = uuid(req.query.user_id, 'user_id');
 
-    const where = ['v.session_date between $1 and $2'];
+    const where = ['v.work_date between $1 and $2'];
     const params = [from, to];
     let next = 3;
     const sf = await schoolFilter(req.user, 'v.school_id', next);
@@ -459,28 +466,29 @@ export default async function routes(app) {
     params.push(...sf.params);
     next = sf.next;
     if (schoolId) { where.push(`v.school_id = $${next}`); params.push(schoolId); next += 1; }
-    if (classId)  { where.push(`v.class_id = $${next}`);  params.push(classId);  next += 1; }
     if (userId)   { where.push(`v.user_id = $${next}`);   params.push(userId);   next += 1; }
+    void classId;   // lọc theo lớp không còn nghĩa với chấm công theo buổi
 
     const [summary, detail] = await Promise.all([
       rows(
         `select v.user_id, v.full_name, u.email, u.role as account_role,
-                count(*)::int as total_sessions,
-                count(*) filter (where v.check_in_at is not null)::int as taught,
+                count(*)::int as total_shifts,
+                count(*) filter (where v.check_in_at is not null)::int as worked,
+                count(*) filter (where v.check_out_at is null and v.check_in_at is not null)::int as no_checkout,
                 count(*) filter (where v.label = 'ontime')::int as ontime,
                 count(*) filter (where v.label = 'late')::int as late,
-                count(*) filter (where v.label = 'absent')::int as absent,
+                coalesce(sum(v.planned_periods), 0)::int as periods,
                 coalesce(sum(v.late_minutes), 0)::int as late_minutes,
                 coalesce(sum(v.work_minutes), 0)::int as work_minutes,
                 count(*) filter (where v.gps_flagged and v.approval_status = 'pending')::int as gps_pending
-           from v_timesheet_reconcile v
+           from v_work_shifts v
            join users u on u.id = v.user_id
           where ${where.join(' and ')}
           group by v.user_id, v.full_name, u.email, u.role
           order by v.full_name`,
         params
       ),
-      fetchTimesheetDetail(req.user, { from, to, schoolId, classId, userId }),
+      fetchTimesheetDetail(req.user, { from, to, schoolId, userId }),
     ]);
 
     const subtitle = `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`;
@@ -502,11 +510,12 @@ export default async function routes(app) {
             { header: 'Họ tên', key: 'name', width: 24 },
             { header: 'Email', key: 'email', width: 26 },
             { header: 'Vai trò', key: 'role', width: 15, align: 'center' },
-            { header: 'Tổng buổi theo lịch', key: 'total', width: 12, align: 'right' },
-            { header: 'Buổi dạy (có check-in)', key: 'taught', width: 12, align: 'right' },
+            { header: 'Số buổi công', key: 'shifts', width: 11, align: 'right' },
+            { header: 'Buổi có chấm công vào', key: 'worked', width: 13, align: 'right' },
+            { header: 'Thiếu chấm công ra', key: 'no_checkout', width: 12, align: 'right' },
             { header: 'Đúng giờ', key: 'ontime', width: 10, align: 'right' },
             { header: 'Trễ', key: 'late', width: 8, align: 'right' },
-            { header: 'Vắng', key: 'absent', width: 8, align: 'right' },
+            { header: 'Tổng tiết theo lịch', key: 'periods', width: 12, align: 'right' },
             { header: 'Tổng phút trễ', key: 'late_minutes', width: 11, align: 'right' },
             { header: 'Tổng phút làm việc', key: 'work_minutes', width: 13, align: 'right' },
             { header: 'Buổi GPS lệch chờ duyệt', key: 'gps_pending', width: 13, align: 'right' },
@@ -515,11 +524,12 @@ export default async function routes(app) {
             name: r.full_name,
             email: r.email,
             role: LABELS.role[r.account_role] || r.account_role,
-            total: r.total_sessions,
-            taught: r.taught,
+            shifts: r.total_shifts,
+            worked: r.worked,
+            no_checkout: r.no_checkout,
             ontime: r.ontime,
             late: r.late,
-            absent: r.absent,
+            periods: r.periods,
             late_minutes: r.late_minutes,
             work_minutes: r.work_minutes,
             gps_pending: r.gps_pending,
@@ -527,7 +537,7 @@ export default async function routes(app) {
         },
         {
           name: 'Chi tiết',
-          title: 'CHI TIẾT CHẤM CÔNG',
+          title: 'CHI TIẾT CHẤM CÔNG THEO BUỔI',
           subtitle,
           columns: TIMESHEET_COLUMNS,
           rows: detail.map(timesheetRow),
@@ -560,8 +570,8 @@ export default async function routes(app) {
     if (userId)   { where.push(`a.marked_by = $${next}`); params.push(userId);   next += 1; }
 
     const data = await rows(
-      `select s.session_date, s.start_time, sc.name as school_name, c.name as class_name,
-              u.full_name as marked_by_name,
+      `select s.session_date, s.start_time, s.period, sc.name as school_name, c.name as class_name,
+              u.full_name as marked_by_name, a.checked_in_at, a.gps_flagged,
               a.roster_size, a.present_count, a.note, a.synced_late
          from attendance a
          join schedules s on s.id = a.schedule_id
@@ -585,23 +595,29 @@ export default async function routes(app) {
       subtitle: `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`,
       columns: [
         { header: 'Ngày', key: 'date', width: 12, align: 'center' },
+        { header: 'Tiết', key: 'period', width: 7, align: 'center' },
         { header: 'Trường', key: 'school', width: 26 },
         { header: 'Lớp', key: 'clazz', width: 10, align: 'center' },
         { header: 'Người điểm danh', key: 'marker', width: 22 },
+        { header: 'Giờ check tại lớp', key: 'class_in', width: 13, align: 'center' },
         { header: 'Sĩ số chuẩn', key: 'roster', width: 10, align: 'right' },
         { header: 'Có mặt', key: 'present', width: 9, align: 'right' },
         { header: 'Vắng', key: 'absent', width: 8, align: 'right' },
+        { header: 'GPS lệch', key: 'gps', width: 9, align: 'center' },
         { header: 'Ghi chú', key: 'note', width: 30, wrap: true },
         { header: 'Đồng bộ trễ', key: 'late_sync', width: 10, align: 'center' },
       ],
       rows: data.map((a) => ({
         date: formatVNDate(a.session_date),
+        period: a.period ?? hhmm(a.start_time),
         school: a.school_name,
         clazz: a.class_name,
         marker: a.marked_by_name,
+        class_in: formatVNTime(a.checked_in_at),
         roster: a.roster_size,
         present: a.present_count,
         absent: Math.max(0, (a.roster_size ?? 0) - (a.present_count ?? 0)),
+        gps: a.gps_flagged ? YES : DASH,
         note: a.note || '',
         late_sync: a.synced_late ? YES : DASH,
       })),
