@@ -57,9 +57,13 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
 | GET/POST | `/api/schools` | GET: mọi vai trò (đã lọc phạm vi) · POST: admin, manager | |
-| GET/PATCH/DELETE | `/api/schools/:id` | PATCH/DELETE: admin, manager | Gồm `lat/lng/gps_radius_m/grace_minutes/device_slots` |
+| GET/PATCH | `/api/schools/:id` | PATCH: admin, manager | Gồm `lat/lng/gps_radius_m/grace_minutes/device_slots`; `is_active` **chỉ admin** (ngừng / khôi phục) |
+| GET | `/api/schools/:id/delete-impact` | admin, manager | `{can_hard_delete, blockers[], cleanup[], unlinked[]}` — xoá hẳn được không và mất những gì |
+| DELETE | `/api/schools/:id` | **chỉ admin** | Mặc định ngừng sử dụng (`is_active=false`), khôi phục được; `?hard=1` xoá hẳn — **409** nếu đã có buổi dạy / kiểm tra thiết bị / báo hỏng |
 | GET/POST | `/api/classes` | POST: admin, manager | `?school_id=&level=` |
-| GET/PATCH/DELETE | `/api/classes/:id` | | |
+| GET/PATCH | `/api/classes/:id` | PATCH: admin, manager | `is_active` để ngừng / khôi phục lớp |
+| GET | `/api/classes/:id/delete-impact` | admin, manager | Như trên, cho lớp |
+| DELETE | `/api/classes/:id` | admin, manager | Mặc định ngừng sử dụng, khôi phục được; `?hard=1` xoá hẳn — **409** nếu lớp đã có buổi dạy |
 | PUT | `/api/classes/:id/assignments` | admin, manager | `{assignments:[{user_id, role}]}` |
 | GET/POST | `/api/rooms` | POST: admin, manager | `?school_id=` |
 | GET/PATCH/DELETE | `/api/rooms/:id` | | |
@@ -71,6 +75,13 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 Các endpoint nhập bảng trả `{created, items[], skipped:[{row, reason}]}` — dòng lỗi (trùng mã/tên,
 thiếu thông tin, ngoài phạm vi…) bị bỏ qua kèm lý do, các dòng khác vẫn được tạo.
 Lớp: không gửi `level` thì server tự suy từ `grade` (1-5 Tiểu học · 6-9 THCS · 10-12 THPT) — áp dụng cả `POST /api/classes`.
+
+**Xoá trường / lớp — hai mức, cố ý tách bạch.** Mọi bảng nghiệp vụ trỏ về `schools`/`classes`
+bằng khoá ngoại `on delete cascade`, nên xoá hẳn một trường đang vận hành sẽ kéo theo cả lịch
+dạy, chấm công và điểm danh. Vì vậy `?hard=1` chỉ chạy khi `delete-impact` không còn
+`blockers` — tức bản ghi chưa ai dùng tới, đúng trường hợp NHẬP SAI. Trường/lớp đã đi vào vận
+hành chỉ ngừng sử dụng được (`is_active=false`), giữ nguyên lịch sử và bật lại bất cứ lúc nào.
+Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 
 ## 4. Lịch dạy — `/api/schedules`
 

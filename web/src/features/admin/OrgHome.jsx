@@ -34,9 +34,10 @@ function numOrNull(v) {
 /* -------------------------------- Thẻ trường ------------------------------- */
 function SchoolCard({ school, onOpen }) {
   const hasGps = school.lat != null && school.lng != null;
+  const off = school.is_active === false;
   return (
     <button type="button" onClick={onOpen}
-      className="card w-full text-left p-4 hover:border-brand-300 hover:shadow-card transition">
+      className={`card w-full text-left p-4 hover:border-brand-300 hover:shadow-card transition${off ? ' opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-bold text-[15px] text-ink truncate">{school.name}</div>
@@ -44,9 +45,11 @@ function SchoolCard({ school, onOpen }) {
             Mã: <span className="font-semibold text-brand-700">{school.code}</span>
           </div>
         </div>
-        {hasGps
-          ? <Badge tone="approved">📍 GPS đã cấu hình</Badge>
-          : <Badge tone="pending">📍 Chưa có toạ độ GPS</Badge>}
+        {off
+          ? <Badge tone="rejected">🚫 Đã ngừng sử dụng</Badge>
+          : hasGps
+            ? <Badge tone="approved">📍 GPS đã cấu hình</Badge>
+            : <Badge tone="pending">📍 Chưa có toạ độ GPS</Badge>}
       </div>
       {(school.address || school.province) && (
         <div className="text-[13px] text-ink-soft mt-2 truncate">
@@ -191,16 +194,18 @@ export default function OrgHome() {
   const [addOpen, setAddOpen] = useState(false);
   const [schoolBatchOpen, setSchoolBatchOpen] = useState(false);
   const [classBatchOpen, setClassBatchOpen] = useState(false);
+  const [showOff, setShowOff] = useState(false);   // hiện cả trường đã ngừng
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await api.get('/api/schools', { q, page, limit: LIMIT });
+      const res = await api.get('/api/schools',
+        showOff ? { q, page, limit: LIMIT } : { q, page, limit: LIMIT, is_active: true });
       setData(res);
     } catch (e) {
       setError(e);
     }
-  }, [q, page]);
+  }, [q, page, showOff]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -226,8 +231,13 @@ export default function OrgHome() {
         value={q}
         onChange={(v) => { setQ(v); setPage(1); }}
         placeholder="Tìm theo tên hoặc mã trường…"
-        className="mb-4"
+        className="mb-2.5"
       />
+      <label className="flex items-center gap-2 text-[13px] text-ink-muted mb-4 cursor-pointer w-fit">
+        <input type="checkbox" className="accent-brand-600" checked={showOff}
+          onChange={(e) => { setShowOff(e.target.checked); setPage(1); }} />
+        Hiện cả trường đã ngừng sử dụng
+      </label>
 
       {error && <ErrorBox error={error} onRetry={load} />}
       {!error && data === null && <PageLoading />}

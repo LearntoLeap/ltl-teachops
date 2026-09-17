@@ -12,6 +12,7 @@ import { audit } from '../lib/audit.js';
 import { conflict, badRequest, notFound, forbidden } from '../lib/errors.js';
 import { str, num, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
 import { sendXlsx } from '../lib/xlsx.js';
+import { schoolDeleteImpact, listOf } from '../lib/orgDelete.js';
 
 const MAX_BATCH_ROWS = 300;
 
@@ -246,6 +247,11 @@ export default async function routes(app) {
       params.push(slots);
       sets.push(`device_slots = $${params.length}::device_slot[]`);
     }
+    if ('is_active' in b) {
+      // Ngừng/khôi phục hoạt động là quyết định vận hành ⇒ chỉ Quản trị viên.
+      if (req.user.role !== 'admin') throw forbidden('Chỉ Quản trị viên được ngừng hoặc khôi phục trường.');
+      set('is_active', bool(b.is_active, 'is_active', { required: true }));
+    }
     if ('contact_name' in b) set('contact_name', str(b.contact_name, 'contact_name', { max: 200 }));
     if ('contact_phone' in b) set('contact_phone', str(b.contact_phone, 'contact_phone', { max: 30 }));
     if ('checkout_grace_minutes' in b) {
@@ -278,22 +284,60 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
-   * DELETE /api/schools/:id — chỉ admin. Soft delete: is_active = false.
+   * GET /api/schools/:id/delete-impact — xoá hẳn được không, và mất những gì.
+   *
+   * blockers = dữ liệu vận hành sẽ MẤT THEO nếu xoá (khoá ngoại on delete cascade)
+   * ⇒ còn một mục nào thì chặn, chỉ cho "ngừng sử dụng".
+   * cleanup  = cấu hình đi kèm, xoá cùng là đúng ý (lớp rỗng, phòng, thiết bị…).
+   * ---------------------------------------------------------------------- */
+  app.get('/api/schools/:id/delete-impact', { preHandler: requirePerm('org.manage') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const school = await assertSchoolAccess(req.user, id);
+    return { ...(await schoolDeleteImpact(id)), school };
+  });
+
+  /* ------------------------------------------------------------------------
+   * DELETE /api/schools/:id — chỉ admin.
+   * Mặc định NGỪNG SỬ DỤNG (is_active = false), khôi phục được bất cứ lúc nào.
+   * ?hard=1 — XOÁ HẲN khỏi cơ sở dữ liệu, chỉ khi trường chưa phát sinh dữ liệu
+   * vận hành (buổi dạy, kiểm tra thiết bị, báo hỏng). Dùng cho trường nhập sai.
    * ---------------------------------------------------------------------- */
   app.delete('/api/schools/:id', { preHandler: requireRole('admin') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
+    const hard = bool(req.query.hard, 'hard', { def: false });
     const before = await one('select * from schools where id = $1', [id]);
     if (!before) throw notFound('Không tìm thấy trường.');
 
-    const after = await one('update schools set is_active = false where id = $1 returning *', [id]);
+    if (!hard) {
+      const after = await one('update schools set is_active = false where id = $1 returning *', [id]);
+      audit(req, {
+        action: 'delete',
+        entity: 'schools',
+        entityId: id,
+        summary: `Ngừng sử dụng trường ${before.code} — ${before.name}`,
+        before,
+        after,
+      });
+      return { ok: true, mode: 'disabled' };
+    }
+
+    const impact = await schoolDeleteImpact(id);
+    if (impact.blockers.length) {
+      throw conflict(
+        `Không xoá hẳn được trường "${before.name}" vì đã có ${listOf(impact.blockers)}. `
+        + 'Hãy dùng "Ngừng sử dụng" để ẩn trường mà vẫn giữ nguyên dữ liệu lịch sử.'
+      );
+    }
+
+    await one('delete from schools where id = $1 returning id', [id]);
     audit(req, {
       action: 'delete',
       entity: 'schools',
       entityId: id,
-      summary: `Vô hiệu hoá trường ${before.code} — ${before.name}`,
+      summary: `XOÁ HẲN trường ${before.code} — ${before.name}`,
       before,
-      after,
+      after: null,
     });
-    return { ok: true };
+    return { ok: true, mode: 'deleted', cleanup: impact.cleanup };
   });
 }

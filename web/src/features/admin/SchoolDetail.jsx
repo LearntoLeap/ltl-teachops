@@ -11,6 +11,7 @@ import { useAuth } from '../../lib/auth.jsx';
 import { LABEL, fmtNumber } from '../../lib/format.js';
 import { getPosition } from '../../lib/gps.js';
 import { useToast } from '../../components/Toast.jsx';
+import DeleteOrgSheet from './DeleteOrgSheet.jsx';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
@@ -115,16 +116,17 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
     }
   };
 
-  const disable = async () => {
+  // Bật lại trường đã ngừng — cùng một chỗ với nút xoá để khỏi đi tìm.
+  const restore = async () => {
     setDisabling(true);
     try {
-      await api.del(`/api/schools/${school.id}`);
-      toast.ok('Đã vô hiệu hoá trường.');
-      onDisabled();
+      await api.patch(`/api/schools/${school.id}`, { is_active: true });
+      toast.ok('Đã khôi phục trường.');
+      onSaved();
     } catch (e) {
       toast.fromError(e);
+    } finally {
       setDisabling(false);
-      setConfirmOff(false);
     }
   };
 
@@ -192,9 +194,22 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
         </div>
       </Field>
 
+      {school.is_active === false && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mt-4 text-[13px] text-amber-900">
+          Trường này đang <b>ngừng sử dụng</b> — không hiện khi xếp lịch, chấm công hay điểm danh.
+          Dữ liệu lịch sử vẫn còn nguyên.
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2.5 mt-4 pt-4 border-t border-line">
         {isAdmin ? (
-          <button className="btn-danger" onClick={() => setConfirmOff(true)}>Vô hiệu hoá trường</button>
+          school.is_active === false
+            ? (
+              <button className="btn-line" onClick={restore} disabled={disabling}>
+                {disabling ? <Spinner className="h-4 w-4" /> : '↩️ Khôi phục trường'}
+              </button>
+            )
+            : <button className="btn-danger" onClick={() => setConfirmOff(true)}>🗑 Xoá trường</button>
         ) : <span />}
         {canManage && (
           <button className="btn-primary" onClick={save} disabled={saving}>
@@ -203,15 +218,12 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
         )}
       </div>
 
-      <ConfirmSheet
+      <DeleteOrgSheet
         open={confirmOff}
+        kind="school"
+        item={school}
         onClose={() => setConfirmOff(false)}
-        onConfirm={disable}
-        title="Vô hiệu hoá trường"
-        danger
-        busy={disabling}
-        confirmLabel="Vô hiệu hoá"
-        message={`Trường "${school.name}" sẽ bị vô hiệu hoá: không còn hiển thị khi xếp lịch, chấm công hay điểm danh. Dữ liệu lịch sử vẫn được giữ nguyên. Bạn chắc chắn chứ?`}
+        onDone={(mode) => { setConfirmOff(false); onDisabled(mode); }}
       />
     </div>
   );
@@ -432,23 +444,29 @@ function ClassSheet({ cls, teachers, assistants, canManage, onClose, onSaved }) 
 }
 
 function ClassesTab({ schoolId, schoolName, canManage }) {
+  const toast = useToast();
   const [list, setList] = useState(null);
   const [error, setError] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [deleting, setDeleting] = useState(null);   // lớp đang chờ xác nhận xoá
+  const [restoring, setRestoring] = useState(null); // id lớp đang bật lại
+  const [showOff, setShowOff] = useState(false);    // hiện cả lớp đã ngừng
   const [teachers, setTeachers] = useState([]);
   const [assistants, setAssistants] = useState([]);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await api.get('/api/classes', { school_id: schoolId });
+      // Mặc định chỉ lấy lớp đang dùng; bật "Hiện lớp đã ngừng" thì lấy tất cả.
+      const res = await api.get('/api/classes',
+        showOff ? { school_id: schoolId } : { school_id: schoolId, is_active: true });
       setList(Array.isArray(res) ? res : res?.items || []);
     } catch (e) {
       setError(e);
     }
-  }, [schoolId]);
+  }, [schoolId, showOff]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -468,7 +486,13 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="text-[13px] text-ink-muted">{fmtNumber(list.length)} lớp</div>
+        <label className="flex items-center gap-2 text-[13px] text-ink-muted cursor-pointer">
+          <span>{fmtNumber(list.length)} lớp</span>
+          <span className="text-line">·</span>
+          <input type="checkbox" className="accent-brand-600" checked={showOff}
+            onChange={(e) => setShowOff(e.target.checked)} />
+          Hiện lớp đã ngừng
+        </label>
         {canManage && (
           <div className="flex gap-2">
             <button className="btn-line !py-2" onClick={() => setBatchOpen(true)}>▦ Nhập bảng lớp</button>
@@ -496,12 +520,19 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
                 <th className="th">Khối</th>
                 <th className="th">Sĩ số</th>
                 <th className="th">GV / TG phụ trách</th>
+                {canManage && <th className="th !w-[52px]"></th>}
               </tr>
             </thead>
             <tbody>
               {list.map((c) => (
-                <tr key={c.id} className="hover:bg-brand-50/40 cursor-pointer" onClick={() => setEditing(c)}>
-                  <td className="td font-semibold text-brand-800">{c.name}</td>
+                <tr key={c.id} className={`hover:bg-brand-50/40 cursor-pointer${c.is_active === false ? ' opacity-55' : ''}`}
+                  onClick={() => setEditing(c)}>
+                  <td className="td font-semibold text-brand-800">
+                    {c.name}
+                    {c.is_active === false && (
+                      <span className="ml-1.5 text-[11.5px] font-semibold text-amber-700">· đã ngừng</span>
+                    )}
+                  </td>
                   <td className="td">{LABEL.level[c.level] || c.level || '—'}</td>
                   <td className="td">{c.grade ?? '—'}</td>
                   <td className="td">{c.roster_size != null ? fmtNumber(c.roster_size) : '—'}</td>
@@ -519,6 +550,31 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
                         </div>
                       )}
                   </td>
+                  {canManage && (
+                    <td className="td !px-1 text-center" onClick={(e) => e.stopPropagation()}>
+                      {c.is_active === false ? (
+                        <button type="button" title="Khôi phục lớp này"
+                          className="h-8 w-8 rounded-lg text-[14px] text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                          disabled={restoring === c.id}
+                          onClick={async () => {
+                            setRestoring(c.id);
+                            try {
+                              await api.patch(`/api/classes/${c.id}`, { is_active: true });
+                              toast.ok(`Đã khôi phục lớp ${c.name}.`);
+                              load();
+                            } catch (err) {
+                              toast.fromError(err);
+                            } finally {
+                              setRestoring(null);
+                            }
+                          }}>↩️</button>
+                      ) : (
+                        <button type="button" title="Xoá lớp này"
+                          className="h-8 w-8 rounded-lg text-[14px] text-ink-muted hover:bg-rose-50 hover:text-rose-700"
+                          onClick={() => setDeleting(c)}>🗑</button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -553,6 +609,14 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
           onSaved={() => { setEditing(null); load(); }}
         />
       )}
+
+      <DeleteOrgSheet
+        open={!!deleting}
+        kind="class"
+        item={deleting}
+        onClose={() => setDeleting(null)}
+        onDone={() => { setDeleting(null); load(); }}
+      />
     </div>
   );
 }
@@ -777,7 +841,7 @@ export default function SchoolDetail() {
           canManage={canManage}
           isAdmin={auth.isAdmin}
           onSaved={load}
-          onDisabled={() => navigate('/to-chuc')}
+          onDisabled={(mode) => { if (mode === 'deleted') navigate('/to-chuc'); else load(); }}
         />
       )}
       {tab === 'classes' && <ClassesTab schoolId={schoolId} schoolName={school.name} canManage={canManage} />}

@@ -9,6 +9,7 @@ import { audit } from '../lib/audit.js';
 import { conflict, badRequest, unprocessable } from '../lib/errors.js';
 import { str, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
 import { sendXlsx } from '../lib/xlsx.js';
+import { classDeleteImpact, listOf } from '../lib/orgDelete.js';
 
 // Khớp enum edu_level trong 001_init.sql
 const LEVELS = ['primary', 'secondary', 'highschool'];
@@ -281,6 +282,8 @@ export default async function routes(app) {
       set('roster_size', int(b.roster_size, 'roster_size', { required: true, min: 0, max: 200 }));
     }
     if ('note' in b) set('note', str(b.note, 'note', { max: 1000 }));
+    // Ngừng/khôi phục lớp — dùng cho lớp tạm nghỉ hoặc nhập nhầm rồi bật lại.
+    if ('is_active' in b) set('is_active', bool(b.is_active, 'is_active', { required: true }));
 
     if (!sets.length) throw badRequest('Không có thông tin nào để cập nhật.');
 
@@ -301,21 +304,55 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
-   * DELETE /api/classes/:id — org.manage. Soft delete: is_active = false.
+   * GET /api/classes/:id/delete-impact — xoá hẳn được không, và mất những gì.
+   * ---------------------------------------------------------------------- */
+  app.get('/api/classes/:id/delete-impact', { preHandler: requirePerm('org.manage') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const cls = await assertClassAccess(req.user, id);
+    return { ...(await classDeleteImpact(id)), class: cls };
+  });
+
+  /* ------------------------------------------------------------------------
+   * DELETE /api/classes/:id — org.manage.
+   * Mặc định NGỪNG SỬ DỤNG (is_active = false), khôi phục được.
+   * ?hard=1 — XOÁ HẲN, chỉ khi lớp chưa có buổi dạy nào. Dùng cho lớp nhập sai.
    * ---------------------------------------------------------------------- */
   app.delete('/api/classes/:id', { preHandler: requirePerm('org.manage') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
+    const hard = bool(req.query.hard, 'hard', { def: false });
     const before = await assertClassAccess(req.user, id);
-    const after = await one('update classes set is_active = false where id = $1 returning *', [id]);
+
+    if (!hard) {
+      const after = await one('update classes set is_active = false where id = $1 returning *', [id]);
+      audit(req, {
+        action: 'delete',
+        entity: 'classes',
+        entityId: id,
+        summary: `Ngừng sử dụng lớp ${before.name}`,
+        before,
+        after,
+      });
+      return { ok: true, mode: 'disabled' };
+    }
+
+    const impact = await classDeleteImpact(id);
+    if (impact.blockers.length) {
+      throw conflict(
+        `Không xoá hẳn được lớp "${before.name}" vì đã có ${listOf(impact.blockers)}. `
+        + 'Hãy dùng "Ngừng sử dụng" để ẩn lớp mà vẫn giữ nguyên dữ liệu lịch sử.'
+      );
+    }
+
+    await one('delete from classes where id = $1 returning id', [id]);
     audit(req, {
       action: 'delete',
       entity: 'classes',
       entityId: id,
-      summary: `Vô hiệu hoá lớp ${before.name}`,
+      summary: `XOÁ HẲN lớp ${before.name}`,
       before,
-      after,
+      after: null,
     });
-    return { ok: true };
+    return { ok: true, mode: 'deleted', cleanup: impact.cleanup };
   });
 
   /* ------------------------------------------------------------------------
