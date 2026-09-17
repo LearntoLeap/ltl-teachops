@@ -496,6 +496,81 @@ export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * PUT /api/users/:id/schools — gán phạm vi trường cho manager (admin)
    * ---------------------------------------------------------------------- */
+  /* ------------------------------------------------------------------------
+   * GET /api/users/:id/classes — lớp đang phụ trách (admin, manager).
+   * ---------------------------------------------------------------------- */
+  app.get('/api/users/:id/classes', { preHandler: requirePerm('users.view') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    await getVisibleUser(req.user, id);
+    const items = await rows(
+      `select c.id, c.name, c.grade, c.level, c.is_active, ca.role,
+              c.school_id, s.name as school_name, s.code as school_code
+         from class_assignments ca
+         join classes c on c.id = ca.class_id
+         join schools s on s.id = c.school_id
+        where ca.user_id = $1
+        order by s.name, c.name`,
+      [id]
+    );
+    return { items };
+  });
+
+  /* ------------------------------------------------------------------------
+   * PUT /api/users/:id/classes — thay TOÀN BỘ lớp phụ trách (admin).
+   * Body: { class_ids: [] }. Vai trò trong lớp lấy theo vai trò tài khoản.
+   * ---------------------------------------------------------------------- */
+  app.put('/api/users/:id/classes', { preHandler: requirePerm('users.manage') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const user = await one('select id, full_name, role, is_active from users where id = $1', [id]);
+    if (!user) throw notFound('Không tìm thấy người dùng.');
+    if (user.role !== 'teacher' && user.role !== 'assistant') {
+      throw unprocessable('Chỉ gán lớp phụ trách cho tài khoản Giáo viên hoặc Trợ giảng.');
+    }
+
+    const classIds = [...new Set(uuidList((req.body || {}).class_ids, 'class_ids'))];
+    if (classIds.length) {
+      const found = await rows('select id, is_active, name from classes where id = any($1)', [classIds]);
+      if (found.length !== classIds.length) throw badRequest('Danh sách class_ids có lớp không tồn tại.');
+      const off = found.find((c) => !c.is_active);
+      if (off) throw unprocessable(`Lớp "${off.name}" đã ngừng sử dụng — không gán phụ trách được.`);
+    }
+
+    const beforeIds = (
+      await rows('select class_id from class_assignments where user_id = $1', [id])
+    ).map((r) => r.class_id);
+
+    // Xoá hết rồi chèn lại trong một giao dịch — trạng thái cuối luôn khớp class_ids
+    await tx(async (c) => {
+      await c.query('delete from class_assignments where user_id = $1', [id]);
+      if (classIds.length) {
+        await c.query(
+          `insert into class_assignments (class_id, user_id, role)
+           select cid, $1, $2 from unnest($3::uuid[]) as cid`,
+          [id, user.role, classIds]
+        );
+      }
+    });
+
+    audit(req, {
+      action: 'update',
+      entity: 'users',
+      entityId: id,
+      summary: `Gán ${classIds.length} lớp phụ trách cho ${user.full_name}.`,
+      before: { class_ids: beforeIds },
+      after: { class_ids: classIds },
+    });
+
+    const items = await rows(
+      `select c.id, c.name, c.grade, ca.role, c.school_id, s.name as school_name
+         from class_assignments ca
+         join classes c on c.id = ca.class_id
+         join schools s on s.id = c.school_id
+        where ca.user_id = $1 order by s.name, c.name`,
+      [id]
+    );
+    return { items };
+  });
+
   app.put('/api/users/:id/schools', { preHandler: requirePerm('users.manage') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const user = await one('select id, email, full_name, role from users where id = $1', [id]);

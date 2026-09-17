@@ -92,14 +92,20 @@ function overlapMessage(hit, date) {
  * Kiểm tra tham chiếu: lớp/phòng đúng trường, người đúng vai trò & đang hoạt động.
  * ------------------------------------------------------------------------ */
 async function assertClassInSchool(classId, schoolId) {
-  const cls = await one('select id, school_id, name from classes where id = $1', [classId]);
+  const cls = await one('select id, school_id, name, is_active from classes where id = $1', [classId]);
   if (!cls || cls.school_id !== schoolId) throw unprocessable('Lớp không thuộc trường đã chọn.');
+  if (!cls.is_active) {
+    throw unprocessable(`Lớp "${cls.name}" đã ngừng sử dụng — khôi phục lại lớp trước khi xếp buổi mới.`);
+  }
   return cls;
 }
 
 async function assertRoomInSchool(roomId, schoolId) {
-  const room = await one('select id, school_id, name from stem_rooms where id = $1', [roomId]);
+  const room = await one('select id, school_id, name, is_active from stem_rooms where id = $1', [roomId]);
   if (!room || room.school_id !== schoolId) throw unprocessable('Phòng STEM không thuộc trường đã chọn.');
+  if (!room.is_active) {
+    throw unprocessable(`Phòng "${room.name}" đã ngừng sử dụng — chọn phòng khác hoặc khôi phục lại phòng.`);
+  }
   return room;
 }
 
@@ -129,7 +135,8 @@ async function validateSessionCore(user, b) {
   let startTime;
   let endTime;
   if (period) {
-    const t = periodTimes(period);
+    const t = await periodTimes(period);
+    if (!t) throw badRequest(`Tiết ${period} không có trong khung tiết đang áp dụng.`);
     startTime = t.start;
     endTime = t.end;
   } else {
@@ -148,6 +155,9 @@ async function validateSessionCore(user, b) {
   }
 
   const school = await assertSchoolAccess(user, schoolId);
+  if (!school.is_active) {
+    throw unprocessable(`Trường "${school.name}" đã ngừng sử dụng — khôi phục lại trường trước khi xếp buổi mới.`);
+  }
   const cls = await assertClassInSchool(classId, schoolId);
   if (roomId) await assertRoomInSchool(roomId, schoolId);
   const teacher = teacherId ? await assertActiveStaff(teacherId, 'teacher', 'Giáo viên') : null;
@@ -507,7 +517,8 @@ export default async function routes(app) {
     if (b.period !== undefined) {
       patch.period = int(b.period, 'Tiết', { min: MIN_PERIOD, max: MAX_PERIOD });
       if (patch.period) {
-        const t = periodTimes(patch.period);
+        const t = await periodTimes(patch.period);
+        if (!t) throw badRequest(`Tiết ${patch.period} không có trong khung tiết đang áp dụng.`);
         patch.start_time = t.start;
         patch.end_time = t.end;
       }

@@ -189,6 +189,7 @@ export async function buildApp() {
     import('./routes/classes.js'),
     import('./routes/rooms.js'),
     import('./routes/schedules.js'),
+    import('./routes/periods.js'),
     import('./routes/timesheets.js'),
     import('./routes/attendance.js'),
     import('./routes/devices.js'),

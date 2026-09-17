@@ -459,9 +459,9 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      // Mặc định chỉ lấy lớp đang dùng; bật "Hiện lớp đã ngừng" thì lấy tất cả.
+      // Mặc định API chỉ trả lớp đang dùng; bật "Hiện lớp đã ngừng" mới lấy thêm.
       const res = await api.get('/api/classes',
-        showOff ? { school_id: schoolId } : { school_id: schoolId, is_active: true });
+        showOff ? { school_id: schoolId, include_inactive: 1 } : { school_id: schoolId });
       setList(Array.isArray(res) ? res : res?.items || []);
     } catch (e) {
       setError(e);
@@ -723,7 +723,8 @@ function RoomsTab({ schoolId, canManage }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await api.get('/api/rooms', { school_id: schoolId });
+      // Tab quản trị nên thấy cả phòng đã ngừng để khôi phục được.
+      const res = await api.get('/api/rooms', { school_id: schoolId, include_inactive: 1 });
       setList(Array.isArray(res) ? res : res?.items || []);
     } catch (e) {
       setError(e);

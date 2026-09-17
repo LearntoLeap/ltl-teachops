@@ -54,8 +54,14 @@ function schoolFields(b) {
  * Các giá trị coalesce khớp default schema (1000m / 10 phút / đủ 4 mốc).
  */
 async function insertSchool(user, f) {
-  const dup = await one('select id from schools where code = $1', [f.code]);
-  if (dup) throw conflict(`Mã trường "${f.code}" đã được sử dụng.`);
+  const dup = await one('select id, name, is_active from schools where code = $1', [f.code]);
+  if (dup) {
+    throw conflict(dup.is_active
+      ? `Mã trường "${f.code}" đã được sử dụng cho "${dup.name}".`
+      : `Mã trường "${f.code}" đang thuộc trường "${dup.name}" đã ngừng sử dụng. `
+        + 'Hãy khôi phục trường đó (bật "Hiện cả trường đã ngừng sử dụng" ở màn Trường & Lớp), '
+        + 'xoá hẳn nó, hoặc dùng mã khác.');
+  }
 
   return tx(async (c) => {
     const r = await c.query(
@@ -89,7 +95,11 @@ export default async function routes(app) {
    * ---------------------------------------------------------------------- */
   app.get('/api/schools', async (req) => {
     const q = str(req.query.q, 'q', { max: 100 });
-    const isActive = bool(req.query.is_active, 'is_active');
+    // Mặc định chỉ trả trường ĐANG DÙNG — trường đã ngừng không được phép lọt
+    // vào các ô chọn (xếp lịch, chấm công, điểm danh…). Muốn thấy cả mục đã
+    // ngừng thì gửi ?include_inactive=1 (chỉ màn hình quản trị dùng).
+    const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
+    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;

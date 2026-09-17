@@ -73,7 +73,9 @@ export default async function routes(app) {
     const schoolId = uuid(req.query.school_id, 'school_id');
     const level = enumOf(req.query.level, 'level', LEVELS);
     const q = str(req.query.q, 'q', { max: 100 });
-    const isActive = bool(req.query.is_active, 'is_active');
+    // Mặc định chỉ trả lớp ĐANG DÙNG — xem lib chú thích ở routes/schools.js.
+    const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
+    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;

@@ -50,6 +50,8 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | POST | `/:id/reset-password` | admin | Cấp lại mật khẩu tạm |
 | DELETE | `/:id` | admin | Vô hiệu hoá (soft delete: `is_active=false`) |
 | PUT | `/:id/schools` | admin | `{school_ids: []}` — phạm vi cho `manager` |
+| GET | `/:id/classes` | admin, manager | Lớp đang phụ trách |
+| PUT | `/:id/classes` | admin | `{class_ids: []}` — lớp phụ trách cho `teacher`/`assistant`. **Quyết định họ thấy trường/lớp nào trong app**: phạm vi GV/TG suy từ lớp được phân công; chưa gắn lớp thì không tự thêm được buổi dạy và không có buổi nào để chấm công |
 | GET | `/:id/schedule` | admin, manager, chính chủ | Lịch cá nhân |
 
 ## 3. Trường / Lớp / Phòng
@@ -71,6 +73,12 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | GET | `/api/schools/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
 | POST | `/api/classes/batch` | admin, manager | Nhập bảng: `{rows:[{school_id, name, grade?, level?, roster_size?, note?, teacher_id?, assistant_id?}]}` (≤300 dòng) |
 | GET | `/api/classes/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
+
+**Mục đã NGỪNG SỬ DỤNG không lọt vào ô chọn.** `GET /api/schools`, `/api/classes`,
+`/api/rooms` mặc định chỉ trả mục `is_active = true`. Màn hình quản trị muốn xem lại để khôi
+phục thì gửi `?include_inactive=1`. Xếp buổi vào trường/lớp/phòng đã ngừng bị chặn (422).
+Mã trường của một trường đã ngừng vẫn chiếm chỗ — `POST /api/schools` trả 409 kèm câu nói rõ
+là trường đó đang ngừng, gợi ý khôi phục / xoá hẳn / đổi mã.
 
 Các endpoint nhập bảng trả `{created, items[], skipped:[{row, reason}]}` — dòng lỗi (trùng mã/tên,
 thiếu thông tin, ngoài phạm vi…) bị bỏ qua kèm lý do, các dòng khác vẫn được tạo.
@@ -95,8 +103,14 @@ Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 | POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}` |
 | GET/PATCH/DELETE | `/:id` | PATCH/DELETE: admin, manager | |
 
-**Tiết dạy.** Gửi `period` (1–10) thì server suy ra `start_time`/`end_time` theo khung tiết
-(`server/src/lib/periods.js` — 45 phút/tiết, sáng 1–5, chiều 6–10) rồi lưu cả ba. Vẫn nhận
+**Khung tiết — `GET /api/periods` (mọi vai trò) · `PUT /api/periods` (admin).**
+Khung tiết lưu ở `app_settings.periods`, Quản trị viên sửa giờ và **thêm tiết** (tối đa 30,
+khớp ràng buộc `schedules_period_chk`) ngay trong app — trường bán trú / ca tối không bị bó
+trong 1–10. Đổi khung tiết KHÔNG động vào buổi đã xếp: giờ của chúng đã lưu từ lúc tạo, nên
+bảng công không xê dịch về sau.
+
+**Tiết dạy.** Gửi `period` thì server suy ra `start_time`/`end_time` theo khung tiết đang áp
+dụng rồi lưu cả ba; tiết không có trong khung ⇒ 400. Vẫn nhận
 `start_time`/`end_time` trực tiếp cho nhập bảng và buổi ngoài khung tiết; khi đó `period` = null.
 Sửa `period` qua `PATCH` sẽ kéo giờ đổi theo.
 

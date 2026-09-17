@@ -18,7 +18,9 @@ export default async function routes(app) {
    * ---------------------------------------------------------------------- */
   app.get('/api/rooms', async (req) => {
     const schoolId = uuid(req.query.school_id, 'school_id');
-    const isActive = bool(req.query.is_active, 'is_active');
+    // Mặc định chỉ trả phòng ĐANG DÙNG — xem chú thích ở routes/schools.js.
+    const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
+    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;

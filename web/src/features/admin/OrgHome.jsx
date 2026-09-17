@@ -15,6 +15,7 @@ import {
   Badge, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Pager, SearchBox, Sheet, Spinner,
 } from '../../components/ui.jsx';
 import { ClassBatchSheet, SchoolBatchSheet } from './OrgBatch.jsx';
+import PeriodsSheet from './PeriodsSheet.jsx';
 
 const LIMIT = 50;
 
@@ -195,12 +196,13 @@ export default function OrgHome() {
   const [schoolBatchOpen, setSchoolBatchOpen] = useState(false);
   const [classBatchOpen, setClassBatchOpen] = useState(false);
   const [showOff, setShowOff] = useState(false);   // hiện cả trường đã ngừng
+  const [periodsOpen, setPeriodsOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const res = await api.get('/api/schools',
-        showOff ? { q, page, limit: LIMIT } : { q, page, limit: LIMIT, is_active: true });
+        showOff ? { q, page, limit: LIMIT, include_inactive: 1 } : { q, page, limit: LIMIT });
       setData(res);
     } catch (e) {
       setError(e);
@@ -220,6 +222,9 @@ export default function OrgHome() {
         sub="Cấu hình trường, lớp học và phòng STEM"
         actions={canManage && (
           <>
+            {auth.isAdmin && (
+              <button className="btn-line" onClick={() => setPeriodsOpen(true)}>⏱ Khung tiết dạy</button>
+            )}
             <button className="btn-line" onClick={() => setSchoolBatchOpen(true)}>▦ Nhập bảng trường</button>
             <button className="btn-line" onClick={() => setClassBatchOpen(true)}>▦ Nhập bảng lớp</button>
             <button className="btn-primary" onClick={() => setAddOpen(true)}>+ Thêm trường</button>
@@ -263,6 +268,8 @@ export default function OrgHome() {
           <Pager page={page} limit={LIMIT} total={total} onPage={setPage} />
         </>
       ))}
+
+      <PeriodsSheet open={periodsOpen} onClose={() => setPeriodsOpen(false)} />
 
       <AddSchoolSheet
         open={addOpen}

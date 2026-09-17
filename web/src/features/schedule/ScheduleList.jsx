@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtDateLong, fmtRange, fmtTime, LABEL, monthRange, today } from '../../lib/format.js';
-import { PERIODS, periodLabel, periodOfStart } from '../../lib/periods.js';
+import { cachedPeriods, loadPeriods, periodLabel, periodOfStart } from '../../lib/periods.js';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field,
   PageHeader, PageLoading, Segmented, Sheet, Spinner,
@@ -452,6 +452,10 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
 
   const res = useSchoolResources(f.school_id, { light: selfOnly });
 
+  // Khung tiết do Quản trị viên cấu hình — tải một lần khi mở form.
+  const [periods, setPeriods] = useState(cachedPeriods);
+  useEffect(() => { loadPeriods().then(setPeriods); }, []);
+
   const setField = (k) => (e) => {
     const v = e.target.value;
     setF((s) => (k === 'school_id'
@@ -672,7 +676,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
 
       <Field label="Tiết dạy" required hint="Chọn tiết — giờ vào/ra lấy theo khung tiết của trường.">
         <div className="flex flex-wrap gap-1.5">
-          {PERIODS.map((p) => {
+          {periods.map((p) => {
             const on = String(f.period) === String(p.no);
             return (
               <button key={p.no} type="button"
@@ -688,9 +692,10 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
         </div>
         {f.period && (
           <div className="text-[12.5px] text-ink-muted mt-1.5">
-            Tiết {f.period} · {PERIODS.find((p) => String(p.no) === String(f.period))?.start}
-            –{PERIODS.find((p) => String(p.no) === String(f.period))?.end}
-            {Number(f.period) <= 5 ? ' (buổi sáng)' : ' (buổi chiều)'}
+            Tiết {f.period} · {periods.find((p) => String(p.no) === String(f.period))?.start}
+            –{periods.find((p) => String(p.no) === String(f.period))?.end}
+            {String(periods.find((p) => String(p.no) === String(f.period))?.start) < '12:00'
+              ? ' (buổi sáng)' : ' (buổi chiều)'}
           </div>
         )}
       </Field>

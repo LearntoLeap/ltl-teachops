@@ -1,10 +1,13 @@
 /**
  * periods.js — Khung TIẾT DẠY cho giao diện.
  *
- * Phải khớp server/src/lib/periods.js. Người xếp lịch chỉ chọn tiết; giờ thật
- * do server suy ra và lưu, vì chấm công tính trễ/sớm theo giờ đó.
+ * Khung thật do Quản trị viên cấu hình (GET /api/periods). Ở đây chỉ giữ một
+ * bản đệm trong bộ nhớ để các màn hình hiển thị "Tiết 3" mà không phải chờ
+ * mạng, cùng khung mặc định dùng tạm trước khi tải xong.
  */
-export const PERIODS = [
+import { api } from './api.js';
+
+export const DEFAULT_PERIODS = [
   { no: 1, start: '07:00', end: '07:45' },
   { no: 2, start: '07:45', end: '08:30' },
   { no: 3, start: '08:40', end: '09:25' },
@@ -17,22 +20,44 @@ export const PERIODS = [
   { no: 10, start: '16:40', end: '17:25' },
 ];
 
-/** Giờ của một tiết, hoặc null nếu ngoài khung. */
+let cache = DEFAULT_PERIODS;
+let inflight = null;
+
+/** Khung tiết đã tải gần nhất — dùng ngay, không chờ. */
+export const cachedPeriods = () => cache;
+
+/** Tải khung tiết từ máy chủ (gộp các lời gọi trùng nhau). */
+export function loadPeriods() {
+  if (!inflight) {
+    inflight = api.get('/api/periods')
+      .then((r) => {
+        const items = Array.isArray(r?.items) ? r.items : [];
+        if (items.length) cache = items;
+        return cache;
+      })
+      .catch(() => cache)
+      .finally(() => { inflight = null; });
+  }
+  return inflight;
+}
+
+/** Bắt máy chủ đọc lại ở lần sau (sau khi Quản trị viên lưu khung mới). */
+export function resetPeriods(items) {
+  if (Array.isArray(items) && items.length) cache = items;
+}
+
 export function periodTimes(no) {
   const n = Number(no);
-  return PERIODS.find((p) => p.no === n) || null;
+  return cache.find((p) => p.no === n) || null;
 }
 
-/** Suy ngược tiết từ giờ bắt đầu — cho các buổi tạo trước khi có tính năng tiết. */
+/** Suy ngược tiết từ giờ bắt đầu — cho buổi tạo trước khi có tính năng tiết. */
 export function periodOfStart(startTime) {
   const hhmm = String(startTime || '').slice(0, 5);
-  return PERIODS.find((p) => p.start === hhmm)?.no || null;
+  return cache.find((p) => p.start === hhmm)?.no || null;
 }
 
-/**
- * Nhãn ngắn của buổi dạy: "Tiết 3" nếu biết tiết, không thì rơi về khung giờ.
- * Dùng chung cho danh sách, thời khoá biểu và trang chi tiết.
- */
+/** Nhãn ngắn: "Tiết 3" nếu biết tiết, không thì rơi về giờ bắt đầu. */
 export function periodLabel(schedule) {
   const no = schedule?.period ?? periodOfStart(schedule?.start_time);
   if (no) return `Tiết ${no}`;

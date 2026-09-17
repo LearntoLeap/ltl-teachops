@@ -27,11 +27,38 @@ const listOf = (r) => (Array.isArray(r) ? r : r?.items || []);
 const nameOf = (u) => u.full_name || u.name || '—';
 
 /* ----------------------------- Sheet hồ sơ ------------------------------ */
-function StaffSheet({ user, canEdit, onClose, onSaved }) {
+function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
   const toast = useToast();
   const [form, setForm] = useState({ full_name: user.full_name || '', phone: user.phone || '' });
   const [saving, setSaving] = useState(false);
   const [sessions, setSessions] = useState(null);
+
+  // Lớp phụ trách — quyết định người này thấy trường/lớp nào trong app.
+  const [mine, setMine] = useState(null);          // [class_id] đang chọn
+  const [pickSchool, setPickSchool] = useState('');
+  const [classes, setClasses] = useState([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    api.get(`/api/users/${user.id}/classes`)
+      .then((r) => { if (live) setMine(listOf(r).map((c) => c.id)); })
+      .catch(() => { if (live) setMine([]); });
+    return () => { live = false; };
+  }, [user.id]);
+
+  useEffect(() => {
+    if (!pickSchool) { setClasses([]); return undefined; }
+    let live = true;
+    setLoadingClasses(true);
+    api.get('/api/classes', { school_id: pickSchool, limit: 200 })
+      .then((r) => { if (live) setClasses(listOf(r)); })
+      .catch(() => { if (live) setClasses([]); })
+      .finally(() => { if (live) setLoadingClasses(false); });
+    return () => { live = false; };
+  }, [pickSchool]);
+
+  const toggleClass = (id) => setMine((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]));
 
   // Buổi dạy gần đây — cho thấy người này đang thực sự đứng lớp ở đâu.
   useEffect(() => {
@@ -50,6 +77,7 @@ function StaffSheet({ user, canEdit, onClose, onSaved }) {
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
       });
+      if (mine) await api.put(`/api/users/${user.id}/classes`, { class_ids: mine });
       toast.ok('Đã lưu hồ sơ.');
       onSaved();
     } catch (e) {
@@ -95,6 +123,61 @@ function StaffSheet({ user, canEdit, onClose, onSaved }) {
         <div>🕘 Đăng nhập lần cuối: {user.last_login_at ? fmtAgo(user.last_login_at) : 'chưa bao giờ'}</div>
         {(user.school_names || []).length > 0 && (
           <div>🏫 Phụ trách: {user.school_names.join(', ')}</div>
+        )}
+      </div>
+
+      <div className="border-t border-line pt-3 mb-3">
+        <div className="font-bold text-[14px] mb-1">Lớp phụ trách</div>
+        <p className="text-[12.5px] text-ink-muted mb-2">
+          Quyết định người này thấy trường/lớp nào trong app — chưa gắn lớp thì họ
+          không tự thêm được buổi dạy và không có buổi nào để chấm công.
+        </p>
+
+        {mine === null ? (
+          <Spinner className="h-4 w-4" />
+        ) : (
+          <>
+            {mine.length === 0 && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-[13px] text-amber-900 mb-2">
+                ⚠️ Chưa phụ trách lớp nào.
+              </div>
+            )}
+
+            {canEdit && (
+              <>
+                <Field label="Chọn trường để xem lớp">
+                  <select className="input" value={pickSchool} onChange={(e) => setPickSchool(e.target.value)}>
+                    <option value="">— Chọn trường —</option>
+                    {(schools || []).map((sc) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
+                  </select>
+                </Field>
+                {loadingClasses && <Spinner className="h-4 w-4" />}
+                {pickSchool && !loadingClasses && classes.length === 0 && (
+                  <div className="text-[13px] text-ink-muted mb-2">Trường này chưa có lớp nào đang dùng.</div>
+                )}
+                {classes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {classes.map((c) => {
+                      const on = mine.includes(c.id);
+                      return (
+                        <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
+                          className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                            ${on ? 'bg-brand-grad text-white ring-transparent'
+                                 : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
+                          {on ? '✓ ' : ''}{c.name}{c.grade ? ` — Khối ${c.grade}` : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="text-[12.5px] text-ink-muted">
+              Đang phụ trách <b>{mine.length}</b> lớp.
+              {canEdit ? ' Bấm "Lưu hồ sơ" để áp dụng.' : ''}
+            </div>
+          </>
         )}
       </div>
 
@@ -303,6 +386,7 @@ export default function StaffDirectory() {
           key={open.id}
           user={open}
           canEdit={canEdit}
+          schools={schools}
           onClose={() => setOpen(null)}
           onSaved={() => { setOpen(null); load(); toast.ok('Đã cập nhật danh bạ.'); }}
         />
