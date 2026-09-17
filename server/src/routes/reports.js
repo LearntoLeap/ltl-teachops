@@ -547,6 +547,85 @@ export default async function routes(app) {
   });
 
   /* ======================================================================== *
+   * GET /api/reports/class-sessions.xlsx — LỊCH DẠY & ĐIỂM DANH theo TIẾT
+   * Khớp đúng những gì hiện trên màn Lịch dạy và màn Điểm danh.
+   * ======================================================================== */
+  app.get('/api/reports/class-sessions.xlsx', { preHandler: requirePerm('export.scope') }, async (req, reply) => {
+    const { from, to } = dateRange(req.query);
+    const schoolId = uuid(req.query.school_id, 'school_id');
+    const classId = uuid(req.query.class_id, 'class_id');
+    const userId = uuid(req.query.user_id, 'user_id');
+
+    const where = ['v.session_date between $1 and $2'];
+    const params = [from, to];
+    let next = 3;
+    const sf = await schoolFilter(req.user, 'v.school_id', next);
+    where.push(sf.sql);
+    params.push(...sf.params);
+    next = sf.next;
+    if (schoolId) { where.push(`v.school_id = $${next}`); params.push(schoolId); next += 1; }
+    if (classId)  { where.push(`v.class_id = $${next}`);  params.push(classId);  next += 1; }
+    if (userId)   { where.push(`v.user_id = $${next}`);   params.push(userId);   next += 1; }
+
+    const data = await rows(
+      `select v.* from v_class_sessions v
+        where ${where.join(' and ')}
+        order by v.session_date, v.school_name, v.start_time, v.class_name, v.full_name`,
+      params
+    );
+
+    if (!isPreview(reply)) audit(req, {
+      action: 'export',
+      entity: 'reports',
+      summary: `Xuất lịch dạy & điểm danh ${formatVNDate(from)}–${formatVNDate(to)} (${data.length} dòng)`,
+    });
+
+    return sendXlsx(reply, {
+      fileName: `lich-day-diem-danh-${from}-${to}`,
+      title: 'LỊCH DẠY & ĐIỂM DANH THEO TIẾT',
+      subtitle: `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`,
+      columns: [
+        { header: 'Ngày', key: 'date', width: 12, align: 'center' },
+        { header: 'Tiết', key: 'period', width: 7, align: 'center' },
+        { header: 'Giờ', key: 'time', width: 13, align: 'center' },
+        { header: 'Trường', key: 'school', width: 24 },
+        { header: 'Lớp', key: 'clazz', width: 9, align: 'center' },
+        { header: 'Môn / chủ đề', key: 'subject', width: 22 },
+        { header: 'Người phụ trách', key: 'name', width: 22 },
+        { header: 'Vai trò', key: 'role', width: 11, align: 'center' },
+        { header: 'Đã chấm công', key: 'shift', width: 12, align: 'center' },
+        { header: 'Đã điểm danh', key: 'done', width: 11, align: 'center' },
+        { header: 'Giờ check tại lớp', key: 'class_in', width: 13, align: 'center' },
+        { header: 'Sĩ số', key: 'roster', width: 8, align: 'right' },
+        { header: 'Có mặt', key: 'present', width: 8, align: 'right' },
+        { header: 'Người điểm danh', key: 'marker', width: 20 },
+        { header: 'GV tự thêm', key: 'self', width: 10, align: 'center' },
+        { header: 'Người thêm', key: 'added_by', width: 20 },
+        { header: 'Lý do thêm', key: 'reason', width: 34, wrap: true },
+      ],
+      rows: data.map((v) => ({
+        date: formatVNDate(v.session_date),
+        period: v.period ?? hhmm(v.start_time),
+        time: `${hhmm(v.start_time)}–${hhmm(v.end_time)}`,
+        school: v.school_name,
+        clazz: v.class_name,
+        subject: v.subject || DASH,
+        name: v.full_name,
+        role: LABELS.classRole?.[v.session_role] || (v.session_role === 'assistant' ? 'Trợ giảng' : 'Giáo viên'),
+        shift: v.shift_check_in_at ? formatVNTime(v.shift_check_in_at) : 'Chưa',
+        done: v.attendance_done ? 'Đã' : 'Chưa',
+        class_in: formatVNTime(v.class_check_in_at),
+        roster: v.roster_size ?? DASH,
+        present: v.present_count ?? DASH,
+        marker: v.marked_by_name || DASH,
+        self: v.self_added ? YES : DASH,
+        added_by: v.self_added ? (v.added_by_name || DASH) : DASH,
+        reason: v.self_added ? (v.self_added_reason || DASH) : DASH,
+      })),
+    });
+  });
+
+  /* ======================================================================== *
    * GET /api/reports/attendance.xlsx — điểm danh học sinh (scope như danh sách)
    * ======================================================================== */
   app.get('/api/reports/attendance.xlsx', async (req, reply) => {

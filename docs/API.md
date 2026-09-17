@@ -97,7 +97,7 @@ Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 |---|---|---|---|
 | GET | `/` | mọi vai trò | `?from=&to=&school_id=&class_id=&user_id=&status=` |
 | GET | `/today` | mọi vai trò | Buổi hôm nay của tôi + trạng thái chấm công/điểm danh |
-| POST | `/` | admin, manager | Tạo một buổi |
+| POST | `/` | admin, manager · GV/TG (`schedule.selfCreate`) | Tạo một tiết. GV/TG tự thêm tiết BỊ THIẾU thì **bắt buộc** `reason` (≥10 ký tự) — lưu `self_added_reason`, đánh dấu `self_added`, ghi `self_added_at`, và báo ngay cho Phòng chuyên môn của trường |
 | | | | Buổi dạy nhận `period` (tiết 1–10) thay cho `start_time`/`end_time`; và `teacher_manual_name`/`assistant_manual_name` cho người chưa có tài khoản |
 | POST | `/bulk` | admin, manager | `{template, weekdays:[], from, to}` — sinh lịch lặp theo tuần |
 | POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}` |
@@ -119,6 +119,13 @@ dùng khi chưa cấp tài khoản (hay gặp với trợ giảng thời vụ, v
 không có quyền xem danh bạ). Chọn được tài khoản thì server tự xoá tên gõ tay — một nguồn sự
 thật. Mọi truy vấn trả `teacher_name`/`assistant_name` đều là
 `coalesce(users.full_name, *_manual_name)`, nên lịch, điểm danh và báo cáo hiển thị như nhau.
+
+**Tự thêm TIẾT bị thiếu.** Giáo viên/trợ giảng chỉ thêm được TIẾT (không phải cả buổi) cho
+chính mình, trong phạm vi trường được phân công, và phải nêu lý do. Tiết vừa thêm xuất hiện
+ngay ở `GET /api/schedules/today` và trong danh sách chờ điểm danh, nên giáo viên điểm danh
+được luôn. Mọi nơi trả tiết đó đều kèm `self_added`, `self_added_reason` và `added_by_name`
+để Phòng chuyên môn và Quản trị viên biết ai thêm, vì sao — căn cứ để quyết định có tính
+công hay không.
 
 ## 5. Chấm công — `/api/timesheets`
 
@@ -269,6 +276,7 @@ Xem trước KHÔNG ghi `audit_log` hành động `export` — chỉ lần tải
 | `GET /my-dashboard` | teacher, assistant | Lịch hôm nay + việc cần làm |
 | `GET /timesheets.xlsx` | admin, manager · `teacher/assistant` chỉ dữ liệu của mình | Bảng chấm công theo tháng |
 | `GET /payroll.xlsx` | admin, manager | Tổng hợp tính lương: số buổi, phút trễ, buổi vắng |
+| `GET /class-sessions.xlsx` | admin, manager (`export.scope`) | **Lịch dạy & điểm danh theo TIẾT** — khớp đúng màn Lịch dạy và màn Điểm danh: tiết, giờ, lớp, người phụ trách, đã chấm công chưa, đã điểm danh chưa, giờ check tại lớp, sĩ số, và GV tự thêm / Người thêm / Lý do thêm |
 | `GET /attendance.xlsx` | theo phạm vi | |
 | `GET /devices.xlsx` | theo phạm vi | |
 | `GET /feedback.xlsx` | theo phạm vi | |

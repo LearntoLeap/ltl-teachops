@@ -445,6 +445,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
     period: String(schedule?.period || periodOfStart(schedule?.start_time) || periodOfStart(initialStart) || ''),
     subject: schedule?.subject || '',
     note: schedule?.note || '',
+    reason: '',   // lý do tự thêm tiết bị thiếu — bắt buộc với GV/TG
     weekdays: [],
     from: today(),
     to: '',
@@ -482,6 +483,10 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
       if (!f.to) need.push('đến ngày');
     } else if (!f.date) need.push('ngày');
     if (!f.period) need.push('tiết dạy');
+    if (selfOnly && f.reason.trim().length < 10) {
+      toast.err('Vui lòng ghi rõ lý do thêm tiết bị thiếu (ít nhất 10 ký tự) để Phòng chuyên môn rà soát.');
+      return;
+    }
     if (need.length) { toast.err(`Vui lòng chọn/nhập: ${need.join(', ')}.`); return; }
     if (bulk && f.to < f.from) { toast.err('"Đến ngày" phải sau hoặc bằng "Từ ngày".'); return; }
 
@@ -495,6 +500,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
       teacher_manual_name: f.teacher_id ? undefined : (f.teacher_manual_name.trim() || undefined),
       assistant_manual_name: f.assistant_id ? undefined : (f.assistant_manual_name.trim() || undefined),
       period: Number(f.period),
+      reason: selfOnly ? f.reason.trim() : undefined,
       subject: f.subject.trim() || undefined,
       note: f.note.trim() || undefined,
     };
@@ -584,9 +590,18 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
       </div>
 
       {selfOnly && (
-        <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
-          ℹ️ Buổi này sẽ tự gắn tên bạn làm người phụ trách.
-        </div>
+        <>
+          <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
+            ℹ️ Tiết này sẽ tự gắn tên bạn làm người phụ trách, và hiện ngay ở mục
+            Điểm danh để bạn điểm danh sĩ số.
+          </div>
+          <Field label="Lý do thêm tiết bị thiếu" required
+            hint="Phòng chuyên môn và Quản trị viên sẽ thấy lý do này khi rà soát.">
+            <textarea className="input" rows={2} value={f.reason}
+              onChange={(e) => setF((x) => ({ ...x, reason: e.target.value }))}
+              placeholder="VD: Tiết dạy bù ngày 12/9 do nghỉ lễ, Phòng chuyên môn chưa kịp xếp lịch." />
+          </Field>
+        </>
       )}
 
       {/* Danh sách của trường đang chọn — để người sắp lịch nắm ngay nguồn lực */}
@@ -1000,6 +1015,12 @@ export default function ScheduleList() {
                   ? <span className="text-amber-700">✋ Giáo viên tự thêm</span>
                   : <span className="text-ink-muted">Phòng chuyên môn xếp lịch</span>}
               </Row>
+              {detail.self_added && detail.self_added_reason ? (
+                <Row label="Lý do tự thêm">{detail.self_added_reason}</Row>
+              ) : null}
+              {detail.self_added && detail.added_by_name ? (
+                <Row label="Người thêm">{detail.added_by_name}</Row>
+              ) : null}
               <Row label="Lớp">{classNameOf(detail) || '—'}</Row>
               <Row label="Trường">{schoolNameOf(detail) || '—'}</Row>
               <Row label="Phòng">{roomNameOf(detail) || '—'}</Row>

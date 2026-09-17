@@ -17,6 +17,7 @@ import {
 } from '../lib/scope.js';
 import { badRequest, conflict, unprocessable } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
+import { notifySchoolManagers } from '../lib/notify.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
 import { periodTimes, MIN_PERIOD, MAX_PERIOD } from '../lib/periods.js';
 
@@ -44,6 +45,7 @@ const DETAIL_SELECT = `
          c.name  as class_name,
          coalesce(t.full_name, s.teacher_manual_name)   as teacher_name,
          coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
+         cb.full_name as added_by_name,
          r.name  as room_name,
          exists (select 1 from timesheets ts  where ts.schedule_id  = s.id) as has_timesheet,
          exists (select 1 from attendance att where att.schedule_id = s.id) as has_attendance
@@ -52,6 +54,7 @@ const DETAIL_SELECT = `
     join classes c  on c.id  = s.class_id
     left join users t on t.id = s.teacher_id
     left join users a on a.id = s.assistant_id
+    left join users cb on cb.id = s.created_by
     left join stem_rooms r on r.id = s.room_id`;
 
 function scheduleDetail(id) {
@@ -239,8 +242,10 @@ export default async function routes(app) {
               coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
               r.name  as room_name,
               ts.check_in_at, ts.check_out_at, ts.label,
+              cb.full_name as added_by_name,
               (att.id is not null) as attendance_done
          from schedules s
+         left join users cb on cb.id = s.created_by
          join schools sc on sc.id = s.school_id
          join classes c  on c.id  = s.class_id
          left join users t on t.id = s.teacher_id
@@ -265,10 +270,17 @@ export default async function routes(app) {
     // GV/TG được TỰ thêm buổi bị thiếu — nhưng buổi phải gắn CHÍNH họ,
     // trường phải nằm trong phạm vi họ được phân công (assertSchoolAccess lo).
     const selfOnly = isFieldStaff(req.user);
+    let selfReason = null;
     if (selfOnly) {
       assertPerm(req.user, 'schedule.selfCreate');
       if (req.user.role === 'teacher') b.teacher_id = req.user.id;
       else b.assistant_id = req.user.id;
+      // Phải nói rõ VÌ SAO thiếu tiết này — không có lý do thì Phòng chuyên môn
+      // không phân biệt được "lịch bị sót" với "khai thêm".
+      selfReason = str(b.reason ?? b.self_added_reason, 'Lý do thêm tiết', { max: 500 });
+      if (!selfReason || selfReason.length < 10) {
+        throw badRequest('Vui lòng ghi rõ lý do thêm tiết bị thiếu (ít nhất 10 ký tự) để Phòng chuyên môn rà soát.');
+      }
     } else {
       assertPerm(req.user, 'schedule.manage');
     }
@@ -290,25 +302,41 @@ export default async function routes(app) {
          (school_id, class_id, room_id, teacher_id, assistant_id,
           session_date, start_time, end_time, period,
           teacher_manual_name, assistant_manual_name,
-          subject, note, created_by, self_added)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          subject, note, created_by, self_added, self_added_reason, self_added_at)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+               case when $15 then now() else null end)
        returning *`,
       [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
         sessionDate, core.startTime, core.endTime, core.period,
         core.teacherManual, core.assistantManual,
         core.subject, note, req.user.id,
-        // GV/TG tự thêm buổi bị thiếu ⇒ đánh dấu để Phòng chuyên môn rà soát
-        selfOnly]
+        // GV/TG tự thêm tiết bị thiếu ⇒ đánh dấu + lưu lý do để Phòng chuyên môn rà soát
+        selfOnly, selfReason]
     );
 
+    const tietLabel = created.period ? `tiết ${created.period}` : `${hhmm(core.startTime)}–${hhmm(core.endTime)}`;
     audit(req, {
       action: 'create',
       entity: 'schedules',
       entityId: created.id,
-      summary: `Tạo buổi dạy ${sessionDate} ${hhmm(core.startTime)}–${hhmm(core.endTime)} — ` +
-        `${core.school.name} / lớp ${core.cls.name}.`,
+      summary: (selfOnly ? 'GV tự thêm ' : 'Tạo ') + `${tietLabel} ngày ${sessionDate} — ` +
+        `${core.school.name} / lớp ${core.cls.name}` +
+        (selfReason ? `. Lý do: ${selfReason}` : '.'),
       after: pickAudit(created),
     });
+
+    // Tiết tự thêm phải tới tay Phòng chuyên môn ngay, kèm lý do — họ là người
+    // quyết định có tính công cho tiết đó hay không.
+    if (selfOnly) {
+      notifySchoolManagers(core.schoolId, {
+        kind: 'schedule_self_added',
+        title: 'Giáo viên tự thêm tiết bị thiếu',
+        body: `${req.user.full_name} thêm ${tietLabel} ngày ${sessionDate} — ` +
+          `${core.school.name} / lớp ${core.cls.name}. Lý do: ${selfReason}`,
+        link: '/lich?tu-them=1',
+        refId: created.id,
+      }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo schedule_self_added'));
+    }
 
     reply.code(201);
     return scheduleDetail(created.id);

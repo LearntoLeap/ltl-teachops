@@ -24,13 +24,23 @@ const clsName = (x) => x?.class_name || x?.class?.name || x?.schedule?.class_nam
 
 const SESSION_VN = { morning: 'Buổi sáng', afternoon: 'Buổi chiều' };
 const sessionOf = (startTime) => (String(startTime || '').slice(0, 5) < '12:00' ? 'morning' : 'afternoon');
+/** Đang là buổi sáng hay chiều theo giờ Việt Nam (mốc 12:00). */
+const sessionNow = () => (new Date(Date.now() + 7 * 3600_000).getUTCHours() < 12 ? 'morning' : 'afternoon');
 
 /**
  * Gom buổi dạy hôm nay theo (trường × buổi) — đơn vị chấm công.
  * Mỗi nhóm là MỘT lần chấm công vào và MỘT lần ra, kèm danh sách tiết để nhắc giờ.
  */
-function groupShifts(items, shifts) {
+function groupShifts(items, shifts, schools, session) {
   const map = new Map();
+
+  // Mọi trường trong phạm vi đều phải chấm công được, kể cả hôm nay không có
+  // tiết nào — giáo viên vẫn có thể tới trường làm việc.
+  for (const sc of schools || []) {
+    const key = `${sc.id}|${session}`;
+    map.set(key, { key, school_id: sc.id, school_name: sc.name, session, periods: [] });
+  }
+
   for (const s of items) {
     if (s.status === 'cancelled') continue;
     const session = sessionOf(s.start_time);
@@ -50,7 +60,12 @@ function groupShifts(items, shifts) {
     g.periods.sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
     g.ts = (shifts || []).find((t) => t.school_id === g.school_id && t.work_session === g.session) || null;
   }
-  return [...map.values()].sort((a, b) => a.session.localeCompare(b.session) || a.school_name.localeCompare(b.school_name));
+  // Trường có tiết hoặc đã chấm công thì lên trước; trường "trống" vẫn giữ lại
+  // để giáo viên chủ động chấm công.
+  return [...map.values()].sort((a, b) =>
+    (b.periods.length > 0 || !!b.ts) - (a.periods.length > 0 || !!a.ts)
+    || a.session.localeCompare(b.session)
+    || a.school_name.localeCompare(b.school_name));
 }
 const schName = (x) => x?.school_name || x?.school?.name || x?.schedule?.school_name || '';
 const roomName = (x) => x?.room_name || x?.room?.name || '';
@@ -171,19 +186,25 @@ function TodaySection() {
   const navigate = useNavigate();
   const [items, setItems] = useState(null);
   const [shifts, setShifts] = useState([]);   // chấm công của tôi hôm nay, theo buổi
+  const [schools, setSchools] = useState([]); // trường trong phạm vi
+  // Buổi đang làm việc theo đồng hồ — quyết định thẻ nào hiện ra trước.
+  const nowSession = sessionNow();
   const [err, setErr] = useState(null);
 
   const load = useCallback(async () => {
     setErr(null);
     try {
       const day = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
-      const [today, mine] = await Promise.all([
+      const [today, mine, sc] = await Promise.all([
         api.get('/api/schedules/today'),
         // Chấm công của chính mình hôm nay — khớp theo (trường, buổi), không theo tiết.
         api.get('/api/timesheets', { from: day, to: day, limit: 50 }).catch(() => ({ items: [] })),
+        // Trường trong phạm vi — để chấm công được cả khi hôm nay không có tiết.
+        api.get('/api/schools', { limit: 50 }).catch(() => ({ items: [] })),
       ]);
       setItems(asItems(today));
       setShifts(asItems(mine));
+      setSchools(asItems(sc));
     }
     catch (e) { setErr(e); }
   }, []);
@@ -199,16 +220,11 @@ function TodaySection() {
       {err && <ErrorBox error={err} onRetry={load} />}
       {!err && items === null && <PageLoading label="Đang tải buổi dạy hôm nay…" />}
 
-      {!err && items !== null && items.length === 0 && (
-        <EmptyState
-          icon="🗓️"
-          title="Hôm nay bạn không có buổi dạy nào"
-          hint="Buổi dạy do Phòng chuyên môn xếp lịch. Xem lịch cả tuần ở mục Lịch dạy." />
-      )}
 
-      {!err && items !== null && items.length > 0 && (
+
+      {!err && items !== null && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {groupShifts(items, shifts).map((g) => {
+          {groupShifts(items, shifts, schools, nowSession).map((g) => {
             const ts = g.ts;
             const done = !!(ts?.check_in_at && ts?.check_out_at);
             const inOnly = !!(ts?.check_in_at && !ts?.check_out_at);
@@ -222,8 +238,9 @@ function TodaySection() {
                     </div>
                     <div className="font-semibold mt-0.5 truncate">{g.school_name}</div>
                     <div className="text-[12.5px] text-ink-muted">
-                      {g.periods.length} tiết · có mặt trước{' '}
-                      <b>{fmtTime(g.periods[0]?.start_time)}</b>
+                      {g.periods.length > 0
+                        ? <>Gợi ý: {g.periods.length} tiết · có mặt trước <b>{fmtTime(g.periods[0]?.start_time)}</b></>
+                        : 'Hôm nay không có tiết nào trong lịch'}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
@@ -232,7 +249,8 @@ function TodaySection() {
                   </div>
                 </div>
 
-                {/* Lịch dạy chỉ để NHẮC — chấm công không gắn với tiết nào. */}
+                {/* Lịch dạy chỉ để GỢI Ý — chấm công không gắn với tiết nào. */}
+                {g.periods.length > 0 && (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-line px-3 py-2 grid gap-1">
                   {g.periods.map((p) => (
                     <div key={p.id} className="flex items-center gap-2 text-[12.5px]">
@@ -246,6 +264,7 @@ function TodaySection() {
                     </div>
                   ))}
                 </div>
+                )}
 
                 {(ts?.check_in_at || ts?.check_out_at) && (
                   <div className="text-[12.5px] text-ink-soft mt-2">
@@ -253,15 +272,25 @@ function TodaySection() {
                   </div>
                 )}
 
-                <div className="mt-3">
-                  {done ? (
-                    <button className="btn-line w-full" onClick={go}>✅ Đã chấm công đủ · Xem chi tiết</button>
-                  ) : (
-                    <button className="btn-primary w-full !py-3 text-[15px]" onClick={go}>
-                      {inOnly ? '🏁 Chấm công ra' : '📍 Chấm công vào'}
-                    </button>
-                  )}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    className={ts?.check_in_at ? 'btn-line !py-3' : 'btn-primary !py-3 text-[15px]'}
+                    disabled={!!ts?.check_in_at}
+                    onClick={go}>
+                    {ts?.check_in_at ? `✅ Vào ${fmtTime(ts.check_in_at)}` : '📍 Chấm công vào'}
+                  </button>
+                  <button
+                    className={inOnly ? 'btn-primary !py-3 text-[15px]' : 'btn-line !py-3'}
+                    disabled={!ts?.check_in_at || done}
+                    onClick={go}>
+                    {done ? `✅ Ra ${fmtTime(ts.check_out_at)}` : '🏁 Chấm công ra'}
+                  </button>
                 </div>
+                {done && (
+                  <button className="btn-line w-full !py-2 mt-2 text-[12.5px]" onClick={go}>
+                    Xem chi tiết chấm công
+                  </button>
+                )}
               </div>
             );
           })}

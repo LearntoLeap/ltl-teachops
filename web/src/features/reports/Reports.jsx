@@ -56,6 +56,7 @@ const DASH_TILES = [
 const EXPORTS = [
   { key: 'timesheets', path: '/api/reports/timesheets.xlsx', file: 'timesheets.xlsx', label: 'Bảng chấm công', icon: '📍' },
   { key: 'payroll', path: '/api/reports/payroll.xlsx', file: 'payroll.xlsx', label: 'Tổng hợp tính lương', icon: '💰' },
+  { key: 'class-sessions', path: '/api/reports/class-sessions.xlsx', file: 'lich-day-diem-danh.xlsx', label: 'Lịch dạy & điểm danh', icon: '🗓️' },
   { key: 'attendance', path: '/api/reports/attendance.xlsx', file: 'attendance.xlsx', label: 'Điểm danh', icon: '📋' },
   { key: 'devices', path: '/api/reports/devices.xlsx', file: 'devices.xlsx', label: 'Thiết bị', icon: '🛠️' },
   { key: 'feedback', path: '/api/reports/feedback.xlsx', file: 'feedback.xlsx', label: 'Góp ý', icon: '📨' },

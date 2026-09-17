@@ -28,6 +28,37 @@ function firstPhotoId(row) {
   return typeof p === 'object' ? p.id || p.file_id || null : p;
 }
 
+/**
+ * Nhãn tiết do giáo viên TỰ THÊM — Phòng chuyên môn và Quản trị viên phải thấy
+ * ngay ai thêm và vì sao, vì tiết này ảnh hưởng tới công và tới sĩ số báo cáo.
+ */
+function SelfAddedNote({ item }) {
+  if (!item?.self_added) return null;
+  return (
+    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[12.5px] text-amber-900">
+      <b>✋ Tiết do giáo viên tự thêm</b>
+      {item.added_by_name ? ` — ${item.added_by_name}` : ''}
+      {item.self_added_reason ? <div className="mt-0.5">Lý do: {item.self_added_reason}</div> : null}
+    </div>
+  );
+}
+
+/** Nhãn tiết: "Tiết 3" nếu biết, không thì rơi về khung giờ. */
+const periodLabel = (s) => (s?.period ? `Tiết ${s.period}` : fmtRange(s?.start_time, s?.end_time));
+
+/**
+ * Tự làm mới định kỳ — điểm danh cần phản ánh gần như tức thì cho cả giáo viên
+ * lẫn Phòng chuyên môn. Dừng khi tab bị ẩn để khỏi gọi mạng vô ích.
+ */
+function useAutoRefresh(load, ms = 30_000) {
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) load(); };
+    const id = setInterval(tick, ms);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+  }, [load, ms]);
+}
+
 /* ============================== Tab: Hôm nay =============================== */
 /* Dành cho giáo viên / trợ giảng: các buổi dạy hôm nay của chính mình. */
 
@@ -45,6 +76,7 @@ function TodayTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load);
 
   if (error) return <ErrorBox error={error} onRetry={load} />;
   if (!items) return <PageLoading />;
@@ -52,8 +84,8 @@ function TodayTab() {
     return (
       <EmptyState
         icon="🗓️"
-        title="Hôm nay bạn không có buổi dạy"
-        hint="Khi được phân công lịch dạy, buổi học sẽ hiện tại đây để bạn điểm danh."
+        title="Hôm nay bạn không có tiết dạy nào"
+        hint="Tiết dạy do Phòng chuyên môn xếp. Thiếu tiết nào thì thêm ở mục Lịch dạy — thêm xong sẽ hiện ngay tại đây để điểm danh."
       />
     );
   }
@@ -67,6 +99,7 @@ function TodayTab() {
           <div key={s.id} className="card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                <div className="text-[12.5px] font-bold text-brand-700">{periodLabel(s)}</div>
                 <div className="font-bold text-[15.5px] truncate">{s.class_name || s.class?.name || 'Lớp học'}</div>
                 <div className="text-[13px] text-ink-muted truncate">{s.school_name || s.school?.name}</div>
                 <div className="text-[13px] text-ink-soft mt-1">
@@ -76,6 +109,7 @@ function TodayTab() {
               </div>
               {done && <Badge tone="approved">Đã điểm danh</Badge>}
             </div>
+            <SelfAddedNote item={s} />
             <div className="mt-3">
               {done ? (
                 <Link to={`/diem-danh/${s.id}`} className="btn-line w-full">Xem lại bản ghi</Link>
@@ -110,6 +144,7 @@ function PendingTab() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(load);
 
   const remind = async (scheduleId) => {
     setRemindingId(scheduleId);
@@ -146,6 +181,7 @@ function PendingTab() {
           <div key={sid} className="card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                <div className="text-[12.5px] font-bold text-brand-700">{periodLabel(p)}</div>
                 <div className="font-bold text-[15px] truncate">{p.class_name || p.class?.name || 'Lớp học'}</div>
                 <div className="text-[13px] text-ink-muted truncate">{p.school_name || p.school?.name}</div>
               </div>
@@ -157,6 +193,7 @@ function PendingTab() {
             {staff && (
               <div className="text-[13px] text-ink-soft mt-1 truncate">👤 {staff}</div>
             )}
+            <SelfAddedNote item={p} />
             <button
               className="btn-line w-full mt-3"
               disabled={remindingId === sid || reminded.has(sid)}

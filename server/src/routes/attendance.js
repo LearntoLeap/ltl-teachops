@@ -155,7 +155,8 @@ export default async function routes(app) {
       );
       const items = await rows(
         `select v.schedule_id, v.school_id, v.class_id, v.session_date, v.start_time,
-                v.teacher_id, v.assistant_id,
+                v.teacher_id, v.assistant_id, v.period,
+                v.self_added, v.self_added_reason, cb.full_name as added_by_name,
                 c.name  as class_name,
                 sc.name as school_name, sc.code as school_code,
                 coalesce(tu.full_name, v.teacher_manual_name)   as teacher_name,
@@ -165,6 +166,7 @@ export default async function routes(app) {
            join schools sc  on sc.id = v.school_id
            left join users tu on tu.id = v.teacher_id
            left join users au on au.id = v.assistant_id
+           left join users cb on cb.id = v.created_by
           where ${where}
           order by v.session_date desc, v.start_time desc
           limit $${next} offset $${next + 1}`,
