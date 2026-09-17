@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/auth.jsx';
 import { LABEL, fmtDate, fmtDuration, fmtNumber, monthRange, today } from '../../lib/format.js';
 import { Badge, EmptyState, ErrorBox, PageHeader, PageLoading, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
+import ExportPreview, { PreviewCount, PreviewTable, usePreview } from './ExportPreview.jsx';
 
 /* ------------------------------ Tiện ích nhỏ ------------------------------ */
 
@@ -38,13 +39,18 @@ function asPercent(v) {
 
 /* --------------------------- Cấu hình hiển thị ----------------------------- */
 
+/**
+ * Ô số liệu nhanh — đọc đúng hình dạng /api/reports/dashboard trả về:
+ * { today: {...}, open_issues: {new, in_progress}, feedback_new, flagged_timesheets }.
+ * Đây là số liệu CỦA HÔM NAY, không theo tháng đang lọc — nên có tiêu đề riêng.
+ */
 const DASH_TILES = [
-  { keys: ['sessions_today', 'today_sessions', 'today_count'], label: 'Buổi dạy hôm nay', icon: '🗓️' },
-  { keys: ['attendance_rate', 'attendance_ratio'], label: 'Tỉ lệ điểm danh', icon: '📋', rate: true },
-  { keys: ['late_checkins', 'late_count', 'timesheets_late'], label: 'Chấm công trễ', icon: '⏰' },
-  { keys: ['open_device_issues', 'device_issues_open', 'open_issues'], label: 'Thiết bị hỏng đang mở', icon: '🛠️' },
-  { keys: ['new_feedback', 'feedback_new', 'open_feedback'], label: 'Góp ý mới', icon: '📨' },
-  { keys: ['pending_timesheets', 'pending_approvals', 'timesheets_pending'], label: 'Chờ duyệt chấm công', icon: '🕒' },
+  { label: 'Buổi dạy hôm nay', icon: '🗓️', get: (d) => d.today?.sessions },
+  { label: 'Đã chấm công', icon: '📍', get: (d) => d.today?.checked_in },
+  { label: 'Trễ giờ', icon: '⏰', get: (d) => d.today?.late },
+  { label: 'Điểm danh còn thiếu', icon: '📋', get: (d) => d.today?.attendance_pending },
+  { label: 'Thiết bị hỏng đang mở', icon: '🛠️', get: (d) => (d.open_issues?.new ?? 0) + (d.open_issues?.in_progress ?? 0) },
+  { label: 'Góp ý mới', icon: '📨', get: (d) => d.feedback_new },
 ];
 
 const EXPORTS = [
@@ -77,6 +83,54 @@ function SummaryChip({ label, value, cls = 'bg-brand-50 text-brand-800' }) {
   );
 }
 
+/** Mục xuất "Bảng chấm công" — dùng lại cho bảng xem theo tháng bên dưới. */
+const TIMESHEET_EXPORT = EXPORTS.find((e) => e.key === 'timesheets');
+
+/**
+ * Bảng chấm công của tháng đang chọn, hiện thẳng trên trang.
+ * Dùng chính bản xem trước của tệp Excel nên số liệu khớp tuyệt đối với tệp tải về.
+ */
+function MonthlyTimesheet({ query, month, onDownload, downloading }) {
+  const [open, setOpen] = useState(true);
+  const { data, error, reload } = usePreview(TIMESHEET_EXPORT.path, query, open);
+  const sheet = data?.sheets?.[0];
+  const [mm, yyyy] = [month.slice(5, 7), month.slice(0, 4)];
+
+  return (
+    <div className="mb-6">
+      <div className="flex flex-wrap items-center gap-2 mb-2.5">
+        <button type="button" onClick={() => setOpen((v) => !v)}
+          className="font-bold text-[15px] flex items-center gap-1.5 hover:text-brand-800">
+          <span className="text-[13px]">{open ? '▾' : '▸'}</span>
+          📍 Bảng chấm công tháng {mm}/{yyyy}
+        </button>
+        {open && (
+          <button type="button" className="btn-line !py-1.5 !px-3 ml-auto" onClick={onDownload} disabled={downloading}>
+            {downloading ? <Spinner className="h-4 w-4" /> : '⬇ Tải tháng này'}
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <>
+          {error && <ErrorBox error={error} onRetry={reload} />}
+          {!error && !data && (
+            <div className="flex items-center gap-2 text-[13.5px] text-ink-muted py-4">
+              <Spinner className="h-4 w-4" /> Đang lấy bảng chấm công…
+            </div>
+          )}
+          {data && (
+            <>
+              <PreviewTable sheet={sheet} dense />
+              <PreviewCount sheet={sheet} />
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------- Màn hình ---------------------------------- */
 
 export default function Reports() {
@@ -97,6 +151,13 @@ export default function Reports() {
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState('');
   const [visible, setVisible] = useState(50);
+  const [previewing, setPreviewing] = useState(null);   // mục xuất đang xem trước
+
+  // Bộ lọc dùng chung cho cả xem trước lẫn tải tệp — luôn khớp tháng đang chọn.
+  const exportQuery = useMemo(
+    () => ({ from, to, school_id: schoolId || undefined }),
+    [from, to, schoolId]
+  );
 
   /* ------------------------------ Nạp dữ liệu ------------------------------ */
   const load = useCallback(async () => {
@@ -138,7 +199,7 @@ export default function Reports() {
     if (downloading) return;
     setDownloading(exp.key);
     try {
-      const name = await api.download(exp.path, { from, to, school_id: schoolId }, exp.file);
+      const name = await api.download(exp.path, exportQuery, exp.file);
       toast.ok('Đã tải ' + name);
     } catch (e) {
       toast.fromError(e);
@@ -150,19 +211,11 @@ export default function Reports() {
   /* ----------------------------- Số liệu nhanh ----------------------------- */
   const tiles = useMemo(() => {
     if (!dash || typeof dash !== 'object') return [];
-    const out = [];
-    for (const t of DASH_TILES) {
-      const v = pick(dash, t.keys);
-      if (v === undefined) continue;
-      out.push({ ...t, value: t.rate ? asPercent(v) : fmtNumber(v) });
-    }
-    // Dự phòng: server trả khoá khác — hiển thị mọi giá trị số để không trống trang.
-    if (!out.length) {
-      for (const [k, v] of Object.entries(dash)) {
-        if (typeof v === 'number' && out.length < 6) out.push({ label: k, icon: '📈', value: fmtNumber(v) });
-      }
-    }
-    return out.slice(0, 6);
+    return DASH_TILES.map((t) => {
+      const v = t.get(dash);
+      // Chỉ hiện ô khi có SỐ thật — thà bỏ ô còn hơn in ra NaN.
+      return Number.isFinite(Number(v)) ? { ...t, value: fmtNumber(Number(v)) } : null;
+    }).filter(Boolean);
   }, [dash]);
 
   /* ---------------------------- Đối chiếu chấm công ------------------------- */
@@ -193,6 +246,13 @@ export default function Reports() {
 
   return (
     <div>
+      <ExportPreview
+        open={!!previewing}
+        exp={previewing}
+        query={exportQuery}
+        onClose={() => setPreviewing(null)}
+      />
+
       <PageHeader
         title="Báo cáo & xuất dữ liệu"
         sub={`Kỳ ${fmtDate(from)} – ${fmtDate(to)}`}
@@ -225,6 +285,11 @@ export default function Reports() {
 
       {/* ---------------------------- Ô số liệu nhanh ---------------------------- */}
       {tiles.length > 0 && (
+        <h2 className="font-bold text-[15px] mb-2.5">
+          ⚡ Hôm nay <span className="font-normal text-[12.5px] text-ink-muted">— không phụ thuộc tháng đang lọc</span>
+        </h2>
+      )}
+      {tiles.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
           {tiles.map((t) => (
             <StatTile key={t.label} icon={t.icon} label={t.label} value={t.value} />
@@ -236,22 +301,36 @@ export default function Reports() {
       <h2 className="font-bold text-[15px] mb-2.5">📥 Xuất dữ liệu Excel</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {exportList.map((exp) => (
-          <button
-            key={exp.key}
-            onClick={() => doDownload(exp)}
-            disabled={!!downloading}
-            className="card p-4 flex items-center gap-3 text-left hover:border-brand-300 transition disabled:opacity-60">
-            <span className="text-2xl">{exp.icon}</span>
+          <div key={exp.key} className="card p-4 flex items-center gap-3">
+            <span className="text-2xl shrink-0">{exp.icon}</span>
             <span className="min-w-0 flex-1">
               <span className="block font-semibold text-[14px]">{exp.label}</span>
-              <span className="block text-[12px] text-ink-muted">{exp.file}</span>
+              <span className="block text-[12px] text-ink-muted truncate">{exp.file}</span>
             </span>
-            {downloading === exp.key
-              ? <Spinner />
-              : <span className="text-brand-600 text-lg font-bold" aria-hidden>⬇</span>}
-          </button>
+            <span className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                title="Xem trước nội dung sẽ xuất"
+                onClick={() => setPreviewing(exp)}
+                className="h-9 px-2.5 rounded-xl text-[12.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100">
+                👁 Xem trước
+              </button>
+              <button
+                type="button"
+                title={`Tải ${exp.file}`}
+                onClick={() => doDownload(exp)}
+                disabled={!!downloading}
+                className="h-9 w-9 grid place-items-center rounded-xl text-brand-700 hover:bg-brand-50 disabled:opacity-50">
+                {downloading === exp.key ? <Spinner className="h-4 w-4" /> : <span className="text-lg font-bold" aria-hidden>⬇</span>}
+              </button>
+            </span>
+          </div>
         ))}
       </div>
+
+      {/* ------------------------ Bảng chấm công theo tháng ----------------------- */}
+      <MonthlyTimesheet query={exportQuery} month={month} onDownload={() => doDownload(TIMESHEET_EXPORT)}
+        downloading={downloading === TIMESHEET_EXPORT.key} />
 
       {/* -------------------------- Đối chiếu chấm công --------------------------- */}
       <h2 className="font-bold text-[15px] mb-2.5">🧮 Đối chiếu chấm công</h2>

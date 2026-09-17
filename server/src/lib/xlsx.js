@@ -22,7 +22,47 @@ const BRAND_SOFT = 'FFF3E8F6';
  * @param {Array}  spec.rows        Mảng object theo `key` của columns
  * @param {Array}  [spec.sheets]    Nhiều sheet: [{ name, title, columns, rows }]
  */
+/** Số dòng tối đa gửi kèm khi xem trước — đủ để soát, không nặng đường truyền. */
+export const PREVIEW_LIMIT = 300;
+
+/** Yêu cầu này chỉ muốn XEM TRƯỚC chứ không tải tệp? */
+export function isPreview(reply) {
+  const v = reply?.request?.query?.preview;
+  return v === '1' || v === 'true' || v === true;
+}
+
+/**
+ * Bản xem trước của đúng bộ dữ liệu sắp xuất — cùng cột, cùng dòng, cùng thứ tự.
+ * Cắt bớt sau PREVIEW_LIMIT dòng mỗi sheet và nói rõ tổng số dòng thật.
+ */
+export function previewOf(spec) {
+  const sheets = (spec.sheets?.length
+    ? spec.sheets
+    : [{ name: spec.sheetName || 'Dữ liệu', title: spec.title, subtitle: spec.subtitle, columns: spec.columns, rows: spec.rows }]
+  ).map((sh) => {
+    const all = sh.rows || [];
+    return {
+      name: sh.name,
+      title: sh.title,
+      subtitle: sh.subtitle,
+      columns: (sh.columns || []).map((c) => ({ header: c.header, key: c.key, align: c.align || 'left' })),
+      rows: all.slice(0, PREVIEW_LIMIT),
+      total: all.length,
+      shown: Math.min(all.length, PREVIEW_LIMIT),
+    };
+  });
+  return {
+    file_name: `${spec.fileName || 'bao-cao'}.xlsx`,
+    sheets,
+    total: sheets.reduce((n, sh) => n + sh.total, 0),
+    limit: PREVIEW_LIMIT,
+  };
+}
+
 export async function sendXlsx(reply, spec) {
+  // ?preview=1 — trả JSON đúng nội dung sắp xuất, không sinh tệp.
+  if (isPreview(reply)) return previewOf(spec);
+
   const safeName = String(spec.fileName || 'bao-cao')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')   // bỏ dấu tiếng Việt trong tên tệp
     .replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(0, 80);

@@ -239,6 +239,14 @@ mục **cấp gốc** mới cần admin) · `GET/POST /:id/items`, `PATCH/DELETE
 `GET /:id` · `PATCH /:id` (admin, manager — `status`, `assigned_to`, `priority`) ·
 `POST /:id/replies` (mọi vai trò trong phạm vi; kèm `status_to` thì chỉ admin/manager).
 
+**Xem trước trước khi tải — `?preview=1`.** Mọi endpoint `*.xlsx` ở trên nhận thêm
+`preview=1`: thay vì trả tệp, chúng trả JSON
+`{ file_name, limit, total, sheets: [{ name, title, subtitle, columns: [{header, key, align}], rows, total, shown }] }`.
+Bản xem trước đi qua ĐÚNG bộ cột và ĐÚNG bộ dòng dùng để sinh tệp, nên không bao giờ lệch với
+thứ tải về; mỗi sheet cắt sau 300 dòng (`shown`) nhưng vẫn báo `total` thật.
+Quyền và phạm vi dữ liệu giữ nguyên như khi tải tệp (GV/TG chỉ thấy phần của mình).
+Xem trước KHÔNG ghi `audit_log` hành động `export` — chỉ lần tải tệp thật mới ghi.
+
 ## 11. Thông báo — `/api/notifications`
 
 `GET /` (`?unread=1`) · `GET /stream` (SSE, `?token=` trên query vì `EventSource` không gửi header) ·

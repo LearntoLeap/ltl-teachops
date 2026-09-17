@@ -12,7 +12,7 @@ import { requirePerm, requireRole, assertPerm, isFieldStaff } from '../lib/rbac.
 import { schoolFilter, scheduleFilter } from '../lib/scope.js';
 import { uuid, dateRange } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
-import { sendXlsx, LABELS, formatVN, formatVNDate, formatVNTime } from '../lib/xlsx.js';
+import { sendXlsx, isPreview, LABELS, formatVN, formatVNDate, formatVNTime } from '../lib/xlsx.js';
 
 /* ----------------------------- Tiện ích chung ------------------------------ */
 
@@ -427,7 +427,7 @@ export default async function routes(app) {
 
     const data = await fetchTimesheetDetail(req.user, { from, to, schoolId, classId, userId });
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary: `Xuất bảng chấm công ${formatVNDate(from)}–${formatVNDate(to)} (${data.length} dòng)`,
@@ -485,7 +485,7 @@ export default async function routes(app) {
 
     const subtitle = `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`;
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary: `Xuất bảng tổng hợp lương ${formatVNDate(from)}–${formatVNDate(to)} (${summary.length} người)`,
@@ -573,7 +573,7 @@ export default async function routes(app) {
       params
     );
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary: `Xuất báo cáo điểm danh ${formatVNDate(from)}–${formatVNDate(to)} (${data.length} dòng)`,
@@ -670,7 +670,7 @@ export default async function routes(app) {
 
     const subtitle = `Từ ${formatVNDate(from)} đến ${formatVNDate(to)}`;
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary:
@@ -783,7 +783,7 @@ export default async function routes(app) {
       params
     );
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary: `Xuất báo cáo góp ý ${formatVNDate(from)}–${formatVNDate(to)} (${data.length} dòng)`,
@@ -875,7 +875,7 @@ export default async function routes(app) {
       params
     );
 
-    audit(req, {
+    if (!isPreview(reply)) audit(req, {
       action: 'export',
       entity: 'reports',
       summary: `Xuất danh sách tài khoản (${data.length} người)`,
