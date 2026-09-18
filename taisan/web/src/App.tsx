@@ -13,6 +13,20 @@ import { useAuth, VAI_TRO_NHAP_LIEU, VAI_TRO_QUAN_LY } from '@/lib/auth';
  * hẳn, nhất là khi mạng kho yếu.
  */
 const TongQuan = lazy(() => import('@/features/tong-quan/TongQuan').then((m) => ({ default: m.TongQuan })));
+
+/**
+ * Trang mặc định theo vai trò.
+ *
+ * Tài khoản KHO về màn hình kho; các vai trò khác về Tổng quan. Đặt ở route
+ * `index` thay vì rải điều kiện ở từng chỗ gọi: đăng nhập xong, bấm logo, hay
+ * thoát khỏi một trang con đều rơi về "/", nên một chỗ này bao hết.
+ */
+function TrangMacDinh() {
+  const { nguoiDung } = useAuth();
+  if (nguoiDung?.role === 'KHO') return <Navigate to="/kiosk" replace />;
+  return <TongQuan />;
+}
+const TongThe = lazy(() => import('@/features/tong-the/TongThe').then((m) => ({ default: m.TongThe })));
 const DoiMatKhau = lazy(() => import('@/features/auth/DoiMatKhau').then((m) => ({ default: m.DoiMatKhau })));
 const ThietBiList = lazy(() => import('@/features/thiet-bi/ThietBiList').then((m) => ({ default: m.ThietBiList })));
 const ThietBiChiTiet = lazy(() => import('@/features/thiet-bi/ThietBiChiTiet').then((m) => ({ default: m.ThietBiChiTiet })));
@@ -23,6 +37,12 @@ const NhapLieuHangLoat = lazy(() => import('@/features/nhap-xuat/NhapLieuHangLoa
 const InNhanQR = lazy(() => import('@/features/qr/InNhanQR').then((m) => ({ default: m.InNhanQR })));
 const QuanLyNguoiDung = lazy(() => import('@/features/nguoi-dung/QuanLyNguoiDung').then((m) => ({ default: m.QuanLyNguoiDung })));
 const KhoaViTri = lazy(() => import('@/features/gps/KhoaViTri').then((m) => ({ default: m.KhoaViTri })));
+const LayLinhKien = lazy(() =>
+  import('@/features/linh-kien/LayLinhKien').then((m) => ({ default: m.LayLinhKien })),
+);
+const LichSuSuaChua = lazy(() =>
+  import('@/features/lich-su/LichSuSuaChua').then((m) => ({ default: m.LichSuSuaChua })),
+);
 const YeuCauList = lazy(() => import('@/features/yeu-cau/YeuCauList').then((m) => ({ default: m.YeuCauList })));
 const YeuCauChiTiet = lazy(() => import('@/features/yeu-cau/YeuCauChiTiet').then((m) => ({ default: m.YeuCauChiTiet })));
 const FormYeuCau = lazy(() => import('@/features/yeu-cau/FormYeuCau').then((m) => ({ default: m.FormYeuCau })));
@@ -118,7 +138,14 @@ export default function App() {
             </CanDangNhap>
           }
         >
-          <Route index element={<TongQuan />} />
+          {/*
+            Trang mặc định: tài khoản KHO về MÀN HÌNH KHO, không phải Tổng
+            quan. Máy ở kho đặt cố định và người dùng nó cả ngày chỉ cần màn
+            hình đó; bắt họ qua Tổng quan rồi tự tìm đường sang là thừa. Mọi
+            đường dẫn "/" — đăng nhập xong, bấm logo, thoát khỏi trang con —
+            đều rơi vào đây nên chỉ cần một chỗ này là đủ.
+          */}
+          <Route index element={<TrangMacDinh />} />
           <Route path="doi-mat-khau" element={<DoiMatKhau />} />
 
           {/* Thiết bị — mọi vai trò xem được, phạm vi do server lọc */}
@@ -200,6 +227,33 @@ export default function App() {
           <Route path="bao-hong" element={<BaoHongList />} />
           <Route path="bao-hong/moi" element={<FormBaoHong />} />
           <Route path="bao-hong/:id" element={<BaoHongChiTiet />} />
+
+          {/*
+            Lấy linh kiện: người ĐỨNG Ở KHO mới lấy được, nên giới hạn ba vai
+            trò. Máy chủ kiểm lại bằng middleware — ẩn ở đây chỉ là phụ.
+            Trang vẫn cho mọi vai trò XEM lịch sử qua /api/linh-kien, nhưng
+            người không có quyền lấy thì không cần vào form này.
+          */}
+          <Route
+            path="linh-kien"
+            element={
+              <CanDangNhap vaiTro={['ADMIN', 'VAN_HANH', 'KHO']}>
+                <LayLinhKien />
+              </CanDangNhap>
+            }
+          />
+
+          {/*
+            Lịch sử sửa chữa: KHÔNG giới hạn vai trò, vì điểm trường cũng cần
+            xem lịch sử của trường mình. Máy chủ lọc theo phạm vi.
+          */}
+          <Route path="lich-su-sua-chua" element={<LichSuSuaChua />} />
+
+          {/*
+            Tổng thể: cũng không giới hạn vai trò — máy chủ lọc theo phạm vi nên
+            điểm trường mở trang này chỉ thấy số của trường mình.
+          */}
+          <Route path="tong-the" element={<TongThe />} />
 
           <Route path="dia-diem" element={<DiaDiemList />} />
           <Route

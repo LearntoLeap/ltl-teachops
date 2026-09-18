@@ -29,6 +29,8 @@ export interface DiaDiem {
   latitude: number | null;
   longitude: number | null;
   gpsRadiusM: number | null;
+  /** Khoá vị trí có đang bật cho điểm này không. */
+  gpsRequired: boolean;
   isActive: boolean;
   note: string | null;
 }
@@ -339,6 +341,71 @@ export interface PhieuBaoHong {
   photos: Array<{ id: string; kind: LoaiAnh; createdAt: string }>;
 }
 
+/* ──────────── Linh kiện thay thế ──────────── */
+
+/** Một phiếu lấy linh kiện ra khỏi kho, luôn gắn với một phiếu báo hỏng. */
+export interface PhieuLinhKien {
+  id: string;
+  code: string;
+  quantity: number;
+  /** Tên tự nhập — chỉ có với linh kiện không có mã trong kho. */
+  partName: string | null;
+  /** Mã của hãng cung cấp — chỉ có với linh kiện không có mã trong kho. */
+  vendorCode: string | null;
+  note: string | null;
+  issuedAt: string;
+  /** Null = linh kiện không có mã trong kho. */
+  asset: { id: string; code: string; name: string } | null;
+  reason: { id: string; name: string };
+  fromLocation: { id: string; name: string } | null;
+  issuedBy: { id: string; fullName: string; email: string };
+  request: {
+    id: string;
+    code: string;
+    status: TrangThaiYeuCau;
+    items: Array<{
+      asset: {
+        id: string;
+        code: string;
+        name: string;
+        currentLocation: { id: string; name: string } | null;
+      };
+    }>;
+  };
+  photos: Array<{ id: string; kind: LoaiAnh }>;
+}
+
+/* ──────────── Lịch sử sửa chữa theo điểm ──────────── */
+
+/** Một dòng trong bảng tổng hợp lịch sử sửa chữa. */
+export interface DongLichSuDiem {
+  diaDiemId: string;
+  ten: string;
+  loai: string;
+  soBaoHong: number;
+  soBaoHongDangMo: number;
+  soPhieuLinhKien: number;
+  /** Tổng số linh kiện đã thay — cộng số lượng, không phải số phiếu. */
+  tongLinhKien: number;
+  lanCuoi: string | null;
+}
+
+/** Một mốc trong dòng thời gian của một điểm. */
+export interface MocLichSu {
+  loai: 'BAO_HONG' | 'LINH_KIEN';
+  id: string;
+  code: string;
+  luc: string;
+  maThietBi: string;
+  tenThietBi: string;
+  noiDung: string;
+  lyDo: string | null;
+  soLuong: number | null;
+  nguoi: string;
+  trangThai: string | null;
+  soAnh: number;
+}
+
 /* ──────────── GĐ6: dashboard, kiosk, màn hình tablet ──────────── */
 
 export interface SoLieuNhanh {
@@ -399,6 +466,50 @@ export interface DuLieuDashboard {
     tongThieu: number;
     tongThua: number;
   } | null;
+}
+
+/** Số liệu trang "Tổng thể" — cả guồng vận hành, không chỉ tài sản. */
+export interface DuLieuTongThe {
+  ok: true;
+  soNgay: number;
+  tuNgay: string;
+  soLieu: SoLieuNhanh;
+  /** Theo ĐÚNG thứ tự quy trình — đừng sắp lại theo giá trị. */
+  yeuCauTheoBuoc: DongDem[];
+  yeuCauTheoLoai: DongDem[];
+  yeuCauBiTuChoi: number;
+  gioDuyetTrungBinh: number | null;
+  baoHong: {
+    dangMo: number;
+    moTrongKy: number;
+    dongTrongKy: number;
+    gioXuLyTrungBinh: number | null;
+  };
+  baoHongTheoNgay: Array<{ ngay: string; moMoi: number; daDong: number }>;
+  linhKien: {
+    soPhieu: number;
+    tongLinhKien: number;
+    soPhieuKhongMa: number;
+    theoLyDo: DongDem[];
+  };
+  diemCanDeMat: Array<{
+    diaDiemId: string;
+    ten: string;
+    loai: string;
+    soBaoHong: number;
+    soBaoHongDangMo: number;
+    soPhieuLinhKien: number;
+    tongLinhKien: number;
+    lanCuoi: string | null;
+  }>;
+  dangCho: {
+    yeuCauChoDuyet: number;
+    yeuCauChoXuat: number;
+    bienBanChoXacNhan: number;
+    kiemKeDangMo: number;
+    baoHongDangMo: number;
+    thietBiQuaHan: number;
+  };
 }
 
 export interface CaiDatKiosk {

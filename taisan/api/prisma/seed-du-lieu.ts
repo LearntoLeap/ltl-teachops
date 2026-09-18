@@ -14,6 +14,8 @@ export interface DongDiemLuuTru {
   latitude?: number;
   longitude?: number;
   gpsRadiusM?: number;
+  /** Bỏ trống = TẮT khoá vị trí (mặc định của cột trong CSDL). */
+  gpsRequired?: boolean;
   note?: string;
 }
 
@@ -93,7 +95,11 @@ export const DIEM_LUU_TRU: ReadonlyArray<DongDiemLuuTru> = [
     latitude: 21.0012345,
     longitude: 105.8123456,
     gpsRadiusM: 150,
-    note: 'Toạ độ và bán kính là dữ liệu MẪU — ADMIN cấu hình lại trước khi dùng thật.',
+    // Kho văn phòng nằm ngay trụ sở, người ra vào đã kiểm soát bằng cửa, nên
+    // khoá GPS ở đây chỉ gây vướng vì GPS trong nhà hay lệch. Vẫn giữ toạ độ
+    // để nhật ký ghi được máy đăng nhập cách kho bao xa.
+    gpsRequired: false,
+    note: 'Toạ độ và bán kính là dữ liệu MẪU — ADMIN cấu hình lại trước khi dùng thật. Khoá vị trí đang TẮT cho kho này.',
   },
   {
     code: 'TRUONG-MINHKHAI',
@@ -396,6 +402,25 @@ export interface DongTaiKhoan {
  * Mật khẩu KHÔNG nằm trong mã nguồn — lấy từ biến môi trường SEED_ADMIN_PASSWORD
  * (xem api/.env.example). Tài khoản email admin có thể đổi qua SEED_ADMIN_EMAIL.
  */
+/**
+ * Lý do thay linh kiện — mồi ban đầu cho danh mục.
+ *
+ * Chỉ là mồi: người ở kho thêm được lý do mới ngay tại chỗ, nên danh sách này
+ * cố tình ngắn và chỉ gồm những hiện tượng gặp nhiều nhất ở robot STEM.
+ */
+export const LY_DO_THAY_LINH_KIEN: readonly string[] = [
+  'Cháy động cơ servo',
+  'Đứt dây tín hiệu',
+  'Vỡ bánh răng',
+  'Chai pin, không giữ điện',
+  'Cảm biến không nhận tín hiệu',
+  'Gãy khớp nhựa',
+  'Lỏng chân cắm, tiếp xúc kém',
+  'Mất phụ kiện kèm theo',
+  'Hỏng bảng mạch điều khiển',
+  'Nứt vỏ, hở mạch',
+];
+
 export const TAI_KHOAN: ReadonlyArray<DongTaiKhoan> = [
   {
     email: 'admin@learntoleap.vn',

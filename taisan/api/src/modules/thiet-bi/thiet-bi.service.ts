@@ -7,17 +7,19 @@
  *   2. Sửa thiết bị KHÔNG đụng tới vị trí / tình trạng / trạng thái phân bổ —
  *      những thứ đó chỉ đổi qua luồng yêu cầu đã duyệt (nguyên tắc #2).
  */
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma.js';
-import { loi400, loi404, loi409 } from '../../lib/loi-http.js';
+import { loi400, loi404, loi409, loi422 } from '../../lib/loi-http.js';
 import { ghiAudit, type NguoiThaoTac } from '../../lib/audit.js';
 import { dieuKienTaiSan } from '../../lib/pham-vi.js';
 import { tonCuaTaiSan } from '../../lib/ton-kho.js';
+import { xoaFileAnh } from '../../lib/luu-anh.js';
 import type { NguoiDungDaXacThuc } from '../../types/express.js';
 import type { BoiCanhGoi } from '../auth/auth.service.js';
 import type {
   DuLieuLocThietBi,
   DuLieuSuaThietBi,
+  DuLieuTaoNhanhThietBi,
   DuLieuTaoThietBi,
 } from './thiet-bi.schema.js';
 
@@ -363,6 +365,10 @@ export async function sua(
  * Xoá thiết bị — chỉ khi CHƯA phát sinh nghiệp vụ gì (mới tạo, nhập sai mã).
  * Thiết bị đã có lịch sử thì dùng "Ngừng theo dõi" (isActive = false) để giữ
  * nguyên nhật ký di chuyển và các chứng từ liên quan.
+ *
+ * "Nghiệp vụ" ở đây là: movement khác NHAP_BAN_DAU, dòng yêu cầu, dòng biên bản
+ * bàn giao, dòng kiểm kê. ẢNH thì KHÔNG — ảnh đi theo thiết bị (cascade) nên xoá
+ * thiết bị là xoá cả ảnh và file trên đĩa.
  */
 export async function xoa(id: string, actor: NguoiThaoTac, ctx: BoiCanhGoi): Promise<void> {
   const truoc = await prisma.asset.findUnique({
@@ -371,14 +377,17 @@ export async function xoa(id: string, actor: NguoiThaoTac, ctx: BoiCanhGoi): Pro
   });
   if (!truoc) throw loi404('Không tìm thấy thiết bị.');
 
-  const [soMovement, yeuCau, anh, bbbg, kiemKe] = await Promise.all([
+  // ẢNH KHÔNG PHẢI NGHIỆP VỤ nên không nằm trong danh sách chặn: `Photo.assetId`
+  // khai `onDelete: Cascade`, tức ảnh là phần thân của bản ghi thiết bị chứ không
+  // phải chứng từ độc lập. Đếm ảnh vào đây khiến MỌI thiết bị thêm nhanh (luồng
+  // đó bắt buộc có ảnh) không bao giờ xoá được — đúng lỗi người dùng báo.
+  const [soMovement, yeuCau, bbbg, kiemKe] = await Promise.all([
     prisma.movement.count({ where: { assetId: id, type: { not: 'NHAP_BAN_DAU' } } }),
     prisma.requestItem.count({ where: { assetId: id } }),
-    prisma.photo.count({ where: { assetId: id } }),
     prisma.handoverNoteItem.count({ where: { assetId: id } }),
     prisma.inventoryCountItem.count({ where: { assetId: id } }),
   ]);
-  const rangBuoc = { diChuyen: soMovement, yeuCau, anh, bienBan: bbbg, kiemKe };
+  const rangBuoc = { diChuyen: soMovement, yeuCau, bienBan: bbbg, kiemKe };
   const tong = Object.values(rangBuoc).reduce((s, n) => s + n, 0);
 
   if (tong > 0) {
@@ -387,6 +396,13 @@ export async function xoa(id: string, actor: NguoiThaoTac, ctx: BoiCanhGoi): Pro
       rangBuoc,
     );
   }
+
+  // Lấy đường dẫn file TRƯỚC khi xoá: sau transaction thì bản ghi ảnh đã bị
+  // cascade mất, không còn đường nào tìm lại file trên đĩa nữa.
+  const anhCanDonDia = await prisma.photo.findMany({
+    where: { assetId: id },
+    select: { filePath: true },
+  });
 
   await prisma.$transaction(async (tx) => {
     await ghiAudit(
@@ -404,4 +420,90 @@ export async function xoa(id: string, actor: NguoiThaoTac, ctx: BoiCanhGoi): Pro
     await tx.movement.deleteMany({ where: { assetId: id } });
     await tx.asset.delete({ where: { id } });
   });
+
+  // Đặt ngoài transaction: CSDL đã chốt xong thì mới dọn đĩa, và lỗi dọn đĩa
+  // (file bị xoá tay, quyền ghi…) không được phép làm hỏng lượt xoá đã thành công.
+  for (const a of anhCanDonDia) await xoaFileAnh(a.filePath);
+}
+
+/**
+ * TẠO NHANH thiết bị khi lập yêu cầu mà mã chưa có trong kho.
+ *
+ * Dùng lại `tao()` ở trên thay vì viết đường ghi riêng: nhờ vậy vẫn sinh
+ * movement NHAP_BAN_DAU, vẫn ghi nhật ký, vẫn qua đúng mọi ràng buộc — chỉ
+ * khác ở chỗ MÃ do server sinh và các trường không hỏi thì lấy mặc định.
+ *
+ * Mã theo dạng LTL-TN-0001 (TN = "tạo nhanh"), đánh số theo mã lớn nhất đang
+ * có cùng tiền tố. Đặt trong transaction cùng lệnh tạo để hai người bấm cùng
+ * lúc không nhận cùng một số; nếu vẫn trùng (khoá UNIQUE bắt được) thì thử
+ * lại tối đa 5 lần rồi mới báo lỗi.
+ */
+export async function taoNhanh(
+  duLieu: DuLieuTaoNhanhThietBi,
+  actor: NguoiThaoTac,
+  ctx: BoiCanhGoi,
+): Promise<ReturnType<typeof donDong>> {
+  const anh = await prisma.photo.findMany({
+    where: { id: { in: duLieu.anhIds } },
+    select: { id: true, kind: true, assetId: true },
+  });
+  if (anh.length !== duLieu.anhIds.length) {
+    throw loi422('Có ảnh không tồn tại trong hệ thống.', 'ANH_KHONG_TON_TAI');
+  }
+  if (anh.some((a) => a.kind !== 'HIEN_TRANG')) {
+    throw loi422('Ảnh phải được tải lên với loại "Ảnh hiện trạng".', 'ANH_SAI_LOAI');
+  }
+  if (anh.some((a) => a.assetId !== null)) {
+    throw loi422('Có ảnh đã gắn vào thiết bị khác.', 'ANH_DA_DUNG');
+  }
+
+  const ghiChu =
+    'TẠO NHANH khi lập yêu cầu — cần bổ sung nguồn gốc, giá trị và serial sau.' +
+    (duLieu.vendorCode ? ` Mã hãng: ${duLieu.vendorCode}.` : '') +
+    (duLieu.note ? `\n${duLieu.note}` : '');
+
+  for (let lan = 0; lan < 5; lan += 1) {
+    const cuoi = await prisma.asset.findFirst({
+      where: { code: { startsWith: 'LTL-TN-' } },
+      orderBy: { code: 'desc' },
+      select: { code: true },
+    });
+    const soTiepTheo = cuoi ? Number(cuoi.code.slice('LTL-TN-'.length)) + 1 : 1;
+    const ma = `LTL-TN-${String(Number.isFinite(soTiepTheo) ? soTiepTheo : 1).padStart(4, '0')}`;
+
+    try {
+      const thietBi = await tao(
+        {
+          code: ma,
+          name: duLieu.name,
+          categoryId: duLieu.categoryId,
+          origin: 'KHAC',
+          purpose: duLieu.purpose,
+          // Nhiều hơn một cái thì phải quản theo số lượng — `tao()` chặn
+          // DON_VI mà soLuongNhap > 1, nên suy ở đây cho khỏi vướng.
+          trackingType: duLieu.soLuongNhap > 1 ? 'SO_LUONG' : 'DON_VI',
+          condition: 'TOT',
+          nhapVeLocationId: duLieu.nhapVeLocationId,
+          soLuongNhap: duLieu.soLuongNhap,
+          ...(duLieu.vendorCode ? { serialNumber: duLieu.vendorCode } : {}),
+          note: ghiChu,
+        },
+        actor,
+        ctx,
+      );
+
+      await prisma.photo.updateMany({
+        where: { id: { in: duLieu.anhIds } },
+        data: { assetId: thietBi.id },
+      });
+      return thietBi;
+    } catch (e) {
+      // Mã vừa bị người khác lấy → tính lại số và thử tiếp.
+      const trungMa =
+        e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+      const trungMaTheoService = e instanceof Error && /đã tồn tại|Mã .* đã/.test(e.message);
+      if (!trungMa && !trungMaTheoService) throw e;
+    }
+  }
+  throw loi409('Không sinh được mã thiết bị mới sau 5 lần thử. Hãy thử lại.');
 }

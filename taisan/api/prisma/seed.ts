@@ -9,14 +9,22 @@
  *   - Ghi audit log cho chính lần seed (nguyên tắc bất biến #4).
  */
 import { hash } from 'bcryptjs';
+import { config as napEnv } from 'dotenv';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import {
   DIEM_LUU_TRU,
   DONG_GIAI_PHAP,
   LOAI_TAI_SAN,
+  LY_DO_THAY_LINH_KIEN,
   TAI_KHOAN,
   TAI_SAN,
 } from './seed-du-lieu.js';
+
+// Đọc api/.env giống api/src/env.ts. Prisma Client KHÔNG tự đọc .env (chỉ Prisma
+// CLI mới đọc), nên thiếu dòng này thì `npm run seed` báo thiếu DATABASE_URL và
+// SEED_ADMIN_PASSWORD dù api/.env đã có đủ. dotenv không ghi đè biến đã đặt sẵn,
+// nên truyền biến từ dòng lệnh vẫn thắng.
+napEnv();
 
 const prisma = new PrismaClient();
 const SO_VONG_BCRYPT = 12;
@@ -80,6 +88,7 @@ async function napDiemLuuTru(): Promise<Map<string, string>> {
       latitude: d.latitude ?? null,
       longitude: d.longitude ?? null,
       gpsRadiusM: d.gpsRadiusM ?? null,
+      gpsRequired: d.gpsRequired ?? false,
       note: d.note ?? null,
     } satisfies Omit<Prisma.LocationUncheckedCreateInput, 'code'>;
 
@@ -94,6 +103,18 @@ async function napDiemLuuTru(): Promise<Map<string, string>> {
   const soTruong = DIEM_LUU_TRU.filter((d) => d.type === 'DIEM_TRUONG').length;
   viet(`  • Điểm lưu trữ: ${DIEM_LUU_TRU.length} (trong đó ${soTruong} điểm trường)`);
   return banDo;
+}
+
+/** Danh mục lý do thay linh kiện. Chạy lại nhiều lần không sinh bản trùng. */
+async function napLyDoLinhKien(): Promise<void> {
+  for (const name of LY_DO_THAY_LINH_KIEN) {
+    await prisma.partReplacementReason.upsert({
+      where: { name },
+      create: { name },
+      update: {},
+    });
+  }
+  viet(`  • Lý do thay linh kiện: ${LY_DO_THAY_LINH_KIEN.length}`);
 }
 
 async function napTaiKhoan(diemLuuTru: Map<string, string>): Promise<Map<string, string>> {
@@ -328,6 +349,7 @@ async function ghiAuditLog(ketQua: KetQuaTaiSan, taiKhoan: Map<string, string>):
 async function chay(): Promise<void> {
   viet('Nạp dữ liệu mẫu — LtL Quản lý Tài sản');
   await napDanhMuc();
+  await napLyDoLinhKien();
   const diemLuuTru = await napDiemLuuTru();
   const taiKhoan = await napTaiKhoan(diemLuuTru);
   const ketQua = await napTaiSan(diemLuuTru, taiKhoan);

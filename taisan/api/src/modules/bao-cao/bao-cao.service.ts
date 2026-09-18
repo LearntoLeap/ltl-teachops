@@ -11,7 +11,12 @@
 import type { LocationType, Prisma } from '@prisma/client';
 import { prisma } from '../../prisma.js';
 import { tonTatCa } from '../../lib/ton-kho.js';
-import { dieuKienDiaDiem, dieuKienTaiSan, phamViCua } from '../../lib/pham-vi.js';
+import {
+  dieuKienDiaDiem,
+  dieuKienTaiSan,
+  dieuKienYeuCau,
+  phamViCua,
+} from '../../lib/pham-vi.js';
 import type { NguoiDungDaXacThuc } from '../../types/express.js';
 
 /** Loại điểm được coi là "kho của LtL" khi chia tồn kho / ở trường. */
@@ -326,5 +331,459 @@ export async function dashboard(
           tongThua: mucLech.filter((l) => l > 0).reduce((s, l) => s + l, 0),
         }
       : null,
+  };
+}
+
+// ===========================================================================
+// LỊCH SỬ SỬA CHỮA THEO ĐIỂM
+// ===========================================================================
+
+export interface DongLichSuDiem {
+  diaDiemId: string;
+  ten: string;
+  loai: string;
+  /** Số phiếu báo hỏng đã lập cho thiết bị đang ở điểm này. */
+  soBaoHong: number;
+  /** Trong đó còn đang mở. */
+  soBaoHongDangMo: number;
+  /** Số phiếu lấy linh kiện thay cho thiết bị của điểm này. */
+  soPhieuLinhKien: number;
+  /** Tổng số linh kiện đã thay (cộng số lượng, không phải số phiếu). */
+  tongLinhKien: number;
+  /** Lần sửa gần nhất — null nếu chưa có gì. */
+  lanCuoi: Date | null;
+}
+
+export interface MocLichSu {
+  loai: 'BAO_HONG' | 'LINH_KIEN';
+  id: string;
+  code: string;
+  luc: Date;
+  /** Mã + tên thiết bị liên quan. */
+  maThietBi: string;
+  tenThietBi: string;
+  /** Mô tả hỏng, hoặc tên linh kiện đã thay. */
+  noiDung: string;
+  /** Lý do thay (chỉ có với mốc linh kiện). */
+  lyDo: string | null;
+  soLuong: number | null;
+  nguoi: string;
+  trangThai: string | null;
+  soAnh: number;
+}
+
+/**
+ * Bảng tổng: mỗi điểm lưu trữ một dòng, kèm số lần hỏng và số linh kiện đã thay.
+ *
+ * Đếm theo VỊ TRÍ HIỆN TẠI của thiết bị (`currentLocationId`), không theo nơi
+ * lập phiếu: câu hỏi thực tế là "trường này hay hỏng cái gì", nên thiết bị
+ * đang ở đâu thì tính cho đó.
+ */
+export async function lichSuSuaChuaTheoDiem(
+  nguoiDung: NguoiDungDaXacThuc,
+): Promise<DongLichSuDiem[]> {
+  const diem = await prisma.location.findMany({
+    where: { ...dieuKienDiaDiem(nguoiDung) },
+    select: { id: true, name: true, type: true },
+    orderBy: [{ type: 'asc' }, { name: 'asc' }],
+  });
+  if (diem.length === 0) return [];
+  const idDiem = diem.map((d) => d.id);
+
+  // Báo hỏng: gom theo điểm của thiết bị trong phiếu.
+  const baoHong = await prisma.request.findMany({
+    where: {
+      type: 'BAO_HONG',
+      items: { some: { asset: { currentLocationId: { in: idDiem } } } },
+    },
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      items: { select: { asset: { select: { currentLocationId: true } } } },
+    },
+  });
+
+  const phieuLK = await prisma.partIssue.findMany({
+    where: { request: { items: { some: { asset: { currentLocationId: { in: idDiem } } } } } },
+    select: {
+      quantity: true,
+      issuedAt: true,
+      request: { select: { items: { select: { asset: { select: { currentLocationId: true } } } } } },
+    },
+  });
+
+  const bang = new Map<string, DongLichSuDiem>(
+    diem.map((d) => [
+      d.id,
+      {
+        diaDiemId: d.id,
+        ten: d.name,
+        loai: d.type,
+        soBaoHong: 0,
+        soBaoHongDangMo: 0,
+        soPhieuLinhKien: 0,
+        tongLinhKien: 0,
+        lanCuoi: null,
+      },
+    ]),
+  );
+
+  const moiNhat = (cu: Date | null, moi: Date): Date => (cu === null || moi > cu ? moi : cu);
+
+  for (const p of baoHong) {
+    const diaDiemId = p.items[0]?.asset.currentLocationId;
+    const o = diaDiemId ? bang.get(diaDiemId) : undefined;
+    if (!o) continue;
+    o.soBaoHong += 1;
+    if (p.status !== 'DA_HOAN_TAT') o.soBaoHongDangMo += 1;
+    o.lanCuoi = moiNhat(o.lanCuoi, p.createdAt);
+  }
+  for (const p of phieuLK) {
+    const diaDiemId = p.request.items[0]?.asset.currentLocationId;
+    const o = diaDiemId ? bang.get(diaDiemId) : undefined;
+    if (!o) continue;
+    o.soPhieuLinhKien += 1;
+    o.tongLinhKien += p.quantity;
+    o.lanCuoi = moiNhat(o.lanCuoi, p.issuedAt);
+  }
+
+  return [...bang.values()];
+}
+
+/** Dòng thời gian của một điểm: báo hỏng và lấy linh kiện trộn lẫn, mới nhất trước. */
+export async function lichSuMotDiem(
+  nguoiDung: NguoiDungDaXacThuc,
+  diaDiemId: string,
+  gioiHan = 100,
+): Promise<MocLichSu[]> {
+  // Chốt phạm vi: điểm không nằm trong phạm vi thì trả rỗng, không lộ dữ liệu.
+  const trongPhamVi = await prisma.location.findFirst({
+    // AND: dieuKienDiaDiem cũng đặt `id`, spread sẽ xoá mất diaDiemId và phép
+    // chốt phạm vi này thành "có điểm nào trong phạm vi không" — luôn đúng.
+    where: { AND: [{ id: diaDiemId }, dieuKienDiaDiem(nguoiDung)] },
+    select: { id: true },
+  });
+  if (!trongPhamVi) return [];
+
+  const [baoHong, phieuLK] = await Promise.all([
+    prisma.request.findMany({
+      where: {
+        type: 'BAO_HONG',
+        items: { some: { asset: { currentLocationId: diaDiemId } } },
+      },
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        reason: true,
+        createdAt: true,
+        createdBy: { select: { fullName: true } },
+        items: { select: { asset: { select: { code: true, name: true } } } },
+        photos: { select: { id: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: gioiHan,
+    }),
+    prisma.partIssue.findMany({
+      where: { request: { items: { some: { asset: { currentLocationId: diaDiemId } } } } },
+      select: {
+        id: true,
+        code: true,
+        quantity: true,
+        partName: true,
+        vendorCode: true,
+        note: true,
+        issuedAt: true,
+        asset: { select: { code: true, name: true } },
+        reason: { select: { name: true } },
+        issuedBy: { select: { fullName: true } },
+        request: {
+          select: { code: true, items: { select: { asset: { select: { code: true, name: true } } } } },
+        },
+        photos: { select: { id: true } },
+      },
+      orderBy: { issuedAt: 'desc' },
+      take: gioiHan,
+    }),
+  ]);
+
+  const moc: MocLichSu[] = [
+    ...baoHong.map((p): MocLichSu => ({
+      loai: 'BAO_HONG',
+      id: p.id,
+      code: p.code,
+      luc: p.createdAt,
+      maThietBi: p.items[0]?.asset.code ?? '—',
+      tenThietBi: p.items[0]?.asset.name ?? '—',
+      noiDung: p.reason,
+      lyDo: null,
+      soLuong: null,
+      nguoi: p.createdBy.fullName,
+      trangThai: p.status,
+      soAnh: p.photos.length,
+    })),
+    ...phieuLK.map((p): MocLichSu => ({
+      loai: 'LINH_KIEN',
+      id: p.id,
+      code: p.code,
+      luc: p.issuedAt,
+      maThietBi: p.request.items[0]?.asset.code ?? '—',
+      tenThietBi: p.request.items[0]?.asset.name ?? '—',
+      noiDung:
+        p.asset?.name ??
+        p.partName ??
+        p.vendorCode ??
+        'Linh kiện không tên',
+      lyDo: p.reason.name,
+      soLuong: p.quantity,
+      nguoi: p.issuedBy.fullName,
+      trangThai: null,
+      soAnh: p.photos.length,
+    })),
+  ];
+
+  moc.sort((a, b) => b.luc.getTime() - a.luc.getTime());
+  return moc.slice(0, gioiHan);
+}
+
+// ===========================================================================
+// DASHBOARD TỔNG THỂ
+// ===========================================================================
+//
+// Trang `/` chỉ nhìn TÀI SẢN: bao nhiêu mã, nằm ở đâu, cái nào hỏng. Trang tổng
+// thể nhìn CẢ GUỒNG: yêu cầu đang tắc ở bước nào, báo hỏng mở nhanh hơn hay
+// đóng nhanh hơn, điểm trường nào ngốn linh kiện, ai đang phải chờ ai.
+//
+// Vẫn lọc theo phạm vi vai trò như mọi báo cáo khác. Điều kiện phạm vi luôn ghép
+// bằng `AND` chứ không spread: `dieuKienYeuCau` có thể trả về `OR`, spread chung
+// với `OR` của mình thì một trong hai bị ghi đè và lọt dữ liệu ngoài phạm vi.
+
+/** Các bước yêu cầu đi qua, ĐÚNG THỨ TỰ quy trình — thứ tự là phần của dữ liệu. */
+const BUOC_YEU_CAU = ['BAN_NHAP', 'CHO_DUYET', 'DA_DUYET', 'DA_XUAT', 'DA_HOAN_TAT'] as const;
+
+export interface DuLieuTongThe {
+  soNgay: number;
+  tuNgay: string;
+  soLieu: SoLieuNhanh;
+
+  /** Yêu cầu (trừ báo hỏng) theo bước quy trình — thứ tự có nghĩa, đừng sắp lại. */
+  yeuCauTheoBuoc: DongDem[];
+  /** Yêu cầu lập trong kỳ, chia theo loại. */
+  yeuCauTheoLoai: DongDem[];
+  yeuCauBiTuChoi: number;
+  /** Số giờ trung bình từ lúc gửi duyệt đến lúc được duyệt, trong kỳ. */
+  gioDuyetTrungBinh: number | null;
+
+  baoHong: {
+    dangMo: number;
+    moTrongKy: number;
+    dongTrongKy: number;
+    /** Số giờ trung bình từ lúc báo đến lúc đóng phiếu, tính trên phiếu đã đóng. */
+    gioXuLyTrungBinh: number | null;
+  };
+  /** Mở mới và đã đóng theo từng ngày trong kỳ. */
+  baoHongTheoNgay: Array<{ ngay: string; moMoi: number; daDong: number }>;
+
+  linhKien: {
+    soPhieu: number;
+    tongLinhKien: number;
+    /** Phiếu lấy linh kiện KHÔNG có mã trong kho (bắt buộc kèm ảnh). */
+    soPhieuKhongMa: number;
+    theoLyDo: DongDem[];
+  };
+
+  /** Điểm lưu trữ xếp theo số lần phải sửa / thay linh kiện. */
+  diemCanDeMat: Array<{
+    diaDiemId: string;
+    ten: string;
+    loai: string;
+    soBaoHong: number;
+    soBaoHongDangMo: number;
+    soPhieuLinhKien: number;
+    tongLinhKien: number;
+    lanCuoi: string | null;
+  }>;
+
+  /** Việc đang chờ NGƯỜI xử lý — mỗi ô là một chỗ tắc. */
+  dangCho: {
+    yeuCauChoDuyet: number;
+    yeuCauChoXuat: number;
+    bienBanChoXacNhan: number;
+    kiemKeDangMo: number;
+    baoHongDangMo: number;
+    thietBiQuaHan: number;
+  };
+}
+
+/** Số giờ trung bình giữa hai mốc thời gian, làm tròn một chữ số thập phân. */
+function gioTrungBinh(cap: Array<{ dau: Date | null; cuoi: Date | null }>): number | null {
+  const hieu = cap
+    .filter((c): c is { dau: Date; cuoi: Date } => c.dau !== null && c.cuoi !== null)
+    .map((c) => (c.cuoi.getTime() - c.dau.getTime()) / 3_600_000)
+    .filter((h) => h >= 0);
+  if (hieu.length === 0) return null;
+  return Math.round((hieu.reduce((s, h) => s + h, 0) / hieu.length) * 10) / 10;
+}
+
+export async function tongThe(
+  nguoiDung: NguoiDungDaXacThuc,
+  soNgay: number,
+): Promise<DuLieuTongThe> {
+  const pvYeuCau = dieuKienYeuCau(nguoiDung);
+  const bayGio = new Date();
+  const tuNgay = new Date(bayGio.getTime() - (soNgay - 1) * 86_400_000);
+  tuNgay.setUTCHours(0, 0, 0, 0);
+
+  /** Yêu cầu thường (không tính báo hỏng) trong phạm vi. */
+  const chiYeuCauThuong: Prisma.RequestWhereInput = {
+    AND: [pvYeuCau, { type: { not: 'BAO_HONG' } }],
+  };
+
+  const [
+    soLieu,
+    demBuoc,
+    yeuCauTrongKy,
+    soTuChoi,
+    capDuyet,
+    baoHongDangMo,
+    baoHongTrongKy,
+    baoHongDaDong,
+    phieuLinhKien,
+    theoDiem,
+    kiemKeDangMo,
+  ] = await Promise.all([
+    soLieuNhanh(nguoiDung),
+    prisma.request.groupBy({ by: ['status'], where: chiYeuCauThuong, _count: { _all: true } }),
+    prisma.request.findMany({
+      where: { AND: [pvYeuCau, { type: { not: 'BAO_HONG' } }, { createdAt: { gte: tuNgay } }] },
+      select: { type: true },
+    }),
+    prisma.request.count({
+      where: { AND: [chiYeuCauThuong, { status: 'TU_CHOI', createdAt: { gte: tuNgay } }] },
+    }),
+    prisma.request.findMany({
+      where: { AND: [chiYeuCauThuong, { approvedAt: { gte: tuNgay } }] },
+      select: { submittedAt: true, createdAt: true, approvedAt: true },
+    }),
+    prisma.request.count({
+      where: { AND: [pvYeuCau, { type: 'BAO_HONG', status: { in: ['CHO_DUYET', 'DA_DUYET'] } }] },
+    }),
+    prisma.request.findMany({
+      where: { AND: [pvYeuCau, { type: 'BAO_HONG', createdAt: { gte: tuNgay } }] },
+      select: { createdAt: true },
+    }),
+    prisma.request.findMany({
+      where: { AND: [pvYeuCau, { type: 'BAO_HONG', completedAt: { gte: tuNgay } }] },
+      select: { createdAt: true, completedAt: true },
+    }),
+    prisma.partIssue.findMany({
+      where: { AND: [{ issuedAt: { gte: tuNgay } }, { request: pvYeuCau }] },
+      select: {
+        assetId: true,
+        quantity: true,
+        reason: { select: { id: true, name: true } },
+      },
+    }),
+    lichSuSuaChuaTheoDiem(nguoiDung),
+    prisma.inventoryCount.count({
+      where: { status: { in: ['BAN_NHAP', 'DANG_KIEM', 'CHO_CHOT'] } },
+    }),
+  ]);
+
+  // --- yêu cầu theo bước: giữ đúng thứ tự quy trình, kể cả bước đang trống.
+  const demTheoTrangThai = new Map(demBuoc.map((d) => [d.status, d._count._all]));
+  const yeuCauTheoBuoc: DongDem[] = BUOC_YEU_CAU.map((b) => ({
+    ma: b,
+    nhan: b,
+    so: demTheoTrangThai.get(b) ?? 0,
+  }));
+
+  const demLoai = new Map<string, number>();
+  for (const y of yeuCauTrongKy) demLoai.set(y.type, (demLoai.get(y.type) ?? 0) + 1);
+
+  // --- báo hỏng theo ngày: khởi tạo đủ mọi ngày để biểu đồ không bị hở cột.
+  const theoNgay = new Map<string, { moMoi: number; daDong: number }>();
+  for (let i = 0; i < soNgay; i++) {
+    theoNgay.set(ngayISO(new Date(tuNgay.getTime() + i * 86_400_000)), { moMoi: 0, daDong: 0 });
+  }
+  for (const b of baoHongTrongKy) {
+    const o = theoNgay.get(ngayISO(b.createdAt));
+    if (o) o.moMoi += 1;
+  }
+  for (const b of baoHongDaDong) {
+    if (!b.completedAt) continue;
+    const o = theoNgay.get(ngayISO(b.completedAt));
+    if (o) o.daDong += 1;
+  }
+
+  // --- linh kiện: gom theo lý do thay, và đếm riêng phiếu linh kiện không mã.
+  const demLyDo = new Map<string, { nhan: string; so: number }>();
+  let tongLinhKien = 0;
+  let soPhieuKhongMa = 0;
+  for (const p of phieuLinhKien) {
+    tongLinhKien += p.quantity;
+    if (p.assetId === null) soPhieuKhongMa += 1;
+    const o = demLyDo.get(p.reason.id) ?? { nhan: p.reason.name, so: 0 };
+    o.so += 1;
+    demLyDo.set(p.reason.id, o);
+  }
+
+  return {
+    soNgay,
+    tuNgay: ngayISO(tuNgay),
+    soLieu,
+    yeuCauTheoBuoc,
+    yeuCauTheoLoai: [...demLoai.entries()]
+      .map(([ma, so]) => ({ ma, nhan: ma, so }))
+      .sort((a, b) => b.so - a.so),
+    yeuCauBiTuChoi: soTuChoi,
+    // Mốc bắt đầu là lúc GỬI DUYỆT; phiếu cũ chưa có `submittedAt` thì lấy lúc tạo.
+    gioDuyetTrungBinh: gioTrungBinh(
+      capDuyet.map((c) => ({ dau: c.submittedAt ?? c.createdAt, cuoi: c.approvedAt })),
+    ),
+    baoHong: {
+      dangMo: baoHongDangMo,
+      moTrongKy: baoHongTrongKy.length,
+      dongTrongKy: baoHongDaDong.length,
+      gioXuLyTrungBinh: gioTrungBinh(
+        baoHongDaDong.map((b) => ({ dau: b.createdAt, cuoi: b.completedAt })),
+      ),
+    },
+    baoHongTheoNgay: [...theoNgay.entries()].map(([ngay, v]) => ({ ngay, ...v })),
+    linhKien: {
+      soPhieu: phieuLinhKien.length,
+      tongLinhKien,
+      soPhieuKhongMa,
+      theoLyDo: [...demLyDo.entries()]
+        .map(([ma, v]) => ({ ma, nhan: v.nhan, so: v.so }))
+        .sort((a, b) => b.so - a.so),
+    },
+    diemCanDeMat: theoDiem
+      .filter((d) => d.soBaoHong > 0 || d.soPhieuLinhKien > 0)
+      .sort(
+        (a, b) =>
+          b.soBaoHongDangMo - a.soBaoHongDangMo ||
+          b.soBaoHong + b.soPhieuLinhKien - (a.soBaoHong + a.soPhieuLinhKien),
+      )
+      .slice(0, 12)
+      .map((d) => ({
+        diaDiemId: d.diaDiemId,
+        ten: d.ten,
+        loai: d.loai,
+        soBaoHong: d.soBaoHong,
+        soBaoHongDangMo: d.soBaoHongDangMo,
+        soPhieuLinhKien: d.soPhieuLinhKien,
+        tongLinhKien: d.tongLinhKien,
+        lanCuoi: d.lanCuoi?.toISOString() ?? null,
+      })),
+    dangCho: {
+      yeuCauChoDuyet: soLieu.yeuCauChoDuyet,
+      yeuCauChoXuat: soLieu.yeuCauChoXuat,
+      bienBanChoXacNhan: soLieu.bienBanChoXacNhan,
+      kiemKeDangMo: kiemKeDangMo,
+      baoHongDangMo: baoHongDangMo,
+      thietBiQuaHan: soLieu.maQuaHan,
+    },
   };
 }

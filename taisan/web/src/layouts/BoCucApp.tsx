@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Boxes,
   ClipboardCheck,
   ClipboardList,
   FileSignature,
+  Gauge,
   LayoutGrid,
   LogOut,
   MapPin,
@@ -15,13 +16,17 @@ import {
   ShieldCheck,
   Tablet,
   TriangleAlert,
+  History,
+  Monitor,
   Upload,
   Users,
+  Wrench,
   X,
 } from 'lucide-react';
 import { NHAN_VAI_TRO } from '@ltl/taisan-shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DauHieuAssetOps } from '@/components/DauHieuAssetOps';
 import { NutDoiGiaoDien } from '@/components/NutDoiGiaoDien';
 import { cn } from '@/lib/utils';
 import { useAuth, VAI_TRO_NHAP_LIEU, VAI_TRO_QUAN_LY } from '@/lib/auth';
@@ -53,6 +58,16 @@ const MENU: readonly MucMenu[] = [
  * được. Tách làm hai nhóm vẫn giữ nguyên đường dẫn và quyền của từng mục.
  */
 const MENU_THEM: readonly MucMenu[] = [
+  // Dashboard tổng thể: cũng KHÔNG đưa lên thanh chính vì lý do y như "Lấy linh
+  // kiện" bên dưới — thanh đã đủ bảy mục. Đường vào chính là nút "Xem tổng thể"
+  // ngay đầu trang Tổng quan, chỗ ai cũng đi qua sau khi đăng nhập.
+  { duongDan: '/tong-the', nhan: 'Tổng thể', icon: Gauge },
+  // Đặt đầu nhóm vì dùng nhiều nhất trong đây. KHÔNG đưa lên thanh chính: thêm
+  // mục thứ 8 vào thanh làm mục cuối bị cắt còn trơ biểu tượng không nhãn —
+  // đã thấy trong ảnh chụp ở 1280px. Đường vào chính của việc này là ô lớn
+  // "Lấy linh kiện" trên màn hình kho và liên kết từ phiếu báo hỏng.
+  { duongDan: '/linh-kien', nhan: 'Lấy linh kiện', icon: Wrench, vaiTro: ['ADMIN', 'VAN_HANH', 'KHO'] },
+  { duongDan: '/lich-su-sua-chua', nhan: 'Lịch sử sửa chữa', icon: History },
   { duongDan: '/dia-diem', nhan: 'Điểm lưu trữ', icon: MapPin },
   { duongDan: '/danh-muc', nhan: 'Danh mục', icon: LayoutGrid, vaiTro: VAI_TRO_QUAN_LY },
   { duongDan: '/nhap-lieu', nhan: 'Nhập hàng loạt', icon: Upload, vaiTro: VAI_TRO_NHAP_LIEU },
@@ -67,6 +82,37 @@ export function BoCucApp() {
   const dieuHuong = useNavigate();
   const [moMenu, datMoMenu] = useState(false);
   const [moThem, datMoThem] = useState(false);
+  const oThem = useRef<HTMLDivElement>(null);
+
+  /*
+   * Đóng bảng "Thêm" khi bấm ra ngoài hoặc bấm Esc.
+   *
+   * Việc này từng do một nút phủ `fixed inset-0` lo. Nhưng <header> có
+   * `backdrop-blur`, và backdrop-filter biến header thành khối chứa cho con
+   * `position: fixed` — nên `inset-0` chỉ phủ đúng dải header cao 64px thay vì
+   * cả màn hình. Hậu quả: bấm vào giữa trang thì bảng không đóng, còn lớp phủ
+   * lại nằm đè lên chính nút "Thêm" và các mục điều hướng bên cạnh.
+   */
+  useEffect(() => {
+    if (!moThem) return;
+    const bamNgoai = (e: PointerEvent): void => {
+      if (!oThem.current?.contains(e.target as Node)) datMoThem(false);
+    };
+    const bamEsc = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') datMoThem(false);
+    };
+    document.addEventListener('pointerdown', bamNgoai);
+    document.addEventListener('keydown', bamEsc);
+    return () => {
+      document.removeEventListener('pointerdown', bamNgoai);
+      document.removeEventListener('keydown', bamEsc);
+    };
+  }, [moThem]);
+
+  // Tài khoản kho: mọi đường "về" đều dẫn về MÀN HÌNH KHO, không phải Tổng
+  // quan. Máy ở kho đặt cố định, người dùng nó cả ngày chỉ cần màn hình đó.
+  const laKho = nguoiDung?.role === 'KHO';
+  const duongVe = laKho ? '/kiosk' : '/';
 
   const hopVaiTro = (m: MucMenu): boolean =>
     !m.vaiTro || Boolean(nguoiDung && m.vaiTro.includes(nguoiDung.role));
@@ -82,41 +128,59 @@ export function BoCucApp() {
     <div className="min-h-dvh">
       <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
         <div className="container flex h-16 items-center gap-3">
-          <Link to="/" className="flex items-center gap-3">
-            <span className="nen-xanh-chuyen grid size-10 place-items-center rounded-lg text-primary-foreground">
-              <Boxes aria-hidden />
-            </span>
+          <Link to={duongVe} className="flex items-center gap-3">
+            <DauHieuAssetOps canh={40} className="shrink-0 rounded-[9px]" />
             <span className="hidden sm:block">
-              <span className="block text-sm font-semibold leading-tight">Quản lý Tài sản</span>
+              <span className="block text-sm font-semibold leading-tight">
+                Asset<span className="text-primary">Ops</span>
+              </span>
               <span className="block text-xs text-muted-foreground">Learn to Leap</span>
             </span>
           </Link>
 
+          {/*
+            overflow-x-auto phải nằm ở div CON, không được đặt ở <nav>. Đặt ở
+            <nav> thì <nav> thành vùng cắt (CSS: một trục auto là trục kia thôi
+            visible), nên bảng "Thêm" — định vị absolute, nằm BÊN DƯỚI thanh —
+            bị cắt sạch: nút vẫn đổi trạng thái mà không ai thấy gì hiện ra.
+            Đã kiểm bằng trình duyệt thật ở 1024→1920px: elementFromPoint tại
+            giữa mục "Tài khoản" trả về thẻ thống kê của trang phía sau, tức
+            bảng không được vẽ ra nên cú bấm rơi thẳng xuống nội dung bên dưới.
+            Để nút "Thêm" ngoài vùng cuộn cũng giữ được nó trong khung ở 1024px.
+          */}
           <nav
-            className="ml-2 hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="ml-2 hidden min-w-0 flex-1 items-center gap-1 lg:flex"
             aria-label="Điều hướng chính"
           >
-            {mucHienThi.map((m) => (
-              <NavLink
-                key={m.duongDan}
-                to={m.duongDan}
-                end={m.duongDan === '/'}
-                className={({ isActive }) =>
-                  cn(
-                    'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                  )
-                }
-              >
-                <m.icon className="size-4" aria-hidden />
-                {m.nhan}
-              </NavLink>
-            ))}
+            {/*
+              mask-image làm mép phải mờ dần. Khi thanh chật, mục cuối bị cắt
+              giữa chữ trông như lỗi hiển thị — đã thấy "Cố định tại k" trong
+              ảnh chụp ở 1280px. Mờ dần thì cú cắt đó đọc thành "còn nữa, cuộn
+              tiếp". Không fade oan khi thanh rộng: chỗ mờ rơi vào vùng trống.
+            */}
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_0,black_calc(100%-1.75rem),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {mucHienThi.map((m) => (
+                <NavLink
+                  key={m.duongDan}
+                  to={m.duongDan}
+                  end={m.duongDan === '/'}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    )
+                  }
+                >
+                  <m.icon className="size-4" aria-hidden />
+                  {m.nhan}
+                </NavLink>
+              ))}
+            </div>
 
             {mucThem.length > 0 ? (
-              <div className="relative shrink-0">
+              <div ref={oThem} className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => datMoThem((t) => !t)}
@@ -133,34 +197,26 @@ export function BoCucApp() {
                   Thêm
                 </button>
                 {moThem ? (
-                  <>
-                    <button
-                      type="button"
-                      className="fixed inset-0 z-30 cursor-default"
-                      aria-label="Đóng bảng điều hướng phụ"
-                      onClick={() => datMoThem(false)}
-                    />
-                    <div className="absolute right-0 z-40 mt-1 w-56 rounded-lg border bg-popover p-1 shadow-lg">
-                      {mucThem.map((m) => (
-                        <NavLink
-                          key={m.duongDan}
-                          to={m.duongDan}
-                          onClick={() => datMoThem(false)}
-                          className={({ isActive }) =>
-                            cn(
-                              'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium',
-                              isActive
-                                ? 'bg-primary/10 text-primary'
-                                : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
-                            )
-                          }
-                        >
-                          <m.icon className="size-4" aria-hidden />
-                          {m.nhan}
-                        </NavLink>
-                      ))}
-                    </div>
-                  </>
+                  <div className="absolute right-0 z-40 mt-1 w-56 rounded-lg border bg-popover p-1 shadow-lg">
+                    {mucThem.map((m) => (
+                      <NavLink
+                        key={m.duongDan}
+                        to={m.duongDan}
+                        onClick={() => datMoThem(false)}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium',
+                            isActive
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                          )
+                        }
+                      >
+                        <m.icon className="size-4" aria-hidden />
+                        {m.nhan}
+                      </NavLink>
+                    ))}
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -182,6 +238,13 @@ export function BoCucApp() {
                   {nguoiDung.tenDiaDiem ? ` · ${nguoiDung.tenDiaDiem}` : ''}
                 </p>
               </div>
+            ) : null}
+            {laKho ? (
+              <Button variant="accent" size="icon" asChild title="Về màn hình kho">
+                <Link to="/kiosk" aria-label="Về màn hình kho">
+                  <Monitor aria-hidden />
+                </Link>
+              </Button>
             ) : null}
             <NutDoiGiaoDien />
             <Button
@@ -211,6 +274,16 @@ export function BoCucApp() {
           aria-label="Điều hướng (màn hình nhỏ)"
         >
           <div className="flex flex-col gap-1">
+            {laKho ? (
+              <Link
+                to="/kiosk"
+                onClick={() => datMoMenu(false)}
+                className="flex min-h-cham items-center gap-2 rounded-md bg-primary/10 px-3 text-sm font-semibold text-primary"
+              >
+                <Monitor className="size-4" aria-hidden />
+                Về màn hình kho
+              </Link>
+            ) : null}
             {[...mucHienThi, ...mucThem].map((m) => (
               <NavLink
                 key={m.duongDan}
