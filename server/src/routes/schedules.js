@@ -17,11 +17,11 @@ import {
 } from '../lib/scope.js';
 import { badRequest, conflict, unprocessable } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
-import { notifySchoolManagers } from '../lib/notify.js';
+import { notify, notifySchoolManagers } from '../lib/notify.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
 import { periodTimes, MIN_PERIOD, MAX_PERIOD } from '../lib/periods.js';
 
-const SCHEDULE_STATUSES = ['scheduled', 'done', 'cancelled'];
+const SCHEDULE_STATUSES = ['scheduled', 'done', 'cancelled', 'skipped'];
 const MAX_BULK_SESSIONS = 120;
 
 /** Các cột "ngày giờ/người" — khoá lại khi buổi đã có người check-in. */
@@ -134,15 +134,12 @@ async function validateSessionCore(user, b) {
 
   // Xếp lịch theo TIẾT: giờ suy ra từ khung tiết. Vẫn nhận start/end trực tiếp
   // cho nhập bảng và các bản ghi cũ.
+  // Tiết ⇒ giờ được quy đổi SAU, theo đúng ngày dạy (xem timesAt). Không chọn
+  // tiết thì phải gửi giờ trực tiếp (nhập bảng, buổi ngoài khung).
   const period = int(b.period, 'Tiết', { min: MIN_PERIOD, max: MAX_PERIOD });
-  let startTime;
-  let endTime;
-  if (period) {
-    const t = await periodTimes(period);
-    if (!t) throw badRequest(`Tiết ${period} không có trong khung tiết đang áp dụng.`);
-    startTime = t.start;
-    endTime = t.end;
-  } else {
+  let startTime = null;
+  let endTime = null;
+  if (!period) {
     startTime = timeStr(b.start_time, 'start_time', { required: true });
     endTime = timeStr(b.end_time, 'end_time', { required: true });
   }
@@ -152,7 +149,7 @@ async function validateSessionCore(user, b) {
   const teacherManual = teacherId ? null : str(b.teacher_manual_name, 'Tên giáo viên', { max: 120 });
   const assistantManual = assistantId ? null : str(b.assistant_manual_name, 'Tên trợ giảng', { max: 120 });
 
-  if (endTime <= startTime) throw badRequest('Giờ kết thúc phải sau giờ bắt đầu.');
+  if (startTime && endTime <= startTime) throw badRequest('Giờ kết thúc phải sau giờ bắt đầu.');
   if (teacherId && assistantId && teacherId === assistantId) {
     throw badRequest('Giáo viên và trợ giảng phải là hai người khác nhau.');
   }
@@ -171,6 +168,19 @@ async function validateSessionCore(user, b) {
     startTime, endTime, period, teacherManual, assistantManual,
     subject, school, cls, teacher, assistant,
   };
+}
+
+/**
+ * Giờ của buổi vào NGÀY cụ thể: có tiết thì tra bộ giờ học theo mùa của trường
+ * (không có thì khung chung); không có tiết thì dùng giờ gửi trực tiếp.
+ */
+async function timesAt(core, date) {
+  if (!core.period) return { startTime: core.startTime, endTime: core.endTime };
+  const t = await periodTimes(core.period, { schoolId: core.schoolId, date });
+  if (!t) {
+    throw badRequest(`Tiết ${core.period} không có trong bộ giờ học của ${core.school.name} ngày ${date}.`);
+  }
+  return { startTime: t.start, endTime: t.end };
 }
 
 export default async function routes(app) {
@@ -287,6 +297,7 @@ export default async function routes(app) {
 
     const core = await validateSessionCore(req.user, b);
     const sessionDate = dateStr(b.session_date, 'session_date', { required: true });
+    Object.assign(core, await timesAt(core, sessionDate));
     const note = str(b.note, 'note');
 
     // Kiểm trùng lịch cho từng người tham gia buổi này
@@ -370,6 +381,7 @@ export default async function routes(app) {
       try {
         const core = await validateSessionCore(req.user, row);
         const sessionDate = dateStr(row.session_date, 'session_date', { required: true });
+        Object.assign(core, await timesAt(core, sessionDate));
 
         await tx(async (c) => {
           const q = (t, p) => c.query(t, p);
@@ -455,11 +467,17 @@ export default async function routes(app) {
     await tx(async (c) => {
       const q = (text, params) => c.query(text, params);
       for (const date of dates) {
+        // Giờ theo mùa của đúng ngày này — lịch lặp vắt qua hai mùa vẫn đúng giờ.
+        let at;
+        try { at = await timesAt(core, date); } catch (e) {
+          skipped.push({ date, reason: e.message });
+          continue;
+        }
         // Buổi trùng lịch → bỏ qua, không làm hỏng cả loạt
         let clashMsg = null;
         for (const p of people) {
           const hit = await findOverlap(q, {
-            userId: p.id, date, start: core.startTime, end: core.endTime,
+            userId: p.id, date, start: at.startTime, end: at.endTime,
           });
           if (hit) { clashMsg = overlapMessage(hit, date); break; }
         }
@@ -474,7 +492,7 @@ export default async function routes(app) {
               teacher_manual_name, assistant_manual_name, subject, created_by)
            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
           [core.schoolId, core.classId, core.roomId, core.teacherId, core.assistantId,
-            date, core.startTime, core.endTime, core.period,
+            date, at.startTime, at.endTime, core.period,
             core.teacherManual, core.assistantManual, core.subject, req.user.id]
         );
         created += 1;
@@ -485,12 +503,13 @@ export default async function routes(app) {
       action: 'create',
       entity: 'schedules',
       summary: `Tạo hàng loạt ${created} buổi dạy (${from} → ${to}, ` +
-        `${hhmm(core.startTime)}–${hhmm(core.endTime)}) — ${core.school.name} / lớp ${core.cls.name}; ` +
+        (core.period ? `tiết ${core.period}` : `${hhmm(core.startTime)}–${hhmm(core.endTime)}`) +
+        `) — ${core.school.name} / lớp ${core.cls.name}; ` +
         `bỏ qua ${skipped.length} buổi trùng lịch.`,
       after: {
         school_id: core.schoolId, class_id: core.classId, room_id: core.roomId,
         teacher_id: core.teacherId, assistant_id: core.assistantId,
-        start_time: core.startTime, end_time: core.endTime,
+        period: core.period, start_time: core.startTime, end_time: core.endTime,
         weekdays, from, to, created, skipped,
       },
     });
@@ -545,7 +564,7 @@ export default async function routes(app) {
     if (b.period !== undefined) {
       patch.period = int(b.period, 'Tiết', { min: MIN_PERIOD, max: MAX_PERIOD });
       if (patch.period) {
-        const t = await periodTimes(patch.period);
+        const t = await periodTimes(patch.period, { schoolId: s.school_id, date: patch.session_date ?? s.session_date });
         if (!t) throw badRequest(`Tiết ${patch.period} không có trong khung tiết đang áp dụng.`);
         patch.start_time = t.start;
         patch.end_time = t.end;
@@ -633,6 +652,153 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
+   * POST /api/schedules/:id/status — đổi TRẠNG THÁI tiết, có lý do.
+   *   cancelled — HUỶ LỊCH: kế hoạch thay đổi từ trước (nghỉ lễ, trường bận…)
+   *   skipped   — ĐÃ BỎ: đến giờ nhưng tiết không diễn ra
+   *   scheduled — khôi phục về theo lịch
+   * Tiết đã điểm danh là đã dạy thật ⇒ không huỷ/bỏ được nữa.
+   * ---------------------------------------------------------------------- */
+  app.post('/api/schedules/:id/status', { preHandler: requirePerm('schedule.manage') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const s = await assertScheduleAccess(req.user, id);
+    const b = req.body || {};
+    const status = enumOf(b.status, 'Trạng thái', ['cancelled', 'skipped', 'scheduled'], { required: true });
+    const reason = str(b.reason, 'Lý do', { max: 500 });
+
+    if (status !== 'scheduled' && (!reason || reason.length < 5)) {
+      throw badRequest(status === 'cancelled'
+        ? 'Vui lòng ghi lý do huỷ lịch (ít nhất 5 ký tự).'
+        : 'Vui lòng ghi lý do bỏ tiết (ít nhất 5 ký tự).');
+    }
+    const taught = await scalar('select exists (select 1 from attendance where schedule_id = $1)', [id]);
+    if (taught && status !== 'scheduled') {
+      throw unprocessable('Tiết này đã điểm danh — đã dạy thật, không huỷ hay đánh dấu bỏ được nữa.');
+    }
+
+    const updated = await one(
+      `update schedules set
+         status = $2::schedule_status,
+         status_reason = $3,
+         status_changed_by = $4,
+         status_changed_at = now()
+       where id = $1 returning *`,
+      [id, status === 'scheduled' && taught ? 'done' : status, status === 'scheduled' ? null : reason, req.user.id]
+    );
+
+    const VN = { cancelled: 'Huỷ lịch', skipped: 'Đánh dấu ĐÃ BỎ', scheduled: 'Khôi phục' };
+    const tiet = s.period ? `tiết ${s.period}` : hhmm(s.start_time);
+    audit(req, {
+      action: status === 'scheduled' ? 'update' : 'cancel',
+      entity: 'schedules',
+      entityId: id,
+      summary: `${VN[status]} ${tiet} ngày ${s.session_date} — ${s.school_name} / lớp ${s.class_name}` +
+        (reason && status !== 'scheduled' ? `. Lý do: ${reason}` : '.'),
+      before: pickAudit(s),
+      after: pickAudit(updated),
+    });
+
+    // Người phụ trách tiết cần biết tiết của mình bị huỷ / bỏ.
+    if (status !== 'scheduled') {
+      for (const uid of [s.teacher_id, s.assistant_id].filter(Boolean)) {
+        notify(uid, {
+          kind: 'schedule_status',
+          title: status === 'cancelled' ? 'Tiết dạy bị huỷ lịch' : 'Tiết dạy được đánh dấu đã bỏ',
+          body: `${tiet} ngày ${s.session_date} — ${s.school_name} / lớp ${s.class_name}. Lý do: ${reason}`,
+          link: '/lich',
+          refId: id,
+        }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo schedule_status'));
+      }
+    }
+    return scheduleDetail(id);
+  });
+
+  /* ------------------------------------------------------------------------
+   * GET /api/schedules/:id/assistant-options — trợ giảng có thể giao cho tiết.
+   * Dành cho GIÁO VIÊN của tiết (không có quyền xem danh bạ nói chung).
+   * ---------------------------------------------------------------------- */
+  app.get('/api/schedules/:id/assistant-options', async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const s = await assertScheduleAccess(req.user, id);
+    const isOwnTeacher = s.teacher_id === req.user.id;
+    if (!isOwnTeacher) assertPerm(req.user, 'schedule.manage');
+
+    // Trợ giảng đang gắn với trường lên đầu; người ở trường khác vẫn chọn được.
+    const items = await rows(
+      `select u.id, u.full_name, u.phone,
+              exists (
+                select 1 from class_assignments ca join classes c on c.id = ca.class_id
+                 where ca.user_id = u.id and c.school_id = $1
+                union all
+                select 1 from schedules x
+                 where x.assistant_id = u.id and x.school_id = $1
+              ) as at_school
+         from users u
+        where u.role = 'assistant' and u.is_active
+        order by at_school desc, u.full_name`,
+      [s.school_id]
+    );
+    return { items, current: { assistant_id: s.assistant_id, assistant_name: s.assistant_name } };
+  });
+
+  /* ------------------------------------------------------------------------
+   * PUT /api/schedules/:id/assistant — GIAO trợ giảng check-in + điểm danh tiết.
+   * Mỗi tiết có thể là một trợ giảng khác nhau. Giáo viên của tiết tự giao được;
+   * admin/Phòng chuyên môn giao được mọi tiết.
+   * Body: { assistant_id } hoặc { assistant_manual_name } hoặc cả hai rỗng = bỏ giao.
+   * ---------------------------------------------------------------------- */
+  app.put('/api/schedules/:id/assistant', async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const s = await assertScheduleAccess(req.user, id);
+    const isOwnTeacher = s.teacher_id === req.user.id;
+    if (!isOwnTeacher) assertPerm(req.user, 'schedule.manage');
+    if (s.status === 'cancelled' || s.status === 'skipped') {
+      throw unprocessable('Tiết đã huỷ / đã bỏ — không giao trợ giảng được.');
+    }
+    const taught = await scalar('select exists (select 1 from attendance where schedule_id = $1)', [id]);
+    if (taught) throw unprocessable('Tiết đã điểm danh xong — không đổi người phụ trách được nữa.');
+
+    const b = req.body || {};
+    const assistantId = uuid(b.assistant_id, 'assistant_id');
+    const manual = assistantId ? null : str(b.assistant_manual_name, 'Tên trợ giảng', { max: 120 });
+    let assistant = null;
+    if (assistantId) {
+      assistant = await assertActiveStaff(assistantId, 'assistant', 'Trợ giảng');
+      if (assistantId === s.teacher_id) throw badRequest('Giáo viên và trợ giảng phải là hai người khác nhau.');
+      const hit = await findOverlap(query, {
+        userId: assistantId, date: s.session_date, start: s.start_time, end: s.end_time, excludeId: id,
+      });
+      if (hit) throw conflict(overlapMessage(hit, s.session_date));
+    }
+
+    const updated = await one(
+      `update schedules set assistant_id = $2, assistant_manual_name = $3 where id = $1 returning *`,
+      [id, assistantId, manual]
+    );
+
+    const tiet = s.period ? `tiết ${s.period}` : hhmm(s.start_time);
+    audit(req, {
+      action: 'update',
+      entity: 'schedules',
+      entityId: id,
+      summary: `Giao trợ giảng ${assistant?.full_name || manual || '(bỏ giao)'} cho ${tiet} ngày ${s.session_date} — ` +
+        `${s.school_name} / lớp ${s.class_name}.`,
+      before: pickAudit(s),
+      after: pickAudit(updated),
+    });
+
+    if (assistantId && assistantId !== s.assistant_id) {
+      notify(assistantId, {
+        kind: 'schedule_assigned',
+        title: 'Bạn được giao check-in và điểm danh một tiết',
+        body: `${req.user.full_name} giao ${tiet} ngày ${s.session_date} — ${s.school_name} / lớp ${s.class_name}.`,
+        link: '/diem-danh',
+        refId: id,
+      }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo schedule_assigned'));
+    }
+    return scheduleDetail(id);
+  });
+
+  /* ------------------------------------------------------------------------
    * DELETE /api/schedules/:id — đã có chấm công ⇒ chỉ huỷ (giữ dữ liệu);
    * chưa có gì ⇒ xoá hẳn. Lý do huỷ lấy từ ?reason=.
    * ---------------------------------------------------------------------- */
@@ -641,30 +807,18 @@ export default async function routes(app) {
     const s = await assertScheduleAccess(req.user, id);
     const reason = str(req.query.reason, 'reason', { max: 500 });
 
+    // Chấm công nay theo BUỔI, không bám tiết — thứ chặn xoá hẳn là ĐIỂM DANH:
+    // tiết đã điểm danh là đã dạy thật, xoá sẽ mất sĩ số và bằng chứng.
     const hasTimesheet = await scalar(
-      'select exists (select 1 from timesheets where schedule_id = $1)',
+      'select exists (select 1 from attendance where schedule_id = $1)',
       [id]
     );
 
     if (hasTimesheet) {
-      // Đã có dữ liệu chấm công → không xoá cứng, chỉ chuyển sang huỷ
-      const note = reason
-        ? (s.note ? `${s.note}\n[Huỷ] ${reason}` : `[Huỷ] ${reason}`)
-        : s.note;
-      const updated = await one(
-        `update schedules set status = 'cancelled', note = $2 where id = $1 returning *`,
-        [id, note]
+      throw conflict(
+        'Tiết này đã điểm danh — đã dạy thật nên không xoá hẳn được. '
+        + 'Nếu cần, hãy đổi trạng thái sang "Huỷ lịch" hoặc "Đã bỏ" kèm lý do.'
       );
-      audit(req, {
-        action: 'cancel',
-        entity: 'schedules',
-        entityId: id,
-        summary: `Huỷ buổi dạy ${s.session_date} — ${s.school_name} / lớp ${s.class_name} ` +
-          `(đã có chấm công nên không xoá).${reason ? ` Lý do: ${reason}` : ''}`,
-        before: pickAudit(s),
-        after: pickAudit(updated),
-      });
-      return { cancelled: true, id, status: 'cancelled' };
     }
 
     await query('delete from schedules where id = $1', [id]);

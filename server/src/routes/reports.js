@@ -51,6 +51,9 @@ async function schoolScope(user, col, next, schoolId) {
 
 const SESSION_VN = { morning: 'Sáng', afternoon: 'Chiều' };
 
+/** Trạng thái tiết — khớp nhãn hiện trên màn Lịch dạy. */
+const TIET_STATUS = { scheduled: 'Theo lịch', done: 'Đã dạy', cancelled: 'Huỷ lịch', skipped: 'Đã bỏ' };
+
 /**
  * Bảng chấm công — MỘT DÒNG MỖI BUỔI (sáng/chiều) của mỗi người, không phải mỗi
  * tiết. Giáo viên đến trường chấm công vào, ra về chấm công ra; kiểm thiết bị
@@ -593,6 +596,8 @@ export default async function routes(app) {
         { header: 'Môn / chủ đề', key: 'subject', width: 22 },
         { header: 'Người phụ trách', key: 'name', width: 22 },
         { header: 'Vai trò', key: 'role', width: 11, align: 'center' },
+        { header: 'Trạng thái tiết', key: 'status', width: 13, align: 'center' },
+        { header: 'Lý do huỷ / bỏ', key: 'status_reason', width: 28, wrap: true },
         { header: 'Đã chấm công', key: 'shift', width: 12, align: 'center' },
         { header: 'Đã điểm danh', key: 'done', width: 11, align: 'center' },
         { header: 'Giờ check tại lớp', key: 'class_in', width: 13, align: 'center' },
@@ -612,6 +617,8 @@ export default async function routes(app) {
         subject: v.subject || DASH,
         name: v.full_name,
         role: LABELS.classRole?.[v.session_role] || (v.session_role === 'assistant' ? 'Trợ giảng' : 'Giáo viên'),
+        status: TIET_STATUS[v.status] || v.status,
+        status_reason: v.status_reason || DASH,
         shift: v.shift_check_in_at ? formatVNTime(v.shift_check_in_at) : 'Chưa',
         done: v.attendance_done ? 'Đã' : 'Chưa',
         class_in: formatVNTime(v.class_check_in_at),

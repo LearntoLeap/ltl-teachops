@@ -134,7 +134,7 @@ export const LABEL = {
     morning_start: 'Đầu buổi sáng', morning_end: 'Cuối buổi sáng',
     afternoon_start: 'Đầu buổi chiều', afternoon_end: 'Cuối buổi chiều',
   },
-  scheduleStatus: { scheduled: 'Theo lịch', done: 'Đã dạy', cancelled: 'Đã huỷ' },
+  scheduleStatus: { scheduled: 'Theo lịch', done: 'Đã dạy', cancelled: 'Huỷ lịch', skipped: 'Đã bỏ' },
   solutionGroup: { ubtech: 'UBTECH', stickem: "Stick'em", weeemake: 'Weeemake', other: 'Khác' },
 };
 

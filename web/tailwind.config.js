@@ -1,40 +1,44 @@
-/** Bảng màu thương hiệu Learn to Leap — tím chủ đạo. */
+/**
+ * Bảng màu Learn to Leap — TÍM chủ đạo, nền trắng kiểu trang quản trị.
+ * Thang brand là tím thuần (trước đây 50–500 ngả hồng nên nền, viền, nút
+ * đều ám hồng và cả trang trông đục).
+ */
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
         brand: {
-          50: '#fdf3f9',
-          100: '#fbe5f1',
-          200: '#f6cce4',
-          300: '#eda3d0',
-          400: '#df78b9',
-          500: '#cd5aa3',
-          600: '#b0428f',
-          700: '#8c3b90',
-          800: '#6a3a99',
-          900: '#4f2a78',
-          950: '#311a48',
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#6d28d9',
+          800: '#5b21b6',
+          900: '#4c1d95',
+          950: '#2e1065',
         },
-        ink: { DEFAULT: '#1e1b2e', soft: '#4b4565', muted: '#857e9e' },
-        night: { DEFAULT: '#241335', deep: '#1a0e28', line: '#3a2452' },
-        line: '#efe7f0',
-        canvas: '#f9f5fb',
+        ink: { DEFAULT: '#18181b', soft: '#3f3f46', muted: '#71717a' },
+        night: { DEFAULT: '#1e1537', deep: '#150f29', line: '#2e2350' },
+        line: '#e4e4e7',
+        canvas: '#f7f7f9',
       },
       fontFamily: {
         sans: ['"Segoe UI"', 'system-ui', '-apple-system', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
       },
       backgroundImage: {
-        'brand-grad': 'linear-gradient(135deg,#ee6c98 0%,#a94f9f 50%,#6f3fa2 100%)',
-        'brand-grad-soft': 'linear-gradient(135deg,#e86ba0 0%,#7e44a3 100%)',
+        'brand-grad': 'linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%)',
+        'brand-grad-soft': 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)',
       },
       boxShadow: {
-        card: '0 6px 22px rgba(99,40,117,.12)',
-        'card-lg': '0 14px 40px rgba(99,40,117,.20)',
-        'card-sm': '0 2px 8px rgba(99,40,117,.09)',
+        card: '0 4px 12px rgba(24,24,27,.06), 0 1px 2px rgba(24,24,27,.04)',
+        'card-lg': '0 16px 40px rgba(24,24,27,.14)',
+        'card-sm': '0 1px 2px rgba(24,24,27,.05)',
       },
-      borderRadius: { xl2: '18px', xl3: '26px' },
+      borderRadius: { xl2: '12px', xl3: '18px' },
       keyframes: {
         'slide-up': { from: { transform: 'translateY(16px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },

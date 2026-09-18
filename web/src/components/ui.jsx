@@ -100,7 +100,7 @@ export function Sheet({ open, onClose, title, children, wide = false }) {
   if (!visible) return null;
   return (
     <div
-      className={`fixed inset-0 z-[70] flex items-end sm:items-center justify-center transition-colors duration-200 ${show ? 'bg-black/45' : 'bg-transparent'}`}
+      className={`fixed inset-0 z-[70] flex items-end sm:items-center justify-center transition-colors duration-200 ${show ? 'bg-zinc-900/25 backdrop-blur-[2px]' : 'bg-transparent'}`}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div
         className={`bg-white w-full sm:rounded-xl3 rounded-t-xl3 shadow-card-lg overflow-hidden

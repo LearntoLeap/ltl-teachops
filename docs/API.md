@@ -127,6 +127,30 @@ ngay ở `GET /api/schedules/today` và trong danh sách chờ điểm danh, nê
 để Phòng chuyên môn và Quản trị viên biết ai thêm, vì sao — căn cứ để quyết định có tính
 công hay không.
 
+**Giờ học theo MÙA của từng trường.** `GET /api/periods?school_id=&date=` trả khung tiết
+áp dụng cho trường vào ngày đó, kèm `source` (`school` | `system`) và `set_name`. Mỗi trường
+có nhiều bộ giờ, mỗi bộ hiệu lực trong một khoảng ngày (VD mùa hè 15/04–14/10, mùa đông
+15/10–14/04); nhiều bộ chồng ngày thì bộ bắt đầu muộn nhất thắng; không bộ nào khớp thì
+dùng khung chung. Quản lý bộ giờ (admin, Phòng chuyên môn — `org.manage`):
+`GET/POST /api/schools/:id/period-sets`, `PUT/DELETE /api/period-sets/:id`, thân
+`{name, valid_from, valid_to, items:[{no, start, end}]}`. Xếp tiết thì giờ được tra theo
+**đúng ngày dạy** — lịch lặp tuần vắt qua hai mùa tự lấy đúng giờ từng mùa. Giờ được chốt
+lúc xếp lịch, nên sửa/xoá bộ giờ không làm xê dịch bảng công các buổi đã có.
+
+**Trạng thái tiết.** `scheduled` Theo lịch · `done` Đã dạy · `cancelled` **Huỷ lịch** (kế
+hoạch thay đổi từ trước) · `skipped` **Đã bỏ** (đến giờ nhưng không diễn ra).
+`POST /api/schedules/:id/status {status, reason}` (admin/manager) — huỷ/bỏ **bắt buộc lý do**,
+lưu `status_reason`, `status_changed_by`, `status_changed_at` và báo cho người phụ trách;
+`status: scheduled` để khôi phục. Tiết đã điểm danh không huỷ/bỏ được. Tiết huỷ/bỏ vẫn hiện
+trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + Lý do huỷ / bỏ).
+`DELETE /api/schedules/:id` là **Xoá hẳn** — chỉ khi chưa điểm danh; đã điểm danh ⇒ 409.
+
+**Giao trợ giảng theo tiết.** Mỗi tiết có thể một trợ giảng khác nhau.
+`GET /api/schedules/:id/assistant-options` và `PUT /api/schedules/:id/assistant
+{assistant_id}` — giáo viên CỦA TIẾT tự giao được, admin/manager giao được mọi tiết. Người
+được giao nhận thông báo, thấy tiết ở màn Điểm danh và check-in + điểm danh tiết đó. Tiết đã
+điểm danh, đã huỷ hoặc đã bỏ thì không đổi người được.
+
 ## 5. Chấm công — `/api/timesheets`
 
 | Method | Path | Quyền | Mô tả |

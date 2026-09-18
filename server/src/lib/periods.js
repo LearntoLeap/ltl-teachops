@@ -1,13 +1,17 @@
 /**
- * periods.js — Khung TIẾT DẠY dùng chung cho xếp lịch.
+ * periods.js — Khung TIẾT DẠY dùng cho xếp lịch.
  *
- * Người xếp lịch chỉ chọn "Tiết 3", không gõ giờ. Nhưng chấm công tính trễ/sớm
- * theo `schedules.start_time`, nên mỗi tiết vẫn phải quy ra giờ thật để lưu.
+ * Người xếp lịch chỉ chọn "Tiết 3", không gõ giờ. Nhưng chấm công và điểm danh
+ * cần giờ thật, nên mỗi tiết phải quy ra giờ để lưu xuống buổi dạy.
  *
- * Khung tiết KHÔNG cố định trong mã nguồn: Quản trị viên sửa và THÊM tiết ngay
- * trong app (lưu ở app_settings key 'periods'). Mảng DEFAULT_PERIODS dưới đây
- * chỉ là khung khởi đầu — 45 phút/tiết, sáng 1-5, chiều 6-10.
+ * Giờ của tiết tra theo thứ tự ưu tiên:
+ *   1. BỘ GIỜ HỌC THEO MÙA của đúng trường, đang hiệu lực vào ngày dạy
+ *      (bảng school_period_sets / school_period_times — Quản trị viên và Phòng
+ *      chuyên môn tự thêm: mùa hè, mùa đông khác nhau).
+ *   2. Khung chung của hệ thống (app_settings.periods — Quản trị viên sửa).
+ *   3. DEFAULT_PERIODS bên dưới — khung phổ thông 45 phút/tiết.
  */
+import { one, rows } from '../db.js';
 import { getSetting, patchSetting } from './settings.js';
 import { badRequest } from './errors.js';
 
@@ -29,84 +33,91 @@ const DEFAULT_PERIODS = [
 ];
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const hhmm = (t) => String(t || '').slice(0, 5);
 
 /** Buổi của tiết suy từ giờ bắt đầu — chỉ để gom nhóm cho dễ nhìn. */
 const sessionOf = (start) => (String(start) < '12:00' ? 'morning' : 'afternoon');
+const withSession = (list) => list.map((p) => ({ ...p, session: sessionOf(p.start) }));
 
 /**
- * Khung tiết đang áp dụng. Cấu hình hỏng (thiếu trường, sai giờ, trùng số tiết)
- * thì rơi về khung mặc định — thà xếp lịch bằng khung chuẩn còn hơn chết API.
+ * Kiểm tra + sắp xếp một danh sách tiết. Không hợp lệ ⇒ ném badRequest kèm lý do
+ * tiếng Việt (dùng khi lưu); `lenient` = trả null thay vì ném (dùng khi đọc).
  */
-export async function listPeriods() {
-  let raw;
-  try {
-    raw = (await getSetting('periods'))?.items;
-  } catch {
-    raw = null;
-  }
-  const items = normalize(raw);
-  return (items || DEFAULT_PERIODS).map((p) => ({ ...p, session: sessionOf(p.start) }));
-}
-
-/** Kiểm tra và sắp xếp danh sách tiết; không hợp lệ ⇒ null. */
-function normalize(raw) {
-  if (!Array.isArray(raw) || !raw.length) return null;
+export function normalizePeriods(raw, { lenient = false } = {}) {
+  const fail = (msg) => { if (lenient) return null; throw badRequest(msg); };
+  if (!Array.isArray(raw) || !raw.length) return fail('Bộ giờ học phải có ít nhất một tiết.');
+  if (raw.length > MAX_PERIOD) return fail(`Tối đa ${MAX_PERIOD} tiết.`);
   const seen = new Set();
   const out = [];
   for (const p of raw) {
     const no = Number(p?.no);
-    const start = String(p?.start || '').slice(0, 5);
-    const end = String(p?.end || '').slice(0, 5);
-    if (!Number.isInteger(no) || no < MIN_PERIOD || no > MAX_PERIOD) return null;
-    if (!HHMM.test(start) || !HHMM.test(end) || end <= start) return null;
-    if (seen.has(no)) return null;
+    if (!Number.isInteger(no) || no < MIN_PERIOD || no > MAX_PERIOD) {
+      return fail(`Số tiết phải là số nguyên từ ${MIN_PERIOD} đến ${MAX_PERIOD}.`);
+    }
+    const start = hhmm(p?.start ?? p?.start_time);
+    const end = hhmm(p?.end ?? p?.end_time);
+    if (!HHMM.test(start) || !HHMM.test(end)) return fail(`Tiết ${no}: giờ phải ở dạng HH:MM.`);
+    if (end <= start) return fail(`Tiết ${no}: giờ kết thúc phải sau giờ bắt đầu.`);
+    if (seen.has(no)) return fail(`Tiết ${no} bị trùng.`);
     seen.add(no);
     out.push({ no, start, end });
   }
   return out.sort((a, b) => a.no - b.no);
 }
 
-/**
- * Lưu khung tiết mới (Quản trị viên). Ném badRequest kèm lý do tiếng Việt nếu
- * danh sách không hợp lệ — người dùng sửa ngay trên màn hình.
- */
-export async function savePeriods(raw, userId = null) {
-  if (!Array.isArray(raw) || !raw.length) {
-    throw badRequest('Khung tiết phải có ít nhất một tiết.');
-  }
-  if (raw.length > MAX_PERIOD) {
-    throw badRequest(`Khung tiết tối đa ${MAX_PERIOD} tiết.`);
-  }
-  for (const p of raw) {
-    const no = Number(p?.no);
-    if (!Number.isInteger(no) || no < MIN_PERIOD || no > MAX_PERIOD) {
-      throw badRequest(`Số tiết phải là số nguyên từ ${MIN_PERIOD} đến ${MAX_PERIOD}.`);
-    }
-    const start = String(p?.start || '').slice(0, 5);
-    const end = String(p?.end || '').slice(0, 5);
-    if (!HHMM.test(start) || !HHMM.test(end)) {
-      throw badRequest(`Tiết ${no}: giờ phải ở dạng HH:MM.`);
-    }
-    if (end <= start) throw badRequest(`Tiết ${no}: giờ kết thúc phải sau giờ bắt đầu.`);
-  }
-  const items = normalize(raw);
-  if (!items) throw badRequest('Khung tiết có số tiết bị trùng nhau.');
-  await patchSetting('periods', { items }, userId);
-  return items.map((p) => ({ ...p, session: sessionOf(p.start) }));
+/** Khung chung của hệ thống (khi trường chưa có bộ giờ theo mùa). */
+async function systemPeriods() {
+  let raw = null;
+  try { raw = (await getSetting('periods'))?.items; } catch { raw = null; }
+  return normalizePeriods(raw, { lenient: true }) || DEFAULT_PERIODS;
 }
 
-/** Giờ bắt đầu/kết thúc của một tiết; tiết không có trong khung ⇒ null. */
-export async function periodTimes(no) {
+/** Bộ giờ theo mùa của trường đang hiệu lực vào ngày đó, hoặc null. */
+export async function activeSchoolSet(schoolId, date) {
+  if (!schoolId || !date) return null;
+  // Nhiều bộ chồng ngày thì bộ bắt đầu MUỘN NHẤT thắng — bộ mới đè bộ cũ.
+  const set = await one(
+    `select id, name, valid_from, valid_to from school_period_sets
+      where school_id = $1 and is_active and $2::date between valid_from and valid_to
+      order by valid_from desc, created_at desc limit 1`,
+    [schoolId, date]
+  );
+  if (!set) return null;
+  const times = await rows(
+    'select no, start_time, end_time from school_period_times where set_id = $1 order by no',
+    [set.id]
+  );
+  if (!times.length) return null;
+  return {
+    ...set,
+    items: times.map((t) => ({ no: t.no, start: hhmm(t.start_time), end: hhmm(t.end_time) })),
+  };
+}
+
+/**
+ * Khung tiết áp dụng cho (trường, ngày). Trả về kèm nguồn để giao diện nói rõ
+ * đang dùng bộ giờ nào: { items, source: 'school'|'system', set_name? }.
+ */
+export async function listPeriods({ schoolId = null, date = null } = {}) {
+  const set = await activeSchoolSet(schoolId, date);
+  if (set) {
+    return { items: withSession(set.items), source: 'school', set_id: set.id, set_name: set.name };
+  }
+  return { items: withSession(await systemPeriods()), source: 'system' };
+}
+
+/** Lưu khung CHUNG của hệ thống (Quản trị viên). */
+export async function savePeriods(raw, userId = null) {
+  const items = normalizePeriods(raw);
+  await patchSetting('periods', { items }, userId);
+  return withSession(items);
+}
+
+/** Giờ của một tiết cho (trường, ngày); tiết không có trong khung ⇒ null. */
+export async function periodTimes(no, ctx = {}) {
   const n = Number(no);
   if (!Number.isInteger(n)) return null;
-  const items = await listPeriods();
+  const { items } = await listPeriods(ctx);
   const p = items.find((x) => x.no === n);
   return p ? { start: p.start, end: p.end } : null;
-}
-
-/** Suy ngược: giờ bắt đầu khớp tiết nào — dùng cho buổi tạo trước khi có tiết. */
-export async function periodOfStart(startTime) {
-  const hhmm = String(startTime || '').slice(0, 5);
-  const items = await listPeriods();
-  return items.find((p) => p.start === hhmm)?.no ?? null;
 }

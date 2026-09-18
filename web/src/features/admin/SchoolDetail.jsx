@@ -12,6 +12,7 @@ import { LABEL, fmtNumber } from '../../lib/format.js';
 import { getPosition } from '../../lib/gps.js';
 import { useToast } from '../../components/Toast.jsx';
 import DeleteOrgSheet from './DeleteOrgSheet.jsx';
+import PeriodSetsTab from './PeriodSetsTab.jsx';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
@@ -833,6 +834,7 @@ export default function SchoolDetail() {
           { value: 'info', label: 'Thông tin' },
           { value: 'classes', label: 'Lớp' },
           { value: 'rooms', label: 'Phòng STEM' },
+          { value: 'periods', label: '⏱ Giờ học' },
         ]}
       />
 
@@ -847,6 +849,7 @@ export default function SchoolDetail() {
       )}
       {tab === 'classes' && <ClassesTab schoolId={schoolId} schoolName={school.name} canManage={canManage} />}
       {tab === 'rooms' && <RoomsTab schoolId={schoolId} canManage={canManage} />}
+      {tab === 'periods' && <PeriodSetsTab schoolId={schoolId} canManage={canManage} />}
     </div>
   );
 }

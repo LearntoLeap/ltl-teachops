@@ -9,6 +9,7 @@ import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtDateLong, fmtRange, fmtTime, LABEL, monthRange, today } from '../../lib/format.js';
 import { cachedPeriods, loadPeriods, periodLabel, periodOfStart } from '../../lib/periods.js';
+import TietActions from './TietActions.jsx';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field,
   PageHeader, PageLoading, Segmented, Sheet, Spinner,
@@ -35,7 +36,7 @@ function weekRange(offsetWeeks = 0) {
 }
 
 /** Tông màu badge theo trạng thái buổi dạy. */
-const STATUS_TONE = { scheduled: 'neutral', done: 'approved', cancelled: 'absent' };
+const STATUS_TONE = { scheduled: 'neutral', done: 'approved', cancelled: 'pending', skipped: 'absent' };
 
 /** Server nhận weekdays theo ISO-8601: 1 = Thứ Hai … 7 = Chủ nhật. */
 const WEEKDAY_OPTS = [
@@ -386,7 +387,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                 {onAddDay && list.length > 0 && (
                   <button
                     className="text-[12px] text-brand-500 hover:text-brand-800 leading-none px-1"
-                    title="Thêm buổi ngày này"
+                    title="Thêm tiết ngày này"
                     onClick={(e) => { e.stopPropagation(); onAddDay(c.date); }}>+</button>
                 )}
               </div>
@@ -397,7 +398,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                     onClick={(e) => { e.stopPropagation(); onOpen(sItem); }}
                     title={`${fmtTime(sItem.start_time)} · Lớp ${classNameOf(sItem)} — ${schoolNameOf(sItem)}${teacherNameOf(sItem) ? ' · GV ' + teacherNameOf(sItem) : ''}`}
                     className={`w-full text-left rounded-md px-1.5 py-[3px] text-[10.5px] leading-tight font-semibold truncate transition
-                      ${sItem.status === 'cancelled'
+                      ${sItem.status === 'cancelled' || sItem.status === 'skipped'
                         ? 'bg-slate-100 text-slate-400 line-through'
                         : 'bg-brand-50 text-brand-900 hover:bg-brand-100 ring-1 ring-inset ring-brand-100'}`}>
                     {periodLabel(sItem)} {classNameOf(sItem)}
@@ -453,9 +454,23 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
 
   const res = useSchoolResources(f.school_id, { light: selfOnly });
 
-  // Khung tiết do Quản trị viên cấu hình — tải một lần khi mở form.
+  // Khung tiết theo trường + ngày dạy: mỗi trường có bộ giờ mùa hè / mùa đông
+  // riêng; chưa có thì dùng khung chung.
   const [periods, setPeriods] = useState(cachedPeriods);
-  useEffect(() => { loadPeriods().then(setPeriods); }, []);
+  const [periodSrc, setPeriodSrc] = useState(null);
+  const periodDate = bulk ? f.from : f.date;
+  useEffect(() => {
+    if (!f.school_id) { loadPeriods().then(setPeriods); setPeriodSrc(null); return undefined; }
+    let live = true;
+    api.get('/api/periods', { school_id: f.school_id, date: periodDate || undefined })
+      .then((r) => {
+        if (!live) return;
+        if (r?.items?.length) setPeriods(r.items);
+        setPeriodSrc(r?.source === 'school' ? r.set_name : null);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [f.school_id, periodDate]);
 
   const setField = (k) => (e) => {
     const v = e.target.value;
@@ -689,7 +704,10 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
         </Field>
       )}
 
-      <Field label="Tiết dạy" required hint="Chọn tiết — giờ vào/ra lấy theo khung tiết của trường.">
+      <Field label="Tiết dạy" required
+        hint={periodSrc
+          ? `Giờ theo bộ "${periodSrc}" của trường.`
+          : 'Trường chưa có bộ giờ theo mùa — đang dùng khung chung.'}>
         <div className="flex flex-wrap gap-1.5">
           {periods.map((p) => {
             const on = String(f.period) === String(p.no);
@@ -727,7 +745,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
         <button type="submit" className="btn-primary" disabled={busy}>
           {busy
             ? <Spinner className="h-4 w-4 border-white/40 border-t-white" />
-            : bulk ? 'Tạo lịch lặp' : schedule ? 'Lưu thay đổi' : 'Thêm buổi'}
+            : bulk ? 'Tạo lịch lặp' : schedule ? 'Lưu thay đổi' : 'Thêm tiết'}
         </button>
       </div>
     </form>
@@ -759,9 +777,6 @@ export default function ScheduleList() {
   const [formCfg, setFormCfg] = useState(null);    // {bulk} | {schedule} | {}
   const [formSeq, setFormSeq] = useState(0);       // key để mỗi lần mở là form mới
 
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelBusy, setCancelBusy] = useState(false);
 
   const range = useMemo(() => {
     if (view === 'grid') return monthRange(monthAnchor);
@@ -817,24 +832,6 @@ export default function ScheduleList() {
 
   const openForm = (cfg) => { setFormSeq((n) => n + 1); setFormCfg(cfg); };
 
-  const doCancel = async () => {
-    if (!detail) return;
-    if (!cancelReason.trim()) { toast.err('Vui lòng nhập lý do huỷ buổi.'); return; }
-    setCancelBusy(true);
-    try {
-      // Server đọc lý do huỷ từ query ?reason= (DELETE không có body).
-      await api.del(`/api/schedules/${detail.id}`, { query: { reason: cancelReason.trim() } });
-      toast.ok('Đã huỷ buổi dạy.');
-      setCancelOpen(false);
-      setDetail(null);
-      load();
-    } catch (e) {
-      toast.fromError(e);
-    } finally {
-      setCancelBusy(false);
-    }
-  };
-
   const todayIso = today();
 
   return (
@@ -846,10 +843,10 @@ export default function ScheduleList() {
           <>
             <button className="btn-line" onClick={() => setBatchOpen(true)}>📋 Nhập bảng</button>
             <button className="btn-line" onClick={() => openForm({ bulk: true })}>+ Lịch lặp tuần</button>
-            <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi</button>
+            <button className="btn-primary" onClick={() => openForm({})}>+ Thêm tiết</button>
           </>
         ) : canSelfAdd ? (
-          <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi bị thiếu</button>
+          <button className="btn-primary" onClick={() => openForm({})}>+ Thêm tiết bị thiếu</button>
         ) : null}
       />
 
@@ -958,10 +955,10 @@ export default function ScheduleList() {
               icon="🗓️"
               title="Không có buổi dạy nào"
               hint={canManage
-                ? 'Khoảng thời gian này chưa được xếp lịch. Thêm buổi lẻ hoặc tạo lịch lặp theo tuần.'
+                ? 'Khoảng thời gian này chưa được xếp lịch. Thêm tiết lẻ hoặc tạo lịch lặp theo tuần.'
                 : 'Bạn không có buổi dạy nào trong khoảng thời gian này.'}
               action={canManage ? (
-                <button className="btn-primary" onClick={() => openForm({})}>+ Thêm buổi</button>
+                <button className="btn-primary" onClick={() => openForm({})}>+ Thêm tiết</button>
               ) : null}
             />
           ) : (
@@ -1038,20 +1035,17 @@ export default function ScheduleList() {
               <Dot on={!!detail.has_attendance} label="Điểm danh" />
             </div>
 
-            {canManage && detail.status !== 'cancelled' && (
-              <div className="flex gap-2.5">
-                <button
-                  className="btn-line flex-1"
-                  onClick={() => { const s = detail; setDetail(null); openForm({ schedule: s }); }}>
-                  ✏️ Sửa
-                </button>
-                <button
-                  className="btn-danger flex-1"
-                  onClick={() => { setCancelReason(''); setCancelOpen(true); }}>
-                  Huỷ buổi
-                </button>
-              </div>
-            )}
+            <TietActions
+              tiet={detail}
+              canManage={canManage}
+              isOwnTeacher={detail.teacher_id === auth.user?.id}
+              onEdit={() => { const s = detail; setDetail(null); openForm({ schedule: s }); }}
+              onChanged={(what) => {
+                if (what === 'deleted') { setDetail(null); load(); return; }
+                api.get(`/api/schedules/${detail.id}`).then(setDetail).catch(() => setDetail(null));
+                load();
+              }}
+            />
           </>
         )}
       </Sheet>
@@ -1061,7 +1055,7 @@ export default function ScheduleList() {
         open={!!formCfg}
         onClose={() => setFormCfg(null)}
         wide
-        title={formCfg?.bulk ? 'Lịch lặp tuần' : formCfg?.schedule ? 'Sửa buổi dạy' : 'Thêm buổi dạy'}>
+        title={formCfg?.bulk ? 'Lịch lặp tuần' : formCfg?.schedule ? 'Sửa tiết dạy' : (canManage ? 'Thêm tiết dạy' : 'Thêm tiết bị thiếu')}>
         {formCfg && (
           <ScheduleForm
             key={formSeq}
@@ -1076,30 +1070,6 @@ export default function ScheduleList() {
           />
         )}
       </Sheet>
-
-      {/* -------------------------- Xác nhận huỷ buổi ------------------------- */}
-      <ConfirmSheet
-        open={cancelOpen}
-        onClose={() => setCancelOpen(false)}
-        onConfirm={doCancel}
-        title="Huỷ buổi dạy"
-        danger
-        confirmLabel="Huỷ buổi"
-        busy={cancelBusy}
-        message={detail ? (
-          <>
-            Buổi <b>{fmtRange(detail.start_time, detail.end_time)}</b> ngày <b>{fmtDate(detail.session_date || detail.date)}</b>
-            {classNameOf(detail) ? <> — lớp <b>{classNameOf(detail)}</b></> : null} sẽ bị huỷ.
-            <textarea
-              className="input mt-3"
-              rows={2}
-              placeholder="Lý do huỷ (bắt buộc)…"
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-            />
-          </>
-        ) : ''}
-      />
     </div>
   );
 }
