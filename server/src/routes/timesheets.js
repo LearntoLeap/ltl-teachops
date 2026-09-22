@@ -16,6 +16,9 @@ import { distanceMeters, isValidCoord, labelCheckIn, workMinutes } from '../lib/
 import { consumeMultipart } from '../lib/storage.js';
 import { audit } from '../lib/audit.js';
 import { notify, notifySchoolManagers } from '../lib/notify.js';
+import {
+  parseDevices, totalOf, shortagesOf, describe, describeShortage, deviceOptions,
+} from '../lib/shiftDevices.js';
 
 const LABELS = ['ontime', 'late', 'absent'];
 const APPROVALS = ['pending', 'approved', 'rejected'];
@@ -210,7 +213,11 @@ export default async function routes(app) {
         where user_id = $1 and school_id = $2 and work_date = $3 and work_session = $4`,
       [req.user.id, schoolId, date, session]
     );
-    const planned = await plannedShift(req.user.id, schoolId, date, session);
+    const [planned, devices] = await Promise.all([
+      plannedShift(req.user.id, schoolId, date, session),
+      // Danh mục thiết bị của trường (có số chuẩn) + loại dùng chung để thêm.
+      deviceOptions(schoolId),
+    ]);
 
     return {
       item,                      // null = chưa chấm công buổi này
@@ -218,6 +225,7 @@ export default async function routes(app) {
       session,
       school: { id: school.id, name: school.name, gps_radius_m: school.gps_radius_m },
       planned,                   // { start_time, periods } — lịch dạy chỉ để NHẮC giờ
+      devices,                   // { catalog: [...], suggestions: [...] }
     };
   });
 
@@ -260,7 +268,12 @@ export default async function routes(app) {
     if (!photo) throw unprocessable('Bắt buộc chụp ảnh thiết bị đầu buổi.');
     const selfie = files.selfie?.[0];
     if (!selfie) throw unprocessable('Bắt buộc chụp ảnh selfie tại trường để xác minh.');
-    const deviceCount = int(fields.device_count, 'device_count', { required: true, min: 0, max: 100_000 });
+    // Thiết bị đầu buổi THEO LOẠI (robot, laptop, tablet…). Client cũ và hàng
+    // đợi offline tạo trước bản này chỉ gửi con số tổng — vẫn nhận.
+    const checkInDevices = parseDevices(fields.devices);
+    const deviceCount = checkInDevices
+      ? totalOf(checkInDevices)
+      : int(fields.device_count, 'device_count', { required: true, min: 0, max: 100_000 });
     const note = str(fields.note, 'note', { max: 2000 });
 
     // Đối chiếu vị trí với toạ độ trường.
@@ -307,8 +320,9 @@ export default async function routes(app) {
           planned_start_time, unscheduled,
           check_in_at, check_in_lat, check_in_lng, check_in_accuracy, check_in_distance_m,
           check_in_photo_id, check_in_selfie_id, check_in_device_count, check_in_note,
-          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+          gps_flagged, late_minutes, label, approval_status, client_time, queued_at, synced_late,
+          check_in_devices)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
        on conflict (user_id, work_date, work_session, school_id) do update set
          schedule_id           = excluded.schedule_id,
          role                  = excluded.role,
@@ -322,6 +336,7 @@ export default async function routes(app) {
          check_in_photo_id     = excluded.check_in_photo_id,
          check_in_selfie_id    = excluded.check_in_selfie_id,
          check_in_device_count = excluded.check_in_device_count,
+         check_in_devices      = excluded.check_in_devices,
          check_in_note         = excluded.check_in_note,
          gps_flagged           = excluded.gps_flagged,
          late_minutes          = excluded.late_minutes,
@@ -336,7 +351,8 @@ export default async function routes(app) {
        planned.start_time, !planned.start_time,
        checkInAt, lat, lng, accuracy, distance,
        photo.id, selfie.id, deviceCount, checkInNote,
-       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate]
+       gpsFlagged, lateMinutes, label, approvalStatus, clientTime, queuedAt, syncedLate,
+       checkInDevices ? JSON.stringify(checkInDevices) : null]
     );
     if (!saved) throw conflict('Bạn đã chấm công buổi này rồi.');
 
@@ -346,7 +362,8 @@ export default async function routes(app) {
       entityId: saved.id,
       summary: `Chấm công vào ${SESSION_VN[session]} — ${school.name} ngày ${vnDate(date)}, `
         + `${label === 'late' ? `trễ ${lateMinutes} phút` : 'đúng giờ'}`
-        + `${gpsFlagged ? ' (ngoài bán kính GPS)' : ''}.`,
+        + `${gpsFlagged ? ' (ngoài bán kính GPS)' : ''}`
+        + (checkInDevices ? `. Thiết bị: ${describe(checkInDevices)}` : `. Thiết bị: ${deviceCount}`) + '.',
       after: saved,
     });
 
@@ -403,6 +420,21 @@ export default async function routes(app) {
       throw unprocessable('Có thiết bị hỏng: bắt buộc mô tả và chụp ảnh minh chứng.');
     }
 
+    // Đếm lại cuối buổi theo loại; loại nào ít hơn đầu buổi là THIẾU.
+    const checkOutDevices = parseDevices(fields.devices);
+    const missing = checkOutDevices ? shortagesOf(ts.check_in_devices, checkOutDevices) : [];
+    if (missing.length && !damageNote) {
+      throw unprocessable(
+        `Cuối buổi thiếu thiết bị so với đầu buổi: ${describeShortage(missing)}. Vui lòng ghi rõ lý do.`
+      );
+    }
+    const shortage = missing.length > 0;
+    // Thiếu hoặc hỏng đều là sự cố phải báo — gộp một phiếu cho Phòng chuyên môn.
+    const issueText = [
+      shortage ? `Thiếu cuối buổi: ${describeShortage(missing)}.` : null,
+      damageNote,
+    ].filter(Boolean).join(' ');
+
     const checkOutAt = new Date();
     const minutes = workMinutes(ts.check_in_at, checkOutAt);
     const clientTime = isoTime(fields.client_time, 'client_time');
@@ -427,20 +459,22 @@ export default async function routes(app) {
            check_out_at = $1, check_out_lat = $2, check_out_lng = $3, check_out_distance_m = $4,
            check_out_photo_id = $5, device_ok = $6, damage_note = $7, check_out_note = $8,
            work_minutes = $9,
+           check_out_devices = $14, device_shortage = $15,
            client_time  = coalesce($10, client_time),
            queued_at    = coalesce($11, queued_at),
            synced_late  = synced_late or $12
          where id = $13 and check_out_at is null
          returning *`,
         [checkOutAt, hasCoord ? lat : null, hasCoord ? lng : null, distance,
-         photoId, deviceOk, deviceOk === false ? damageNote : null, note,
-         minutes, clientTime, queuedAt, syncedLate, ts.id]
+         photoId, deviceOk, (deviceOk === false || shortage) ? damageNote : null, note,
+         minutes, clientTime, queuedAt, syncedLate, ts.id,
+         checkOutDevices ? JSON.stringify(checkOutDevices) : null, shortage]
       );
       const savedRow = r.rows[0];
       if (!savedRow) throw conflict('Bạn đã chấm công ra buổi này rồi.');
 
       let issueRow = null;
-      if (deviceOk === false) {
+      if (deviceOk === false || shortage) {
         const ir = await c.query(
           `insert into device_issues
              (school_id, room_id, device_name, description, priority, status, source, source_id, reported_by)
@@ -448,7 +482,7 @@ export default async function routes(app) {
            returning *`,
           [schoolId, room?.room_id ?? null,
            `Thiết bị ${room?.room_name ? `phòng ${room.room_name}` : `${school.name}`}`,
-           damageNote, savedRow.id, user.id]
+           issueText, savedRow.id, user.id]
         );
         issueRow = ir.rows[0];
         for (let i = 0; i < damagePhotos.length; i++) {
@@ -466,7 +500,9 @@ export default async function routes(app) {
       entity: 'timesheets',
       entityId: saved.id,
       summary: `Chấm công ra ${SESSION_VN[session]} — ${school.name} ngày ${vnDate(date)} `
-        + `(${minutes} phút làm việc)${deviceOk === false ? ', có thiết bị hỏng' : ''}.`,
+        + `(${minutes} phút làm việc)${deviceOk === false ? ', có thiết bị hỏng' : ''}`
+        + (shortage ? `, thiếu ${describeShortage(missing)}` : '')
+        + (checkOutDevices ? `. Thiết bị: ${describe(checkOutDevices)}` : '') + '.',
       before: ts,
       after: saved,
     });
@@ -474,8 +510,8 @@ export default async function routes(app) {
     if (issue) {
       notifySchoolManagers(schoolId, {
         kind: 'device_issue',
-        title: 'Thiết bị hỏng cuối buổi',
-        body: `${user.full_name} báo hỏng thiết bị tại ${school.name}: ${damageNote}`,
+        title: shortage ? 'Thiếu thiết bị cuối buổi' : 'Thiết bị hỏng cuối buổi',
+        body: `${user.full_name} — ${school.name}: ${issueText}`,
         link: '/thiet-bi',
         refId: issue.id,
       }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo device_issue'));

@@ -156,7 +156,7 @@ trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + L
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
 | GET | `/` | theo phạm vi | `?from=&to=&user_id=&school_id=&label=&approval_status=` |
-| GET | `/my-shift` | teacher, assistant | `?school_id=&date=&session=morning\|afternoon` → `{item, date, session, school, planned}` — `planned` là tiết đầu buổi, CHỈ để nhắc giờ |
+| GET | `/my-shift` | teacher, assistant | `?school_id=&date=&session=morning\|afternoon` → `{item, date, session, school, planned, devices}` — `planned` là tiết đầu buổi, CHỈ để nhắc giờ; `devices = {catalog:[{catalog_id,name,unit,expected,room_name,icon}], suggestions:[{name,category,unit,icon}]}` |
 | POST | `/check-in` | teacher, assistant | *(xem dưới)* |
 | POST | `/check-out` | teacher, assistant | *(xem dưới)* |
 | POST | `/:id/approve` | admin, manager | `{decision:'approved'\|'rejected', reason?}` |
@@ -183,7 +183,8 @@ trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + L
 | `lat`, `lng`, `accuracy` | ✅ | Từ `navigator.geolocation` |
 | `photo` | ✅ | Ảnh thiết bị đầu buổi |
 | `selfie` | ✅ | Ảnh xác minh đúng người có mặt |
-| `device_count` | ✅ | Số thiết bị đếm tay |
+| `devices` | ✅ | Chuỗi JSON — số lượng THỰC TẾ từng loại: `[{name, qty, unit?, catalog_id?, expected?}]` (≤60 loại, `qty` nguyên 0–10000, không trùng tên). Server tự tính `check_in_device_count` = tổng |
+| `device_count` | — | Chỉ dùng khi client cũ không gửi `devices` |
 | `note` | ⚠️ | **Bắt buộc** nếu ngoài bán kính, thiếu → `422` |
 | `client_time`, `queued_at` | — | Dùng cho bản ghi đồng bộ trễ |
 
@@ -191,8 +192,11 @@ Server tính `distance_m`, `late_minutes`, `label`, `gps_flagged`. Đã chấm c
 
 **`POST /check-out`** — `multipart/form-data`
 
-`school_id`, `date`, `session`, `lat`, `lng`, `device_ok` (bool), `photo` (tuỳ chọn), `damage_note` + `damage_photo` (**bắt buộc nếu `device_ok=false`**, thiếu → `422`), `note`.
-Khi `device_ok=false` server tự tạo `device_issues` (`source='checkout'`) và thông báo cho `manager` của trường.
+`school_id`, `date`, `session`, `lat`, `lng`, `device_ok` (bool), `devices` (JSON như check-in — đếm lại từng loại), `photo` (tuỳ chọn), `damage_note` + `damage_photo` (**bắt buộc nếu `device_ok=false`**, thiếu → `422`), `note`.
+
+Server so `devices` cuối buổi với đầu buổi theo tên loại (không phân biệt hoa thường): loại nào **ít hơn** là thiếu → bắt buộc `damage_note` ghi lý do (thiếu → `422` nêu rõ loại và số thiếu), lưu `check_out_devices`, `device_shortage = true`.
+Khi `device_ok=false` hoặc thiếu thiết bị, server tự tạo `device_issues` (`source='checkout'`, mô tả gồm phần thiếu + lý do) và thông báo cho `manager` của trường.
+Bảng chấm công (`/api/reports/timesheets.xlsx`) ghi chi tiết từng loại ở cột *Thiết bị đầu buổi / cuối buổi* và cột *Tình trạng thiết bị* (Thiếu · Có hỏng · Đủ, nguyên vẹn).
 
 ## 6. Điểm danh — `/api/attendance`
 

@@ -15,6 +15,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import DeviceTally, { initialRows, tallyProblem, toPayload } from './DeviceTally.jsx';
 import { api, fileUrl } from '../../lib/api.js';
 import { LABEL, fmtDateLong, fmtDuration, fmtNumber, fmtRange, fmtTime } from '../../lib/format.js';
 import { getPosition } from '../../lib/gps.js';
@@ -154,7 +155,8 @@ function CheckInForm({ shift, onDone }) {
   const [pos, setPos] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [selfies, setSelfies] = useState([]);        // ảnh chân dung xác minh có mặt
-  const [deviceCount, setDeviceCount] = useState('');
+  // Thiết bị đầu buổi theo loại — dòng lấy sẵn từ danh mục thiết bị của trường.
+  const [devRows, setDevRows] = useState(() => initialRows({ mode: 'in', catalog: shift?.devices?.catalog }));
   const [note, setNote] = useState('');
   const [errors, setErrors] = useState({});
   const [sending, setSending] = useState(false);
@@ -165,9 +167,8 @@ function CheckInForm({ shift, onDone }) {
     if (!pos) errs.pos = 'Vui lòng bấm "Lấy vị trí" trước khi chấm công.';
     if (!photos.length) errs.photos = 'Cần ít nhất 1 ảnh thiết bị đầu buổi.';
     if (!selfies.length) errs.selfie = 'Cần chụp 1 ảnh selfie tại trường để xác minh.';
-    if (deviceCount === '' || Number(deviceCount) < 0 || !Number.isFinite(Number(deviceCount))) {
-      errs.device = 'Vui lòng nhập số thiết bị đếm được.';
-    }
+    const devProblem = tallyProblem(devRows);
+    if (devProblem) errs.device = devProblem;
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -175,7 +176,9 @@ function CheckInForm({ shift, onDone }) {
       school_id: shift.school.id,
       date: shift.date,
       session: shift.session,
-      device_count: Number(deviceCount),
+      // Chi tiết từng loại (JSON) + tổng để máy chủ cũ vẫn hiểu.
+      devices: JSON.stringify(toPayload(devRows)),
+      device_count: devRows.reduce((n, r) => n + (Number(r.qty) || 0), 0),
       note: note.trim(),
       client_time: new Date().toISOString(),
     };
@@ -267,17 +270,12 @@ function CheckInForm({ shift, onDone }) {
           hint="Chụp rõ khu vực thiết bị. Ảnh đầu tiên sẽ được dùng làm minh chứng." />
         {errors.photos && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.photos}</div>}
 
-        <Field label="Số thiết bị đếm được" required error={errors.device}>
-          <input
-            className="input"
-            type="number"
-            inputMode="numeric"
-            min="0"
-            step="1"
-            placeholder="Ví dụ: 12"
-            value={deviceCount}
-            onChange={(e) => { setDeviceCount(e.target.value); if (errors.device) setErrors((x) => ({ ...x, device: '' })); }} />
-        </Field>
+        <DeviceTally
+          mode="in"
+          rows={devRows}
+          suggestions={shift?.devices?.suggestions}
+          error={errors.device}
+          onChange={(v) => { setDevRows(v); if (errors.device) setErrors((x) => ({ ...x, device: '' })); }} />
 
         <Field label="Ghi chú" hint="Bắt buộc nếu bạn đứng ngoài khuôn viên trường." error={errors.note}>
           <textarea
@@ -305,6 +303,14 @@ function CheckOutForm({ shift, ts, onDone }) {
   const navigate = useNavigate();
 
   const [pos, setPos] = useState(null);
+  // Đếm lại cuối buổi theo đúng các loại đã đếm đầu buổi.
+  const [devRows, setDevRows] = useState(() => initialRows({
+    mode: 'out', catalog: shift?.devices?.catalog, checkIn: ts?.check_in_devices,
+    suggestions: shift?.devices?.suggestions,
+  }));
+  // Chỉ đối chiếu khi đầu buổi đã đếm theo loại (bản ghi cũ chỉ có con số tổng).
+  const hasDetail = !!ts?.check_in_devices?.length;
+  const shortRows = devRows.filter((r) => r.ref != null && r.qty !== '' && Number(r.qty) < r.ref);
   const [deviceOk, setDeviceOk] = useState(true);
   const [damageNote, setDamageNote] = useState('');
   const [damagePhotos, setDamagePhotos] = useState([]);
@@ -316,9 +322,17 @@ function CheckOutForm({ shift, ts, onDone }) {
   const submit = async () => {
     if (sending) return;
     const errs = {};
+    if (hasDetail) {
+      const devProblem = tallyProblem(devRows);
+      if (devProblem) errs.device = devProblem;
+    }
     if (!deviceOk) {
       if (!damageNote.trim()) errs.damage = 'Vui lòng mô tả thiết bị hỏng.';
       if (!damagePhotos.length) errs.damagePhotos = 'Cần ít nhất 1 ảnh thiết bị hỏng.';
+    }
+    // Thiếu so với đầu buổi ⇒ bắt buộc ghi lý do (ảnh không bắt buộc).
+    if (shortRows.length && !damageNote.trim()) {
+      errs.damage = `Thiếu ${shortRows.map((r) => `${r.name} ${r.ref - Number(r.qty)}`).join(', ')} so với đầu buổi — vui lòng ghi rõ lý do.`;
     }
     setErrors(errs);
     if (Object.keys(errs).length) return;
@@ -336,7 +350,8 @@ function CheckOutForm({ shift, ts, onDone }) {
       fields.lng = pos.lng;
       fields.accuracy = pos.accuracy;
     }
-    if (!deviceOk) fields.damage_note = damageNote.trim();
+    if (!deviceOk || shortRows.length) fields.damage_note = damageNote.trim();
+    if (hasDetail) fields.devices = JSON.stringify(toPayload(devRows));
 
     const files = [];
     if (photos[0]) files.push({ field: 'photo', blob: photos[0].blob, name: photos[0].name });
@@ -372,7 +387,7 @@ function CheckOutForm({ shift, ts, onDone }) {
       onDone();
     } catch (e) {
       if (e?.isOffline) { await saveOffline(); return; }
-      if (e?.status === 422 && !deviceOk) {
+      if (e?.status === 422 && (!deviceOk || shortRows.length)) {
         setErrors((x) => ({ ...x, damage: e.message }));
         return;
       }
@@ -400,6 +415,24 @@ function CheckOutForm({ shift, ts, onDone }) {
 
       <div className="card p-4">
         <GpsBlock pos={pos} setPos={setPos} required={false} />
+
+        {hasDetail && (
+          <DeviceTally
+            mode="out"
+            rows={devRows}
+            suggestions={shift?.devices?.suggestions}
+            error={errors.device}
+            onChange={(v) => { setDevRows(v); if (errors.device) setErrors((x) => ({ ...x, device: '' })); }} />
+        )}
+
+        {shortRows.length > 0 && deviceOk && (
+          <Field label="Lý do thiếu thiết bị" required error={errors.damage}
+            hint="Hệ thống sẽ tự mở phiếu báo cho Phòng chuyên môn.">
+            <textarea className="input" rows={2} value={damageNote}
+              onChange={(e) => { setDamageNote(e.target.value); if (errors.damage) setErrors((x) => ({ ...x, damage: '' })); }}
+              placeholder="VD: 2 laptop giáo viên chủ nhiệm mượn, sẽ trả sáng mai." />
+          </Field>
+        )}
 
         <div className="mb-3.5">
           <div className="label">Tình trạng thiết bị <span className="text-rose-500">*</span></div>
@@ -468,6 +501,56 @@ function CheckOutForm({ shift, ts, onDone }) {
 }
 
 /* -------------------------------- Màn tổng kết ---------------------------------- */
+/** Bảng đối chiếu thiết bị từng loại: đầu buổi ↔ cuối buổi. */
+function DeviceSummary({ ts }) {
+  const inList = ts?.check_in_devices || [];
+  const outList = ts?.check_out_devices || [];
+  if (!inList.length && !outList.length) {
+    if (ts?.check_in_device_count == null) return null;
+    return (
+      <div className="text-[13px] text-ink-soft mb-3">
+        Thiết bị đầu buổi: <b>{fmtNumber(ts.check_in_device_count)}</b>
+      </div>
+    );
+  }
+  const key = (n) => String(n || '').trim().toLowerCase();
+  const outBy = new Map(outList.map((d) => [key(d.name), d]));
+  const names = [...inList.map((d) => d.name), ...outList.filter((d) => !inList.some((x) => key(x.name) === key(d.name))).map((d) => d.name)];
+  const inBy = new Map(inList.map((d) => [key(d.name), d]));
+  return (
+    <div className="mb-3">
+      <div className="label">Thiết bị theo loại</div>
+      <div className="rounded-lg border border-line overflow-hidden">
+        <table className="w-full text-[13px]">
+          <thead className="bg-zinc-50 text-ink-muted text-[11.5px]">
+            <tr>
+              <th className="text-left font-semibold px-3 py-1.5">Loại</th>
+              <th className="text-right font-semibold px-2 py-1.5">Đầu buổi</th>
+              <th className="text-right font-semibold px-3 py-1.5">Cuối buổi</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {names.map((n) => {
+              const a = inBy.get(key(n));
+              const b = outBy.get(key(n));
+              const short = a && b && b.qty < a.qty;
+              return (
+                <tr key={n} className={short ? 'bg-rose-50/70' : ''}>
+                  <td className="px-3 py-1.5 font-medium text-ink">{n}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{a ? a.qty : '—'}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${short ? 'text-rose-700 font-semibold' : ''}`}>
+                    {b ? b.qty : '—'}{short && <span className="text-[11.5px]"> (thiếu {a.qty - b.qty})</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function DoneView({ shift, ts }) {
   const navigate = useNavigate();
   const mins = workedMinutes(ts);
@@ -515,9 +598,12 @@ function DoneView({ shift, ts }) {
           </div>
         )}
 
-        {deviceBroken && (
+        <DeviceSummary ts={ts} />
+
+        {(deviceBroken || ts?.device_shortage) && (
           <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
-            ⚠️ Có thiết bị hỏng{ts?.damage_note ? `: ${ts.damage_note}` : ' (đã báo Phòng chuyên môn).'}
+            ⚠️ {ts?.device_shortage ? 'Thiếu thiết bị cuối buổi' + (deviceBroken ? ', có thiết bị hỏng' : '') : 'Có thiết bị hỏng'}
+            {ts?.damage_note ? `: ${ts.damage_note}` : ' (đã báo Phòng chuyên môn).'}
           </div>
         )}
 
@@ -572,7 +658,10 @@ export default function CheckInOut() {
     setLoadErr(null);
     try {
       const mine = await api.get('/api/timesheets/my-shift', { school_id: schoolId, date, session });
-      setShift({ school: mine.school, date: mine.date, session: mine.session, planned: mine.planned });
+      setShift({
+        school: mine.school, date: mine.date, session: mine.session, planned: mine.planned,
+        devices: mine.devices,   // danh mục thiết bị của trường + loại dùng chung
+      });
       setTs(mine.item || null);
       setForcedStep(null);
     } catch (e) {

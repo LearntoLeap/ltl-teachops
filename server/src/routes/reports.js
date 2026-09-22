@@ -13,6 +13,7 @@ import { schoolFilter, scheduleFilter } from '../lib/scope.js';
 import { uuid, dateRange } from '../lib/validate.js';
 import { audit } from '../lib/audit.js';
 import { sendXlsx, isPreview, LABELS, formatVN, formatVNDate, formatVNTime } from '../lib/xlsx.js';
+import { describe } from '../lib/shiftDevices.js';
 
 /* ----------------------------- Tiện ích chung ------------------------------ */
 
@@ -71,8 +72,9 @@ const TIMESHEET_COLUMNS = [
   { header: 'Phút trễ', key: 'late', width: 9, align: 'right' },
   { header: 'Phút làm việc', key: 'work', width: 12, align: 'right' },
   { header: 'Tiết theo lịch', key: 'periods', width: 11, align: 'right' },
-  { header: 'Thiết bị đầu buổi', key: 'dev_in', width: 12, align: 'right' },
-  { header: 'Thiết bị cuối buổi', key: 'dev_out', width: 13, align: 'center' },
+  { header: 'Thiết bị đầu buổi', key: 'dev_in', width: 30, wrap: true },
+  { header: 'Thiết bị cuối buổi', key: 'dev_out', width: 30, wrap: true },
+  { header: 'Tình trạng thiết bị', key: 'dev_state', width: 16, align: 'center' },
   { header: 'GPS lệch', key: 'gps', width: 9, align: 'center' },
   { header: 'Duyệt', key: 'approval', width: 11, align: 'center' },
 ];
@@ -90,9 +92,12 @@ function timesheetRow(v) {
     late: v.late_minutes ?? 0,
     work: v.work_minutes ?? 0,
     periods: v.planned_periods ?? 0,
-    dev_in: v.check_in_device_count ?? DASH,
-    dev_out: v.device_ok === null || v.device_ok === undefined
-      ? DASH : (v.device_ok ? 'Nguyên vẹn' : 'Có hỏng'),
+    // Có chi tiết theo loại thì ghi từng loại; bản ghi cũ chỉ có con số tổng.
+    dev_in: v.check_in_devices?.length ? describe(v.check_in_devices) : (v.check_in_device_count ?? DASH),
+    dev_out: v.check_out_devices?.length ? describe(v.check_out_devices) : DASH,
+    dev_state: v.check_out_at == null ? DASH
+      : [v.device_shortage ? 'Thiếu' : null, v.device_ok === false ? 'Có hỏng' : null]
+        .filter(Boolean).join(' + ') || 'Đủ, nguyên vẹn',
     gps: v.gps_flagged ? YES : DASH,
     approval: LABELS.approval[v.approval_status] || DASH,
   };
