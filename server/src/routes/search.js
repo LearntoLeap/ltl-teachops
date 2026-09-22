@@ -86,7 +86,7 @@ export default async function routes(app) {
           scopeCond = `(sch.teacher_id = $${params.length} or sch.assistant_id = $${params.length})`;
         }
         return rows(
-          `select sch.id, sch.session_date, sch.start_time, sch.end_time,
+          `select sch.id, sch.session_date, sch.period, sch.start_time, sch.end_time,
                   c.name as class_name, s.name as school_name, u.full_name as teacher_name
              from schedules sch
              join schools s on s.id = sch.school_id

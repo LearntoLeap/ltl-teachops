@@ -727,8 +727,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
           <div className="text-[12.5px] text-ink-muted mt-1.5">
             Tiết {f.period} · {periods.find((p) => String(p.no) === String(f.period))?.start}
             –{periods.find((p) => String(p.no) === String(f.period))?.end}
-            {String(periods.find((p) => String(p.no) === String(f.period))?.start) < '12:00'
-              ? ' (buổi sáng)' : ' (buổi chiều)'}
+            {Number(f.period) <= 5 ? ' (buổi sáng)' : ' (buổi chiều)'}
           </div>
         )}
       </Field>

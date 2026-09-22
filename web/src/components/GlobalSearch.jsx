@@ -85,12 +85,12 @@ export function ResultGroups({ data, onNavigate }) {
 
   const groups = [
     {
-      key: 'schedules', label: 'Buổi dạy sắp tới',
+      key: 'schedules', label: 'Tiết dạy sắp tới',
       rows: (data.schedules || []).map((s) => ({
         icon: '🗓️',
-        title: `${fmtTime(s.start_time)} · Lớp ${s.class_name}`,
+        title: `${s.period ? `Tiết ${s.period} · ` : ''}${fmtTime(s.start_time)} · Lớp ${s.class_name}`,
         sub: `${fmtDate(s.session_date)} — ${s.school_name}${s.teacher_name ? ` · GV ${s.teacher_name}` : ''}`,
-        to: auth.isFieldStaff ? `/cham-cong/${s.id}` : '/lich',
+        to: '/lich',
       })),
     },
     {

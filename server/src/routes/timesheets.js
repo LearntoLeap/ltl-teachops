@@ -32,7 +32,7 @@ function vnToday() {
   return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 }
 
-/** Đang là buổi sáng hay chiều theo giờ Việt Nam (mốc 12:00). */
+/** Đang là buổi sáng hay chiều theo giờ Việt Nam (mốc 12:00) — chỉ dùng làm mặc định. */
 function vnSessionNow() {
   return new Date(Date.now() + 7 * 3600_000).getUTCHours() < 12 ? 'morning' : 'afternoon';
 }
@@ -42,19 +42,26 @@ function vnSessionNow() {
  * Chấm công không thuộc về tiết nào; tiết đầu buổi chỉ cho biết mấy giờ phải có mặt.
  */
 async function plannedShift(userId, schoolId, date, session) {
-  const first = await one(
-    `select s.id, s.start_time, count(*) over () ::int as periods
+  const list = await rows(
+    `select s.id, s.period, s.start_time, s.end_time, c.name as class_name
        from schedules s
-      where s.school_id = $1 and s.session_date = $2 and s.status <> 'cancelled'
+       join classes c on c.id = s.class_id
+      where s.school_id = $1 and s.session_date = $2 and s.status not in ('cancelled', 'skipped')
         and (s.teacher_id = $3 or s.assistant_id = $3)
-        and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session = $4
-      order by s.start_time limit 1`,
+        and schedule_session(s.period, s.start_time) = $4
+      order by s.start_time, s.period`,
     [schoolId, date, userId, session]
   );
+  const first = list[0];
   return {
     schedule_id: first?.id ?? null,
     start_time: first ? String(first.start_time).slice(0, 5) : null,
-    periods: first?.periods ?? 0,
+    periods: list.length,
+    // Các tiết của buổi — chấm công một lần cho cả buổi, danh sách chỉ để nhắc.
+    items: list.map((x) => ({
+      id: x.id, period: x.period, class_name: x.class_name,
+      start_time: String(x.start_time).slice(0, 5), end_time: String(x.end_time).slice(0, 5),
+    })),
   };
 }
 
@@ -137,9 +144,9 @@ export default async function routes(app) {
       `select t.*, sc.name as school_name, u.full_name as user_name,
               (select count(*) from schedules s
                 where s.school_id = t.school_id and s.session_date = t.work_date
-                  and s.status <> 'cancelled'
+                  and s.status not in ('cancelled', 'skipped')
                   and (s.teacher_id = t.user_id or s.assistant_id = t.user_id)
-                  and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session
+                  and schedule_session(s.period, s.start_time)
                       = t.work_session)::int as planned_periods
          ${baseSql}
         order by t.work_date desc, t.work_session, sc.name
@@ -448,7 +455,7 @@ export default async function routes(app) {
          left join stem_rooms r on r.id = s.room_id
         where s.school_id = $1 and s.session_date = $2 and s.status <> 'cancelled'
           and (s.teacher_id = $3 or s.assistant_id = $3)
-          and (case when s.start_time < '12:00' then 'morning' else 'afternoon' end)::work_session = $4
+          and schedule_session(s.period, s.start_time) = $4
         order by s.start_time limit 1`,
       [schoolId, date, user.id, session]
     );

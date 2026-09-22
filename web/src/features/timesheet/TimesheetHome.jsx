@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api, fileUrl } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
+import { sessionOfSchedule } from '../../lib/periods.js';
 import {
   LABEL, fmtDate, fmtDateLong, fmtDistance, fmtNumber, fmtRange, fmtTime,
   initials, monthRange, today,
@@ -23,7 +24,8 @@ const asItems = (res) => (Array.isArray(res) ? res : res?.items || []);
 const clsName = (x) => x?.class_name || x?.class?.name || x?.schedule?.class_name || 'Lớp';
 
 const SESSION_VN = { morning: 'Buổi sáng', afternoon: 'Buổi chiều' };
-const sessionOf = (startTime) => (String(startTime || '').slice(0, 5) < '12:00' ? 'morning' : 'afternoon');
+// Buổi của một tiết: tiết 1–5 sáng, 6+ chiều (xem lib/periods.js).
+const sessionOf = sessionOfSchedule;
 /** Đang là buổi sáng hay chiều theo giờ Việt Nam (mốc 12:00). */
 const sessionNow = () => (new Date(Date.now() + 7 * 3600_000).getUTCHours() < 12 ? 'morning' : 'afternoon');
 
@@ -42,8 +44,8 @@ function groupShifts(items, shifts, schools, session) {
   }
 
   for (const s of items) {
-    if (s.status === 'cancelled') continue;
-    const session = sessionOf(s.start_time);
+    if (s.status === 'cancelled' || s.status === 'skipped') continue;
+    const session = sessionOf(s);
     const key = `${s.school_id}|${session}`;
     if (!map.has(key)) {
       map.set(key, {
@@ -64,7 +66,7 @@ function groupShifts(items, shifts, schools, session) {
   // để giáo viên chủ động chấm công.
   return [...map.values()].sort((a, b) =>
     (b.periods.length > 0 || !!b.ts) - (a.periods.length > 0 || !!a.ts)
-    || a.session.localeCompare(b.session)
+    || (a.session === b.session ? 0 : a.session === 'morning' ? -1 : 1)
     || a.school_name.localeCompare(b.school_name));
 }
 const schName = (x) => x?.school_name || x?.school?.name || x?.schedule?.school_name || '';
@@ -258,9 +260,13 @@ function TodaySection() {
                         {p.period ? `Tiết ${p.period}` : fmtTime(p.start_time)}
                       </span>
                       <span className="truncate">{clsName(p)}</span>
-                      <span className="text-ink-muted ml-auto shrink-0">
-                        {p.has_attendance ? '✓ đã điểm danh' : 'chưa điểm danh'}
-                      </span>
+                      {(p.attendance_done ?? p.has_attendance) ? (
+                        <span className="text-emerald-700 font-semibold ml-auto shrink-0">
+                          ✓ {p.present_count != null ? `${p.present_count}/${p.attendance_roster_size ?? '—'} HS` : 'đã điểm danh'}
+                        </span>
+                      ) : (
+                        <span className="text-ink-muted ml-auto shrink-0">chưa điểm danh</span>
+                      )}
                     </div>
                   ))}
                 </div>

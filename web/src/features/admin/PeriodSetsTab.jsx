@@ -112,7 +112,7 @@ function SetSheet({ schoolId, set, onClose, onSaved }) {
                   <input type="time" className="input !py-1.5" value={p.end}
                     onChange={(e) => setCell(i, 'end', e.target.value)} aria-label={`Giờ ra tiết ${p.no}`} />
                 </td>
-                <td className="td text-ink-muted text-[12.5px]">{String(p.start) < '12:00' ? 'Sáng' : 'Chiều'}</td>
+                <td className="td text-ink-muted text-[12.5px]">{Number(p.no) <= 5 ? 'Sáng' : 'Chiều'}</td>
               </tr>
             ))}
           </tbody>

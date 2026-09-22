@@ -2,9 +2,9 @@
  * Dashboard.jsx — Trang chủ "bảng điều độ", MỖI VAI TRÒ MỘT BỐ CỤC RIÊNG:
  *
  * - Giáo viên / Trợ giảng  → GET /api/reports/my-dashboard
- *     "Vé buổi dạy": buổi kế tiếp là tấm vé lớn với 3 bước tuần tự
- *     Check-in → Điểm danh → Check-out; kèm việc tồn, lịch 7 ngày tới,
- *     hành động nhanh và thống kê tháng.
+ *     "Tiết dạy kế tiếp" (chỉ gợi ý) + TẤT CẢ tiết trong ngày gom theo buổi
+ *     (tiết 1–5 sáng, 6+ chiều), mỗi buổi một nút chấm công vào/ra; kèm việc
+ *     tồn, lịch tuần, hành động nhanh và thống kê tháng.
  *
  * - Phòng chuyên môn        → GET /api/reports/dashboard
  *     Nhịp vận hành hôm nay (thanh tiến độ điểm danh), hàng đợi xử lý
@@ -18,7 +18,7 @@
  * vàng = cần hành động ngay · tím = giám sát · xám = tham khảo.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { api } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { pendingCount } from '../../lib/offline.js';
@@ -26,7 +26,7 @@ import { useToast } from '../../components/Toast.jsx';
 import { Badge, EmptyState, ErrorBox, PageLoading, Spinner } from '../../components/ui.jsx';
 import {
   LABEL, fmtAgo, fmtDate, fmtDateLong, fmtDuration, fmtNumber,
-  fmtRange, fmtTime, today,
+  fmtTime, today,
 } from '../../lib/format.js';
 
 /* ================================ Dùng chung =============================== */
@@ -133,111 +133,237 @@ function QuickActions({ items, className = '' }) {
 
 /* ===================== 1) GIÁO VIÊN / TRỢ GIẢNG ===================== */
 
-/** Trạng thái 3 bước của một buổi: check-in → điểm danh → check-out. */
-function sessionSteps(s) {
-  const steps = [
-    { key: 'in', label: 'Check-in', done: !!s.check_in_at, at: s.check_in_at, to: 'cham-cong' },
-    { key: 'att', label: 'Điểm danh', done: !!s.attendance_done, to: 'diem-danh' },
-    { key: 'out', label: 'Check-out', done: !!s.check_out_at, at: s.check_out_at, to: 'cham-cong' },
-  ];
-  const current = steps.find((st) => !st.done) || null;
-  return { steps, current, complete: !current };
+/*
+ * Hai việc tách bạch:
+ * - CHẤM CÔNG theo BUỔI: tiết 1–5 là buổi sáng, tiết 6 trở đi là buổi chiều.
+ *   Mỗi buổi ở mỗi trường chỉ chấm công vào 1 lần, ra 1 lần.
+ * - Các TIẾT trong ngày chỉ là GỢI Ý để giáo viên nắm lịch (không phải nút bấm);
+ *   điểm danh sĩ số từng tiết làm ở mục Điểm danh.
+ */
+
+const SESSION_META = {
+  morning: { icon: '☀️', label: 'Buổi sáng', range: 'tiết 1–5' },
+  afternoon: { icon: '🌤️', label: 'Buổi chiều', range: 'tiết 6 trở đi' },
+};
+
+const toMin = (t) => {
+  const [h, m] = String(t || '').split(':').map(Number);
+  return Number.isFinite(h) ? h * 60 + (m || 0) : null;
+};
+const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+
+/** Tiết có cần dạy không (huỷ lịch / đã bỏ thì không). */
+const isActive = (s) => s.status !== 'cancelled' && s.status !== 'skipped';
+
+/** Trạng thái hiển thị của một tiết theo giờ hiện tại. */
+function tietState(s, now, nextId) {
+  if (s.status === 'cancelled') return { key: 'cancelled', text: 'Huỷ lịch', cls: 'bg-zinc-100 text-ink-muted' };
+  if (s.status === 'skipped') return { key: 'skipped', text: 'Đã bỏ', cls: 'bg-zinc-100 text-ink-muted' };
+  if (s.attendance_done) {
+    return {
+      key: 'done',
+      text: s.present_count != null ? `✓ ${s.present_count}/${s.roster_size ?? '—'} HS` : '✓ Đã điểm danh',
+      cls: 'bg-emerald-50 text-emerald-700',
+    };
+  }
+  const a = toMin(s.start_time);
+  const b = toMin(s.end_time);
+  if (a != null && b != null && now >= a && now < b) return { key: 'live', text: '● Đang diễn ra', cls: 'bg-brand-600 text-white' };
+  if (b != null && now >= b) return { key: 'missed', text: 'Chưa điểm danh', cls: 'bg-amber-100 text-amber-800' };
+  if (s.id === nextId) return { key: 'next', text: 'Kế tiếp', cls: 'bg-brand-100 text-brand-800' };
+  return { key: 'later', text: 'Chưa tới giờ', cls: 'bg-zinc-100 text-ink-muted' };
 }
 
-/** VÉ BUỔI DẠY — thẻ chủ đạo của người dạy: khối giờ + mép đục lỗ + 3 bước. */
-function SessionTicket({ s }) {
-  const navigate = useNavigate();
-  const { steps, current, complete } = sessionSteps(s);
-  const id = s.id || s.schedule_id;
+/** Tiết đang dạy, nếu không thì tiết sắp tới gần nhất (chưa điểm danh). */
+function pickNext(sessions, now) {
+  const open = sessions.filter((s) => isActive(s) && !s.attendance_done);
+  const live = open.find((s) => toMin(s.start_time) <= now && now < toMin(s.end_time));
+  if (live) return { s: live, live: true };
+  const up = open.find((s) => toMin(s.start_time) > now);
+  return up ? { s: up, live: false } : null;
+}
 
-  const CTA = {
-    in: { label: '📍 Check-in ngay', to: `/cham-cong/${id}` },
-    att: { label: '📋 Điểm danh lớp', to: `/diem-danh/${id}` },
-    out: { label: '🏁 Check-out kết thúc buổi', to: `/cham-cong/${id}` },
-  }[current?.key];
+/** Gom tiết theo (trường, buổi) và ghép bản ghi chấm công của buổi đó. */
+function groupByShift(sessions, shifts) {
+  const map = new Map();
+  const keyOf = (schoolId, session) => `${schoolId}|${session}`;
+  for (const s of sessions) {
+    const k = keyOf(s.school_id, s.work_session);
+    if (!map.has(k)) {
+      map.set(k, { key: k, school_id: s.school_id, school_name: s.school_name, session: s.work_session, items: [], shift: null });
+    }
+    map.get(k).items.push(s);
+  }
+  for (const t of shifts) {
+    const k = keyOf(t.school_id, t.work_session);
+    if (!map.has(k)) {
+      map.set(k, { key: k, school_id: t.school_id, school_name: t.school_name, session: t.work_session, items: [], shift: null });
+    }
+    map.get(k).shift = t;
+  }
+  return [...map.values()].sort((x, y) => (x.session === y.session
+    ? String(x.school_name).localeCompare(String(y.school_name), 'vi')
+    : x.session === 'morning' ? -1 : 1));
+}
 
-  return (
-    <div className="ticket rise rise-1">
-      {/* Khối giờ — cuống vé */}
-      <div className="w-[104px] shrink-0 bg-brand-grad text-white px-3 py-4 flex flex-col justify-center items-center text-center">
-        <div className="text-[24px] font-extrabold leading-none tracking-tight">{fmtTime(s.start_time)}</div>
-        <div className="text-[12px] opacity-85 mt-1">– {fmtTime(s.end_time)}</div>
-        <div className="text-[10.5px] opacity-75 mt-2">{fmtDate(s.session_date || today())}</div>
+const tietLabel = (s) => (s.period ? `Tiết ${s.period}` : fmtTime(s.start_time));
+
+/** TIẾT DẠY KẾ TIẾP — chỉ gợi ý, không phải nút bấm. */
+function NextTietCard({ next, now }) {
+  if (!next) {
+    return (
+      <div className="rise rise-1 card px-4 py-3.5 text-[13.5px] text-ink-soft">
+        🎉 Đã hết tiết cần dạy hôm nay. Nhớ <b>chấm công ra</b> cho buổi đang làm nếu chưa.
       </div>
-      <div className="ticket-perf" aria-hidden />
-
-      {/* Nội dung vé */}
-      <div className="flex-1 min-w-0 p-4">
+    );
+  }
+  const { s, live } = next;
+  const start = toMin(s.start_time);
+  const end = toMin(s.end_time);
+  const wait = start - now;
+  const when = live
+    ? `Đang diễn ra — còn ${Math.max(0, end - now)} phút`
+    : wait >= 60 ? `Bắt đầu sau ${Math.floor(wait / 60)} giờ ${wait % 60 ? `${wait % 60} phút` : ''}`
+    : `Bắt đầu sau ${wait} phút`;
+  return (
+    <div className="rise rise-1 card overflow-hidden flex">
+      <div className="w-[96px] shrink-0 bg-brand-grad text-white px-2 py-3.5 flex flex-col items-center justify-center text-center">
+        <div className="text-[11px] font-bold uppercase opacity-85">{s.period ? 'Tiết' : 'Giờ'}</div>
+        <div className="text-[30px] font-extrabold leading-none">{s.period || fmtTime(s.start_time)}</div>
+        <div className="text-[11.5px] opacity-90 mt-1.5">{fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>
+      </div>
+      <div className="flex-1 min-w-0 px-4 py-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="font-extrabold text-[16px] truncate">Lớp {s.class_name || '?'}</div>
+            <div className="font-extrabold text-[16px] truncate">Lớp {s.class_name}</div>
             <div className="text-[12.5px] text-ink-muted truncate">
-              {s.school_name}{s.room_name ? ` · ${s.room_name}` : ''}
-              {s.subject ? ` · ${s.subject}` : ''}
+              {s.school_name}{s.room_name ? ` · ${s.room_name}` : ''}{s.subject ? ` · ${s.subject}` : ''}
             </div>
           </div>
-          {s.label === 'late' && <Badge tone="late">Trễ {s.late_minutes > 0 ? `${s.late_minutes}p` : ''}</Badge>}
-          {complete && <Badge tone="approved">Hoàn tất</Badge>}
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold
+            ${live ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-800'}`}>
+            {live ? '● Đang dạy' : 'Sắp tới'}
+          </span>
         </div>
-
-        {/* Rãnh 3 bước tuần tự */}
-        <ol className="mt-3 grid gap-1.5">
-          {steps.map((st, i) => {
-            const isCurrent = current?.key === st.key;
-            return (
-              <li key={st.key} className="flex items-center gap-2.5">
-                <span className={`h-[22px] w-[22px] rounded-full grid place-items-center text-[11px] font-extrabold shrink-0
-                  ${st.done ? 'bg-emerald-500 text-white'
-                    : isCurrent ? 'bg-brand-grad text-white shadow-card-sm'
-                    : 'bg-line text-ink-muted'}`}>
-                  {st.done ? '✓' : i + 1}
-                </span>
-                <span className={`text-[13px] ${st.done ? 'text-ink-muted line-through decoration-emerald-300'
-                  : isCurrent ? 'font-bold text-ink' : 'text-ink-muted'}`}>
-                  {st.label}
-                </span>
-                {st.at && <span className="text-[11.5px] text-emerald-600 font-semibold">{fmtTime(st.at)}</span>}
-                {isCurrent && <span className="text-[10.5px] font-bold text-brand-700 bg-brand-50 rounded-full px-2 py-[1px]">bước tiếp theo</span>}
-              </li>
-            );
-          })}
-        </ol>
-
-        {CTA && (
-          <button className="btn-primary w-full mt-3 !py-2.5" onClick={() => navigate(CTA.to)}>
-            {CTA.label}
-          </button>
-        )}
+        <div className={`mt-2 text-[13px] font-semibold ${live ? 'text-brand-800' : 'text-ink-soft'}`}>⏱ {when}</div>
+        <div className="text-[11.5px] text-ink-muted mt-0.5">
+          {SESSION_META[s.work_session]?.label} · {s.my_role === 'assistant' ? 'bạn là trợ giảng' : 'bạn là giáo viên'}
+          {' '}· điểm danh sĩ số tại lớp ở mục Điểm danh
+        </div>
       </div>
     </div>
   );
 }
 
-/** Thẻ gọn cho các buổi còn lại trong ngày. */
-function SessionRow({ s }) {
-  const navigate = useNavigate();
-  const { current, complete } = sessionSteps(s);
-  const id = s.id || s.schedule_id;
+/** Trạng thái chấm công của một buổi. */
+function ShiftStatus({ shift }) {
+  if (!shift?.check_in_at) {
+    return <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-[11.5px] font-bold">Chưa chấm công vào</span>;
+  }
+  if (!shift.check_out_at) {
+    return (
+      <span className="rounded-full bg-brand-100 text-brand-800 px-2.5 py-0.5 text-[11.5px] font-bold">
+        Đã vào {fmtTime(shift.check_in_at)}{shift.label === 'late' ? ` · trễ ${shift.late_minutes}p` : ''}
+      </span>
+    );
+  }
   return (
-    <button
-      onClick={() => navigate(current?.to === 'diem-danh' ? `/diem-danh/${id}` : `/cham-cong/${id}`)}
-      className="card w-full p-3 flex items-center gap-3 text-left hover:border-brand-300 transition">
-      <span className="w-[52px] shrink-0 text-center">
-        <span className="block text-[15px] font-extrabold text-brand-800 leading-none">{fmtTime(s.start_time)}</span>
-        <span className="block text-[10.5px] text-ink-muted mt-0.5">{fmtTime(s.end_time)}</span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-semibold truncate">Lớp {s.class_name}</span>
-        <span className="block text-[11.5px] text-ink-muted truncate">{s.school_name}</span>
-      </span>
-      {complete
-        ? <Badge tone="approved">✓ Xong</Badge>
-        : <Badge tone={current?.key === 'in' ? 'pending' : 'new'}>{current?.label}</Badge>}
-    </button>
+    <span className="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-0.5 text-[11.5px] font-bold">
+      ✓ {fmtTime(shift.check_in_at)} – {fmtTime(shift.check_out_at)}
+    </span>
   );
 }
 
-/** Bảng lịch tuần rút gọn: 7 cột, mỗi ô liệt kê các tiết của ngày đó. */
+/** Một buổi ở một trường: nút chấm công vào/ra + các tiết (gợi ý). */
+function ShiftCard({ g, now, nextId }) {
+  const meta = SESSION_META[g.session] || SESSION_META.morning;
+  const active = g.items.filter(isActive);
+  const done = active.filter((s) => s.attendance_done).length;
+  const pct = active.length ? Math.round((done / active.length) * 100) : 0;
+  const to = `/cham-cong/${g.school_id}?buoi=${g.session}`;
+  const nums = active.map((s) => s.period).filter(Boolean);
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-3.5 py-3 flex flex-wrap items-start justify-between gap-2 border-b border-line bg-zinc-50/70">
+        <div className="min-w-0">
+          <div className="font-extrabold text-[15px]">
+            {meta.icon} {meta.label}
+            <span className="text-[12.5px] font-semibold text-ink-muted">
+              {' '}· {active.length} tiết{nums.length ? ` (tiết ${nums.join(', ')})` : ''}
+            </span>
+          </div>
+          <div className="text-[12.5px] text-ink-muted truncate">{g.school_name}</div>
+        </div>
+        <ShiftStatus shift={g.shift} />
+      </div>
+
+      {/* Chấm công MỘT lần cho cả buổi */}
+      <div className="px-3.5 pt-3">
+        {!g.shift?.check_in_at ? (
+          <Link to={to} className="btn-primary w-full !py-2.5">📍 Chấm công vào {meta.label.toLowerCase()}</Link>
+        ) : !g.shift.check_out_at ? (
+          <Link to={to} className="btn-primary w-full !py-2.5">🏁 Chấm công ra {meta.label.toLowerCase()}</Link>
+        ) : (
+          <Link to={to} className="btn-line w-full !py-2">Xem chấm công {meta.label.toLowerCase()}</Link>
+        )}
+        <div className="text-[11.5px] text-ink-muted mt-1.5">
+          Chấm công một lần vào, một lần ra cho cả buổi — không chấm theo từng tiết.
+        </div>
+      </div>
+
+      {g.items.length > 0 ? (
+        <>
+          <ol className="mt-2 divide-y divide-line">
+            {g.items.map((s) => {
+              const st = tietState(s, now, nextId);
+              const muted = st.key === 'cancelled' || st.key === 'skipped';
+              const hot = st.key === 'live' || st.key === 'next';
+              return (
+                <li key={s.id} className={`flex items-center gap-3 px-3.5 py-2.5 ${hot ? 'bg-brand-50/60' : ''}`}>
+                  <span className={`h-9 w-12 shrink-0 rounded-lg grid place-items-center text-center leading-none
+                    ${st.key === 'done' ? 'bg-emerald-500 text-white'
+                      : hot ? 'bg-brand-grad text-white' : muted ? 'bg-zinc-100 text-ink-muted' : 'bg-brand-50 text-brand-800'}`}>
+                    <span>
+                      <span className="block text-[9.5px] font-bold uppercase opacity-80">{s.period ? 'Tiết' : ''}</span>
+                      <span className="block text-[15px] font-extrabold">{s.period || fmtTime(s.start_time)}</span>
+                    </span>
+                  </span>
+                  <span className={`min-w-0 flex-1 ${muted ? 'opacity-60' : ''}`}>
+                    <span className={`block text-[13.5px] font-semibold truncate ${muted ? 'line-through' : ''}`}>
+                      {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · Lớp {s.class_name}
+                    </span>
+                    <span className="block text-[11.5px] text-ink-muted truncate">
+                      {muted && s.status_reason ? `Lý do: ${s.status_reason}`
+                        : [s.room_name, s.subject, s.my_role === 'assistant' ? 'trợ giảng' : null].filter(Boolean).join(' · ') || ' '}
+                    </span>
+                  </span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${st.cls}`}>{st.text}</span>
+                </li>
+              );
+            })}
+          </ol>
+          {active.length > 0 && (
+            <div className="px-3.5 py-2.5 border-t border-line">
+              <div className="flex items-center justify-between text-[11.5px] text-ink-muted mb-1">
+                <span>Đã điểm danh {done}/{active.length} tiết</span><span>{pct}%</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                <span className="block h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="px-3.5 py-3 text-[12.5px] text-ink-muted">
+          Buổi này không có tiết nào trong lịch dạy (đã chấm công ngoài lịch).
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Bảng lịch tuần rút gọn: 7 cột, mỗi ô liệt kê các tiết của ngày đó (chỉ xem). */
 function MyWeekBoard({ from, items }) {
   const todayIso = today();
   const days = [];
@@ -282,13 +408,13 @@ function MyWeekBoard({ from, items }) {
               </div>
               <div className="grid gap-1">
                 {list.slice(0, 3).map((s) => (
-                  <Link key={s.id} to={`/cham-cong/${s.id}`}
-                    title={`${fmtTime(s.start_time)} · Lớp ${s.class_name} — ${s.school_name}`}
+                  <span key={s.id}
+                    title={`${s.period ? `Tiết ${s.period} · ` : ''}${fmtTime(s.start_time)} · Lớp ${s.class_name} — ${s.school_name}`}
                     className="block rounded-md bg-white ring-1 ring-inset ring-brand-100 px-1 py-[3px]
-                               text-[10px] font-bold text-brand-900 text-center truncate hover:bg-brand-100">
-                    {fmtTime(s.start_time)}
+                               text-[10px] font-bold text-brand-900 text-center truncate">
+                    {s.period ? `T${s.period}` : fmtTime(s.start_time)}
                     <span className="block font-semibold text-ink-muted truncate">{s.class_name}</span>
-                  </Link>
+                  </span>
                 ))}
                 {list.length > 3 && (
                   <span className="block text-[9.5px] text-ink-muted text-center">+{list.length - 3}</span>
@@ -299,7 +425,7 @@ function MyWeekBoard({ from, items }) {
         })}
       </div>
       <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
-        Tổng <b>{(items || []).length}</b> tiết trong tuần · bấm một tiết để chấm công
+        Tổng <b>{(items || []).length}</b> tiết trong tuần · T1 = tiết 1
       </div>
     </div>
   );
@@ -309,6 +435,13 @@ function FieldDashboard({ data }) {
   const [week, setWeek] = useState([]);
   const [weekRange, setWeekRange] = useState(null);
   const [queued, setQueued] = useState(0);
+  const [now, setNow] = useState(nowMin);
+
+  // Cập nhật "đang diễn ra / kế tiếp" theo đồng hồ mỗi 30 giây.
+  useEffect(() => {
+    const id = setInterval(() => setNow(nowMin()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Lịch TUẦN NÀY (Thứ Hai → Chủ nhật) + số mục chờ đồng bộ.
   useEffect(() => {
@@ -322,21 +455,24 @@ function FieldDashboard({ data }) {
     const to = iso(sun);
     setWeekRange({ from, to });
     api.get('/api/schedules', { from, to, limit: 100 })
-      .then((r) => setWeek((r?.items || []).filter((x) => x.status !== 'cancelled')))
+      .then((r) => setWeek((r?.items || []).filter((x) => x.status !== 'cancelled' && x.status !== 'skipped')))
       .catch(() => {});
     pendingCount().then(setQueued).catch(() => {});
   }, []);
 
-  const sessions = [...(data.today_sessions || [])].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)));
-  const focusIdx = sessions.findIndex((s) => !sessionSteps(s).complete);
-  const focus = focusIdx >= 0 ? sessions[focusIdx] : null;
-  const rest = sessions.filter((_, i) => i !== focusIdx);
+  const sessions = [...(data.today_sessions || [])]
+    .sort((a, b) => String(a.start_time).localeCompare(String(b.start_time)) || (a.period || 0) - (b.period || 0));
+  const groups = groupByShift(sessions, data.today_shifts || []);
+  const active = sessions.filter(isActive);
+  const next = pickNext(sessions, now);
+  const nMorning = active.filter((s) => s.work_session === 'morning').length;
+  const nAfternoon = active.length - nMorning;
 
   const tasks = [];
   const pt = data.pending_tasks || {};
   if (queued > 0) tasks.push({ key: 'sync', label: `${queued} thao tác chờ đồng bộ lên máy chủ`, to: '/cho-dong-bo' });
-  if (pt.not_checked_out > 0) tasks.push({ key: 'out', label: `${pt.not_checked_out} buổi chưa check-out`, to: '/cham-cong' });
-  if (pt.attendance_missing > 0) tasks.push({ key: 'att', label: `${pt.attendance_missing} buổi chưa điểm danh`, to: '/diem-danh' });
+  if (pt.not_checked_out > 0) tasks.push({ key: 'out', label: `${pt.not_checked_out} buổi chưa chấm công ra`, to: '/cham-cong' });
+  if (pt.attendance_missing > 0) tasks.push({ key: 'att', label: `${pt.attendance_missing} tiết đã qua chưa điểm danh`, to: '/diem-danh' });
 
   const m = data.my_month || {};
 
@@ -344,9 +480,10 @@ function FieldDashboard({ data }) {
     <>
       <HeroBand tone="gradient">
         <div className="text-[12.5px] mt-1 opacity-90">
-          {sessions.length > 0
-            ? `Hôm nay bạn có ${sessions.length} buổi dạy${focus ? ` — bước tiếp theo: ${sessionSteps(focus).current?.label}` : ' — đã hoàn tất cả 🎉'}`
-            : 'Hôm nay không có buổi dạy — xem trước lịch tuần bên dưới nhé.'}
+          {active.length > 0
+            ? `Hôm nay bạn có ${active.length} tiết dạy — sáng ${nMorning} · chiều ${nAfternoon}`
+              + (next ? ` · tiếp theo: ${tietLabel(next.s)} lớp ${next.s.class_name}` : ' · đã dạy xong 🎉')
+            : 'Hôm nay không có tiết dạy — xem trước lịch tuần bên dưới nhé.'}
         </div>
       </HeroBand>
 
@@ -365,61 +502,23 @@ function FieldDashboard({ data }) {
         </div>
       )}
 
-      {/* Vé buổi kế tiếp */}
-      {focus && (
+      {active.length > 0 && (
         <>
-          <Section kind="act" title="Buổi dạy kế tiếp" to="/lich" />
-          <SessionTicket s={focus} />
+          <Section kind="act" title="Tiết dạy kế tiếp" />
+          <NextTietCard next={next} now={now} />
         </>
       )}
-      {sessions.length > 0 && (
+
+      {groups.length > 0 ? (
         <>
-          <Section kind="watch" title={`Các tiết hôm nay (${sessions.length} tiết)`} to="/lich" />
-          <div className="rise rise-2 card divide-y divide-line overflow-hidden">
-            {sessions.map((s, i) => {
-              const st = sessionSteps(s);
-              const isFocus = focus && (s.id || s.schedule_id) === (focus.id || focus.schedule_id);
-              return (
-                <Link
-                  key={s.id || s.schedule_id}
-                  to={st.current?.to === 'diem-danh'
-                    ? `/diem-danh/${s.id || s.schedule_id}`
-                    : `/cham-cong/${s.id || s.schedule_id}`}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 transition hover:bg-brand-50/50
-                    ${isFocus ? 'bg-brand-50/60' : ''}`}>
-                  <span className={`h-7 w-7 rounded-lg grid place-items-center text-[12px] font-extrabold shrink-0
-                    ${st.complete ? 'bg-emerald-500 text-white'
-                      : isFocus ? 'bg-brand-grad text-white' : 'bg-brand-50 text-brand-800'}`}>
-                    {st.complete ? '✓' : i + 1}
-                  </span>
-                  <span className="w-[86px] shrink-0">
-                    <span className="block text-[13.5px] font-extrabold text-brand-800 leading-none">
-                      {fmtTime(s.start_time)}
-                    </span>
-                    <span className="block text-[10.5px] text-ink-muted mt-0.5">
-                      đến {fmtTime(s.end_time)}
-                    </span>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13.5px] font-semibold truncate">
-                      Tiết {i + 1} · Lớp {s.class_name}
-                    </span>
-                    <span className="block text-[11.5px] text-ink-muted truncate">
-                      {s.school_name}{s.room_name ? ` · ${s.room_name}` : ''}{s.subject ? ` · ${s.subject}` : ''}
-                    </span>
-                  </span>
-                  {st.complete
-                    ? <Badge tone="approved">Xong</Badge>
-                    : <Badge tone={st.current?.key === 'in' ? 'pending' : 'new'}>{st.current?.label}</Badge>}
-                </Link>
-              );
-            })}
+          <Section kind="act" title={`Hôm nay: chấm công & ${active.length} tiết dạy`} to="/lich" toLabel="Thời khoá biểu ›" />
+          <div className="rise rise-2 grid gap-3 lg:grid-cols-2 items-start">
+            {groups.map((g) => <ShiftCard key={g.key} g={g} now={now} nextId={next?.s.id} />)}
           </div>
         </>
-      )}
-      {sessions.length === 0 && (
+      ) : (
         <div className="rise rise-2 mt-3.5">
-          <EmptyState icon="🌤️" title="Hôm nay bạn không có buổi dạy nào"
+          <EmptyState icon="🌤️" title="Hôm nay bạn không có tiết dạy nào"
             hint="Tận hưởng ngày nghỉ, hoặc xem trước học liệu cho tuần tới." />
         </div>
       )}
@@ -428,9 +527,9 @@ function FieldDashboard({ data }) {
       <Section kind="ref" title="Hành động nhanh" />
       <QuickActions className="rise rise-3" items={[
         { icon: '📋', label: 'Điểm danh', to: '/diem-danh' },
-        { icon: '🛠️', label: 'Báo hỏng', to: '/thiet-bi' },
+        { icon: '📍', label: 'Chấm công', to: '/cham-cong' },
         { icon: '📚', label: 'Học liệu', to: '/hoc-lieu' },
-        { icon: '📨', label: 'Gửi góp ý', to: '/gop-y' },
+        { icon: '🛠️', label: 'Báo hỏng', to: '/thiet-bi' },
       ]} />
 
       {/* Lịch tuần này — bảng 7 cột để bao quát cả tuần */}
@@ -444,13 +543,13 @@ function FieldDashboard({ data }) {
       {/* Tháng của tôi */}
       <Section kind="ref" title="Tháng này của tôi" />
       <div className="rise rise-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Tile icon="🗓️" num={m.sessions ?? 0} label="Buổi dạy" />
+        <Tile icon="🗓️" num={m.sessions ?? 0} label="Buổi đã chấm công" />
         <Tile icon="✅" chipCls="bg-emerald-50" numCls="text-emerald-600" num={m.ontime ?? 0} label="Đúng giờ" />
         <Tile icon="⏱️" chipCls="bg-amber-50" numCls="text-amber-600" num={m.late ?? 0} label="Trễ" />
         <Tile icon="🚫" chipCls="bg-rose-50" numCls="text-rose-600" num={m.absent ?? 0} label="Vắng" />
       </div>
       <div className="rise rise-6 card mt-2 px-4 py-3 flex items-center justify-between">
-        <span className="text-[13.5px] text-ink-soft font-medium">⏱️ Tổng giờ dạy tháng này</span>
+        <span className="text-[13.5px] text-ink-soft font-medium">⏱️ Tổng giờ làm việc tháng này</span>
         <span className="font-extrabold text-brand-800">{fmtDuration(m.work_minutes)}</span>
       </div>
     </>
@@ -827,6 +926,13 @@ export default function Dashboard() {
   }, [endpoint]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!auth.isFieldStaff) return undefined;
+    const tick = () => { if (!document.hidden) load(); };
+    const id = setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+  }, [auth.isFieldStaff, load]);
 
   if (error && !data) return <ErrorBox error={error} onRetry={load} />;
   if (!data) return <PageLoading />;

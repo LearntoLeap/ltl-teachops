@@ -2,7 +2,9 @@
  * attendance.js — Điểm danh học sinh (docs/API.md mục 6 · ARCHITECTURE.md §5.2).
  *
  * Nguyên tắc:
- *   - class_id / school_id / roster_size / marked_by LUÔN suy ra từ schedules — không tin client.
+ *   - class_id / school_id / marked_by LUÔN suy ra từ schedules — không tin client.
+ *   - roster_size = sĩ số THỰC TẾ buổi đó do người điểm danh điền ("26/30");
+ *     client cũ không gửi thì lấy sĩ số chuẩn của lớp.
  *   - Bản ghi ngoài phạm vi ⇒ 404 (notFound), không phải 403.
  *   - Bắt buộc tối thiểu 1 ảnh tổng quan lớp khi điểm danh.
  */
@@ -70,6 +72,16 @@ async function assertRecordVisible(user, a) {
 
   if (a.marked_by === user.id || a.teacher_id === user.id || a.assistant_id === user.id) return;
   throw notFound('Không tìm thấy bản ghi điểm danh.');
+}
+
+/** Trần kỹ thuật để chặn gõ nhầm (VD thừa số 0) — không phải giới hạn sĩ số lớp. */
+const MAX_STUDENTS = 10_000;
+
+/** Có mặt không thể nhiều hơn sĩ số của chính buổi đó. */
+function assertCounts(present, roster) {
+  if (present > roster) {
+    throw unprocessable(`Số học sinh có mặt (${present}) lớn hơn sĩ số (${roster}). Vui lòng kiểm tra lại.`);
+  }
 }
 
 export default async function routes(app) {
@@ -210,14 +222,12 @@ export default async function routes(app) {
       const existed = await one('select id from attendance where schedule_id = $1', [scheduleId]);
       if (existed) throw conflict('Buổi này đã được điểm danh.');
 
-      // roster_size snapshot từ lớp tại thời điểm điểm danh (đọc qua schedule, không tin client).
-      const rosterSize = sch.roster_size ?? 0;
-      const presentCount = int(fields.present_count, 'present_count', { required: true, min: 0 });
-      if (presentCount > rosterSize + 20) {
-        throw unprocessable(
-          `Số học sinh có mặt (${presentCount}) vượt quá sĩ số chuẩn của lớp (${rosterSize}) quá 20 em. Vui lòng kiểm tra lại.`
-        );
-      }
+      // Giáo viên điền CẢ hai số: có mặt / sĩ số thực tế buổi đó. Không giới hạn
+      // theo sĩ số chuẩn của lớp — chỉ cần có mặt không vượt sĩ số vừa điền.
+      const presentCount = int(fields.present_count, 'Số học sinh có mặt', { required: true, min: 0, max: MAX_STUDENTS });
+      const rosterInput = int(fields.roster_size, 'Sĩ số', { min: 0, max: MAX_STUDENTS });
+      if (rosterInput !== null) assertCounts(presentCount, rosterInput);
+      const rosterSize = rosterInput ?? Math.max(sch.roster_size ?? 0, presentCount);
 
       // Check TẠI LỚP: vị trí lúc dạy tiết này. Không bắt buộc (lớp trong nhà,
       // GPS hay chập chờn) nhưng có thì đối chiếu với toạ độ trường.
@@ -266,6 +276,11 @@ export default async function routes(app) {
           sch.school_id,
           photos.map((f) => f.id),
         ]);
+
+        // Lớp chưa khai sĩ số chuẩn ⇒ lấy luôn sĩ số giáo viên vừa đếm.
+        if (rosterInput) {
+          await c.query('update classes set roster_size = $2 where id = $1 and roster_size = 0', [sch.class_id, rosterInput]);
+        }
 
         // Tiết đã dạy xong — tín hiệu thật là đã điểm danh tại lớp.
         await c.query("update schedules set status = 'done' where id = $1 and status = 'scheduled'", [scheduleId]);
@@ -333,16 +348,17 @@ export default async function routes(app) {
     const params = [];
     let next = 1;
 
-    if (fields.present_count !== undefined) {
-      const presentCount = int(fields.present_count, 'present_count', { required: true, min: 0 });
-      if (presentCount > before.roster_size + 20) {
-        throw unprocessable(
-          `Số học sinh có mặt (${presentCount}) vượt quá sĩ số chuẩn của lớp (${before.roster_size}) quá 20 em. Vui lòng kiểm tra lại.`
-        );
-      }
-      sets.push(`present_count = $${next}`);
-      params.push(presentCount);
-      next += 1;
+    if (fields.present_count !== undefined || fields.roster_size !== undefined) {
+      const presentCount = fields.present_count !== undefined
+        ? int(fields.present_count, 'Số học sinh có mặt', { required: true, min: 0, max: MAX_STUDENTS })
+        : before.present_count;
+      const rosterSize = fields.roster_size !== undefined
+        ? int(fields.roster_size, 'Sĩ số', { required: true, min: 0, max: MAX_STUDENTS })
+        : before.roster_size;
+      assertCounts(presentCount, rosterSize);
+      sets.push(`present_count = $${next}, roster_size = $${next + 1}`);
+      params.push(presentCount, rosterSize);
+      next += 2;
     }
     if (fields.absent_names !== undefined) {
       sets.push(`absent_names = $${next}`);

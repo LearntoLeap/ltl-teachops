@@ -96,7 +96,7 @@ Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
 | GET | `/` | mọi vai trò | `?from=&to=&school_id=&class_id=&user_id=&status=` |
-| GET | `/today` | mọi vai trò | Buổi hôm nay của tôi + trạng thái chấm công/điểm danh |
+| GET | `/today` | mọi vai trò | Tiết hôm nay của tôi + `work_session` + đã điểm danh chưa (`attendance_done`, `present_count`, `attendance_roster_size`) |
 | POST | `/` | admin, manager · GV/TG (`schedule.selfCreate`) | Tạo một tiết. GV/TG tự thêm tiết BỊ THIẾU thì **bắt buộc** `reason` (≥10 ký tự) — lưu `self_added_reason`, đánh dấu `self_added`, ghi `self_added_at`, và báo ngay cho Phòng chuyên môn của trường |
 | | | | Buổi dạy nhận `period` (tiết 1–10) thay cho `start_time`/`end_time`; và `teacher_manual_name`/`assistant_manual_name` cho người chưa có tài khoản |
 | POST | `/bulk` | admin, manager | `{template, weekdays:[], from, to}` — sinh lịch lặp theo tuần |
@@ -170,6 +170,12 @@ trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + L
 > với tiết đầu tiên của buổi; buổi không có tiết nào vẫn chấm công được nhưng
 > được đánh dấu `unscheduled` để Phòng chuyên môn soát lại.
 >
+> **Buổi của một tiết tính theo SỐ TIẾT**: tiết 1–5 là buổi sáng, tiết 6 trở đi
+> là buổi chiều (hàm SQL `schedule_session(period, start_time)`; tiết cũ không
+> có số tiết thì theo giờ, trước 12:00 là sáng). Tiết "huỷ lịch" và "đã bỏ"
+> không tính vào lịch của buổi. `GET /my-shift` trả `planned.items` =
+> danh sách tiết của buổi `[{id, period, class_name, start_time, end_time}]`.
+>
 > **Việc dạy từng tiết nằm ở điểm danh**: trong mỗi tiết, giáo viên CHECK TẠI LỚP
 > và đếm sĩ số (`POST /api/attendance` — ghi `checked_in_at`, GPS, sĩ số có mặt).
 > Điểm danh xong thì tiết chuyển sang `done`.
@@ -204,11 +210,13 @@ Bảng chấm công (`/api/reports/timesheets.xlsx`) ghi chi tiết từng loạ
 |---|---|---|---|
 | GET | `/` | theo phạm vi | `?from=&to=&school_id=&class_id=` |
 | GET | `/pending` | admin, manager | Buổi quá giờ mà chưa điểm danh |
-| POST | `/` | teacher, assistant | `multipart`: `schedule_id`, `present_count`, `photos[]` (≥1), `absent_names?`, `note?` |
+| POST | `/` | teacher, assistant | `multipart`: `schedule_id`, `present_count`, `roster_size` (sĩ số thực tế buổi đó), `photos[]` (≥1), `absent_names?`, `note?` |
 | GET/PATCH | `/:id` | PATCH: người tạo trong 24h, hoặc admin/manager | |
 | POST | `/:id/remind` | admin, manager | Gửi thông báo nhắc người phụ trách |
 
-Server tự suy `class_id`, `school_id`, `roster_size`, `marked_by` từ `schedule_id` — client **không** gửi.
+Server tự suy `class_id`, `school_id`, `marked_by` từ `schedule_id` — client **không** gửi.
+
+**Sĩ số do giáo viên điền theo thực tế** ("26/30"): `present_count` / `roster_size`, không giới hạn theo sĩ số chuẩn của lớp (trần kỹ thuật 10 000 để chặn gõ nhầm). Chỉ chặn có mặt > sĩ số vừa điền (`422`). Client cũ không gửi `roster_size` ⇒ lấy max(sĩ số chuẩn của lớp, có mặt). Lớp chưa khai sĩ số chuẩn (0) được bổ sung bằng sĩ số giáo viên vừa đếm. PATCH nhận thêm `roster_size`. `GET /api/schedules/:id` trả `last_roster_size` (sĩ số lần điểm danh gần nhất của lớp) để gợi ý.
 
 ## 7. Thiết bị — `/api/devices`
 
@@ -301,7 +309,7 @@ Xem trước KHÔNG ghi `audit_log` hành động `export` — chỉ lần tải
 |---|---|---|
 | `GET /admin-overview` | **chỉ admin** | Quy mô tổ chức (`org`), nhân sự theo vai trò (`staff`), hàng đợi (`queues`), nhật ký + tài khoản mới (`recent_audit`, `recent_users`) |
 | `GET /dashboard` | admin, manager | Số buổi hôm nay, tỉ lệ điểm danh, chấm công trễ, thiết bị hỏng mở, góp ý mới |
-| `GET /my-dashboard` | teacher, assistant | Lịch hôm nay + việc cần làm |
+| `GET /my-dashboard` | teacher, assistant | `today_sessions` (MỌI tiết hôm nay kể cả huỷ/bỏ, kèm `period`, `work_session`, `school_id`, kết quả điểm danh), `today_shifts` (chấm công hôm nay theo trường × buổi), `pending_tasks`, `my_month` |
 | `GET /timesheets.xlsx` | admin, manager · `teacher/assistant` chỉ dữ liệu của mình | Bảng chấm công theo tháng |
 | `GET /payroll.xlsx` | admin, manager | Tổng hợp tính lương: số buổi, phút trễ, buổi vắng |
 | `GET /class-sessions.xlsx` | admin, manager (`export.scope`) | **Lịch dạy & điểm danh theo TIẾT** — khớp đúng màn Lịch dạy và màn Điểm danh: tiết, giờ, lớp, người phụ trách, đã chấm công chưa, đã điểm danh chưa, giờ check tại lớp, sĩ số, và GV tự thêm / Người thêm / Lý do thêm |

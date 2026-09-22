@@ -36,8 +36,9 @@ const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const hhmm = (t) => String(t || '').slice(0, 5);
 
 /** Buổi của tiết suy từ giờ bắt đầu — chỉ để gom nhóm cho dễ nhìn. */
-const sessionOf = (start) => (String(start) < '12:00' ? 'morning' : 'afternoon');
-const withSession = (list) => list.map((p) => ({ ...p, session: sessionOf(p.start) }));
+// Tiết 1–5 là buổi sáng, tiết 6 trở đi là buổi chiều (quy ước chấm công theo buổi).
+const sessionOf = (no) => (Number(no) <= 5 ? 'morning' : 'afternoon');
+const withSession = (list) => list.map((p) => ({ ...p, session: sessionOf(p.no) }));
 
 /**
  * Kiểm tra + sắp xếp một danh sách tiết. Không hợp lệ ⇒ ném badRequest kèm lý do

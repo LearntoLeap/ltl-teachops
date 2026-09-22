@@ -346,31 +346,44 @@ export default async function routes(app) {
     const me = req.user.id;
     const today = vnToday();
 
-    const [todaySessions, notCheckedOut, attendanceMissing, myMonth, unread] = await Promise.all([
-      // Buổi hôm nay của tôi + trạng thái check-in/out + đã điểm danh chưa
+    const nowSession = new Date(Date.now() + 7 * 3_600_000).getUTCHours() < 12 ? 'morning' : 'afternoon';
+    const [todaySessions, todayShifts, notCheckedOut, attendanceMissing, myMonth, unread] = await Promise.all([
+      // TẤT CẢ tiết hôm nay của tôi (kể cả huỷ/bỏ để giáo viên biết), kèm buổi
+      // (tiết 1–5 sáng, 6+ chiều) và kết quả điểm danh từng tiết.
       rows(
-        `select s.id, s.session_date, s.start_time, s.end_time, s.subject, s.status,
+        `select s.id, s.session_date, s.period, s.start_time, s.end_time, s.subject,
+                s.status, s.status_reason, s.school_id,
                 sc.name as school_name, c.name as class_name, r.name as room_name,
+                schedule_session(s.period, s.start_time) as work_session,
                 case when s.teacher_id = $1 then 'teacher' else 'assistant' end as my_role,
-                t.check_in_at, t.check_out_at, t.label, t.late_minutes,
-                t.gps_flagged, t.approval_status,
-                (att.id is not null) as attendance_done
+                (att.id is not null) as attendance_done,
+                att.present_count, att.roster_size, att.checked_in_at as class_check_in_at
            from schedules s
            join schools sc on sc.id = s.school_id
            join classes c on c.id = s.class_id
            left join stem_rooms r on r.id = s.room_id
-           left join timesheets t on t.schedule_id = s.id and t.user_id = $1
            left join attendance att on att.schedule_id = s.id
-          where s.session_date = $2 and s.status <> 'cancelled'
+          where s.session_date = $2
             and (s.teacher_id = $1 or s.assistant_id = $1)
-          order by s.start_time`,
+          order by s.start_time, s.period`,
         [me, today]
       ),
-      // Đã check-in nhưng quên check-out
+      // Chấm công hôm nay — MỘT bản ghi cho mỗi (trường, buổi).
+      rows(
+        `select t.id, t.school_id, sc.name as school_name, t.work_session,
+                t.check_in_at, t.check_out_at, t.label, t.late_minutes, t.approval_status, t.unscheduled
+           from timesheets t
+           join schools sc on sc.id = t.school_id
+          where t.user_id = $1 and t.work_date = $2
+          order by t.work_session, sc.name`,
+        [me, today]
+      ),
+      // Đã chấm công vào nhưng quên chấm công ra (trừ buổi đang diễn ra)
       one(
         `select count(*)::int as cnt from timesheets t
-          where t.user_id = $1 and t.check_in_at is not null and t.check_out_at is null`,
-        [me]
+          where t.user_id = $1 and t.check_in_at is not null and t.check_out_at is null
+            and not (t.work_date = $2 and t.work_session = $3::work_session)`,
+        [me, today, nowSession]
       ),
       // Buổi 3 ngày gần đây (kể cả hôm nay) đã tới giờ mà tôi chưa điểm danh
       one(
@@ -405,6 +418,7 @@ export default async function routes(app) {
 
     return {
       today_sessions: todaySessions,
+      today_shifts: todayShifts,
       pending_tasks: {
         not_checked_out: notCheckedOut?.cnt ?? 0,
         attendance_missing: attendanceMissing?.cnt ?? 0,

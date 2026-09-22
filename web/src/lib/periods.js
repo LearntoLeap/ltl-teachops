@@ -20,6 +20,19 @@ export const DEFAULT_PERIODS = [
   { no: 10, start: '16:40', end: '17:25' },
 ];
 
+/** Buổi của tiết số `no`: tiết 1–5 là buổi sáng, tiết 6 trở đi là buổi chiều. */
+export const sessionOfNo = (no) => (Number(no) <= 5 ? 'morning' : 'afternoon');
+
+/**
+ * Buổi của một tiết trong lịch: ưu tiên máy chủ đã tính (work_session), rồi
+ * theo số tiết; tiết cũ không có số tiết thì theo giờ (trước 12:00 là sáng).
+ */
+export function sessionOfSchedule(s) {
+  if (s?.work_session) return s.work_session;
+  if (s?.period) return sessionOfNo(s.period);
+  return String(s?.start_time || '').slice(0, 5) < '12:00' ? 'morning' : 'afternoon';
+}
+
 let cache = DEFAULT_PERIODS;
 let inflight = null;
 

@@ -47,6 +47,8 @@ const DETAIL_SELECT = `
          coalesce(a.full_name, s.assistant_manual_name) as assistant_name,
          cb.full_name as added_by_name,
          r.name  as room_name,
+         c.roster_size,
+         schedule_session(s.period, s.start_time) as work_session,
          exists (select 1 from timesheets ts  where ts.schedule_id  = s.id) as has_timesheet,
          exists (select 1 from attendance att where att.schedule_id = s.id) as has_attendance
     from schedules s
@@ -253,7 +255,9 @@ export default async function routes(app) {
               r.name  as room_name,
               ts.check_in_at, ts.check_out_at, ts.label,
               cb.full_name as added_by_name,
-              (att.id is not null) as attendance_done
+              schedule_session(s.period, s.start_time) as work_session,
+              (att.id is not null) as attendance_done,
+              att.present_count, att.roster_size as attendance_roster_size
          from schedules s
          left join users cb on cb.id = s.created_by
          join schools sc on sc.id = s.school_id
@@ -524,8 +528,13 @@ export default async function routes(app) {
     const id = uuid(req.params.id, 'id', { required: true });
     const s = await assertScheduleAccess(req.user, id);
     const flags = await one(
-      `select exists (select 1 from timesheets  where schedule_id = $1) as has_timesheet,
-              exists (select 1 from attendance where schedule_id = $1) as has_attendance`,
+      `select exists (select 1 from timesheets  where schedule_id = s.id) as has_timesheet,
+              exists (select 1 from attendance where schedule_id = s.id) as has_attendance,
+              schedule_session(s.period, s.start_time) as work_session,
+              -- Sĩ số lần điểm danh gần nhất của lớp — gợi ý sẵn cho lần điểm danh sau.
+              (select a2.roster_size from attendance a2
+                where a2.class_id = s.class_id order by a2.created_at desc limit 1) as last_roster_size
+         from schedules s where s.id = $1`,
       [id]
     );
     return { ...s, ...flags };

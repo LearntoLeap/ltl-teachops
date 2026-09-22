@@ -2,6 +2,8 @@
  * AttendanceMark.jsx — Điểm danh một buổi dạy (/diem-danh/:scheduleId).
  *
  * - Thông tin trường/lớp/người dạy tự điền theo lịch phân công — chỉ hiển thị tĩnh.
+ * - Giáo viên điền CẢ HAI số theo thực tế: có mặt / sĩ số ("26/30"), không giới
+ *   hạn theo sĩ số chuẩn của lớp. Sĩ số gợi ý sẵn theo lần điểm danh gần nhất.
  * - Buổi đã điểm danh (cờ trên lịch hoặc server trả 409) → hiển thị bản ghi đã có.
  * - Mất mạng → đưa vào hàng đợi offline (enqueue), tự gửi lại khi có sóng.
  */
@@ -68,6 +70,29 @@ function RecordCard({ record, roster }) {
   );
 }
 
+/** Ô số lớn có nút −/+ (bấm được trên điện thoại). Không giới hạn trên. */
+function CountInput({ label, value, onChange, placeholder, tone = 'brand' }) {
+  const n = value === '' || value === null ? null : Number(value);
+  const step = (d) => onChange(String(Math.max(0, (n ?? 0) + d)));
+  return (
+    <div className="min-w-0">
+      <div className="text-[12.5px] font-semibold text-ink-soft mb-1">{label} <span className="text-rose-500">*</span></div>
+      <div className="flex items-stretch">
+        <button type="button" onClick={() => step(-1)} aria-label={`Bớt ${label}`}
+          className="w-10 rounded-l-lg border border-line text-[18px] text-ink-soft hover:bg-zinc-50">−</button>
+        <input
+          className={`h-12 min-w-0 w-full flex-1 border-y border-line text-center text-[22px] font-extrabold tabular-nums outline-none
+            focus:bg-brand-50 ${tone === 'brand' ? 'text-brand-800' : 'text-ink'}`}
+          inputMode="numeric" value={value ?? ''} placeholder={placeholder}
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+          aria-label={label} />
+        <button type="button" onClick={() => step(1)} aria-label={`Thêm ${label}`}
+          className="w-10 rounded-r-lg border border-line text-[18px] text-ink-soft hover:bg-zinc-50">+</button>
+      </div>
+    </div>
+  );
+}
+
 export default function AttendanceMark() {
   const { scheduleId } = useParams();
   const navigate = useNavigate();
@@ -80,7 +105,8 @@ export default function AttendanceMark() {
   const [error, setError] = useState(null);
 
   // Form
-  const [present, setPresent] = useState(null);   // null = chưa nạp lịch (để tự điền sĩ số chuẩn)
+  const [present, setPresent] = useState('');     // giáo viên đếm thực tế
+  const [total, setTotal] = useState(null);       // sĩ số buổi này; null = chưa nạp lịch
   const [absentNames, setAbsentNames] = useState('');
   const [note, setNote] = useState('');
   const [photos, setPhotos] = useState([]);
@@ -113,8 +139,9 @@ export default function AttendanceMark() {
     try {
       const s = await api.get(`/api/schedules/${scheduleId}`);
       setSchedule(s);
-      // Mặc định số có mặt = sĩ số chuẩn (chỉ đặt lần đầu, không ghi đè khi tải lại).
-      setPresent((prev) => (prev === null ? String(s?.roster_size ?? '') : prev));
+      // Gợi ý sĩ số theo lần điểm danh gần nhất (hoặc sĩ số lớp) — giáo viên sửa theo thực tế.
+      const hint = Number(s?.last_roster_size) || Number(s?.roster_size) || 0;
+      setTotal((prev) => (prev === null ? (hint ? String(hint) : '') : prev));
       const attended = !!(s?.attendance_done ?? s?.has_attendance);
       setDone(attended);
       if (attended) await fetchRecord(s);
@@ -128,18 +155,26 @@ export default function AttendanceMark() {
   if (error && !schedule) return <ErrorBox error={error} onRetry={load} />;
   if (!schedule) return <PageLoading />;
 
-  const roster = Number(schedule.roster_size ?? 0);
+  const roster = Number(schedule.last_roster_size || schedule.roster_size || 0);
   const teacherNames = schedule.teacher_name
     || (schedule.assignments || schedule.staff || []).map((a) => a.full_name || a.name).filter(Boolean).join(', ');
-  const missing = roster > 0 && present !== null && present !== '' && Number(present) < roster
-    ? roster - Number(present)
-    : 0;
+  const nPresent = present === '' ? null : Number(present);
+  const nTotal = total === '' || total === null ? null : Number(total);
+  const over = nPresent !== null && nTotal !== null && nPresent > nTotal;
+  const missing = nPresent !== null && nTotal !== null && nPresent < nTotal ? nTotal - nPresent : 0;
 
   const submit = async (e) => {
     e.preventDefault();
-    const n = Number(present);
-    if (present === null || present === '' || !Number.isFinite(n) || n < 0) {
-      toast.err('Vui lòng nhập số học sinh có mặt hợp lệ.');
+    if (nPresent === null || !Number.isFinite(nPresent)) {
+      toast.err('Vui lòng điền số học sinh có mặt.');
+      return;
+    }
+    if (nTotal === null || !Number.isFinite(nTotal)) {
+      toast.err('Vui lòng điền sĩ số của buổi này.');
+      return;
+    }
+    if (over) {
+      toast.err(`Số có mặt (${nPresent}) lớn hơn sĩ số (${nTotal}) — vui lòng kiểm tra lại.`);
       return;
     }
     if (!photos.length) {
@@ -149,7 +184,8 @@ export default function AttendanceMark() {
 
     const fields = {
       schedule_id: scheduleId,
-      present_count: String(Math.round(n)),
+      present_count: String(nPresent),
+      roster_size: String(nTotal),
       absent_names: absentNames.trim(),
       note: note.trim(),
       client_time: new Date().toISOString(),
@@ -218,12 +254,12 @@ export default function AttendanceMark() {
           {done && <Badge tone="approved">Đã điểm danh</Badge>}
         </div>
         <div className="mt-3 grid gap-1.5">
-          <InfoRow k="Thời gian" v={`${fmtDateLong(schedule.session_date || schedule.date)} · ${fmtRange(schedule.start_time, schedule.end_time)}`} />
+          <InfoRow k="Thời gian" v={`${schedule.period ? `Tiết ${schedule.period} · ` : ''}${fmtDateLong(schedule.session_date || schedule.date)} · ${fmtRange(schedule.start_time, schedule.end_time)}`} />
           {(schedule.room_name || schedule.room?.name) && (
             <InfoRow k="Phòng" v={schedule.room_name || schedule.room?.name} />
           )}
           <InfoRow k="Người dạy" v={teacherNames || '—'} />
-          <InfoRow k="Sĩ số chuẩn" v={`${roster || '—'} học sinh`} />
+          {roster > 0 && <InfoRow k="Sĩ số gần nhất" v={`${roster} học sinh`} />}
         </div>
         <div className="text-[12px] text-ink-muted mt-2.5">
           ℹ️ Tự điền theo lịch phân công — không chỉnh sửa tại đây.
@@ -251,35 +287,29 @@ export default function AttendanceMark() {
         </div>
       ) : (
         <form onSubmit={submit} className="card p-4">
-          <Field
-            label="Số học sinh có mặt"
-            required
-            hint={roster > 0 ? `Sĩ số chuẩn của lớp: ${roster} học sinh.` : undefined}>
-            <input
-              type="number"
-              className="input"
-              min="0"
-              max="200"
-              required
-              inputMode="numeric"
-              value={present ?? ''}
-              onChange={(e) => setPresent(e.target.value)}
-            />
-          </Field>
-
-          <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3.5 flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-brand-900">Sĩ số buổi này</span>
-            <span className="text-[22px] font-extrabold text-brand-800" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {present === null || present === '' ? '—' : Number(present)}
-              <span className="text-[13px] text-ink-muted font-semibold">/{roster || '—'}</span>
-            </span>
+          <div className="label">Sĩ số thực tế buổi này</div>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 mb-2">
+            <CountInput label="Có mặt" value={present} onChange={setPresent} placeholder="?" />
+            <span className="pb-2 text-[26px] font-extrabold text-ink-muted">/</span>
+            <CountInput label="Sĩ số" value={total ?? ''} onChange={setTotal} placeholder="?" tone="ink" />
+          </div>
+          <div className="text-[12px] text-ink-muted mb-3">
+            Đếm thực tế tại lớp rồi điền: có mặt bao nhiêu / tổng sĩ số bao nhiêu.
+            {roster > 0 && <> Sĩ số đang gợi ý theo lần điểm danh gần nhất ({roster}) — sửa lại nếu khác.</>}
           </div>
 
-          {missing > 0 && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-3.5 py-2.5 mb-3.5">
-              ⚠ Vắng {missing} học sinh so với sĩ số chuẩn
-            </div>
-          )}
+          <div className={`rounded-xl border px-3.5 py-2.5 mb-3.5 flex items-center justify-between
+            ${over ? 'bg-rose-50 border-rose-200' : 'bg-brand-50 border-brand-100'}`}>
+            <span className={`text-[13px] font-semibold ${over ? 'text-rose-700' : 'text-brand-900'}`}>
+              {over ? 'Có mặt nhiều hơn sĩ số — kiểm tra lại'
+                : missing > 0 ? `Vắng ${missing} học sinh`
+                : nPresent !== null && nTotal !== null ? 'Đủ sĩ số' : 'Sĩ số buổi này'}
+            </span>
+            <span className="text-[22px] font-extrabold text-brand-800" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {nPresent ?? '—'}
+              <span className="text-[15px] text-ink-muted font-bold">/{nTotal ?? '—'}</span>
+            </span>
+          </div>
 
           <Field label="Học sinh vắng" hint="Mỗi em một dòng (hoặc cách nhau dấu phẩy) — hệ thống tự trừ vào sĩ số.">
             <textarea
@@ -289,10 +319,10 @@ export default function AttendanceMark() {
               onChange={(e) => {
                 const v = e.target.value;
                 setAbsentNames(v);
-                // Tự tính số có mặt = sĩ số chuẩn − số em vắng đã liệt kê.
-                if (roster > 0) {
+                // Tự tính số có mặt = sĩ số − số em vắng đã liệt kê.
+                if (nTotal) {
                   const n = v.split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean).length;
-                  setPresent(String(Math.max(0, roster - n)));
+                  if (n) setPresent(String(Math.max(0, nTotal - n)));
                 }
               }}
               placeholder={'Ví dụ:\nNguyễn Văn A\nTrần Thị B'}

@@ -78,8 +78,21 @@ function SessionCard({ shift }) {
       <div className="font-semibold mt-1">{clsName(shift.school)}</div>
       <div className="text-[13px] text-ink-muted">
         {shift.planned?.start_time
-          ? `Lịch dạy: ${shift.planned.periods} tiết, có mặt trước ${shift.planned.start_time}`
+          ? `${shift.planned.periods} tiết trong buổi — có mặt trước ${shift.planned.start_time}`
           : 'Buổi này không có tiết nào trong lịch dạy'}
+      </div>
+      {shift.planned?.items?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {shift.planned.items.map((p) => (
+            <span key={p.id} className="rounded-md bg-brand-50 text-brand-900 px-2 py-1 text-[12px] font-semibold">
+              {p.period ? `Tiết ${p.period}` : p.start_time} · {p.class_name}
+              <span className="text-ink-muted font-medium"> {p.start_time}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="text-[11.5px] text-ink-muted mt-2">
+        Tiết 1–5 là buổi sáng, tiết 6 trở đi là buổi chiều. Chấm công một lần vào, một lần ra cho cả buổi.
       </div>
     </div>
   );

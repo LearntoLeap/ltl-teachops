@@ -123,7 +123,7 @@ export default async function routes(app) {
     const name = str(b.name, 'Tên lớp', { required: true, max: 100 });
     const grade = int(b.grade, 'Khối', { min: 1, max: 12 });
     const level = resolveLevel(b, grade);
-    const rosterSize = int(b.roster_size, 'roster_size', { min: 0, max: 200, def: 0 });
+    const rosterSize = int(b.roster_size, 'roster_size', { min: 0, max: 10_000, def: 0 });
     const note = str(b.note, 'note', { max: 1000 });
 
     await assertSchoolAccess(req.user, schoolId); // ngoài phạm vi ⇒ 404
@@ -173,7 +173,7 @@ export default async function routes(app) {
         const name = str(b.name, 'Tên lớp', { required: true, max: 100 });
         const grade = int(b.grade, 'Khối', { min: 1, max: 12 });
         const level = resolveLevel(b, grade);
-        const rosterSize = int(b.roster_size, 'Sĩ số', { min: 0, max: 200, def: 0 });
+        const rosterSize = int(b.roster_size, 'Sĩ số', { min: 0, max: 10_000, def: 0 });
         const note = str(b.note, 'Ghi chú', { max: 1000 });
         const teacherId = uuid(b.teacher_id, 'Giáo viên');
         const assistantId = uuid(b.assistant_id, 'Trợ giảng');
@@ -281,7 +281,7 @@ export default async function routes(app) {
     if ('level' in b) set('level', enumOf(b.level, 'level', LEVELS, { required: true }));
     if ('grade' in b) set('grade', int(b.grade, 'grade', { min: 1, max: 12 }));
     if ('roster_size' in b) {
-      set('roster_size', int(b.roster_size, 'roster_size', { required: true, min: 0, max: 200 }));
+      set('roster_size', int(b.roster_size, 'roster_size', { required: true, min: 0, max: 10_000 }));
     }
     if ('note' in b) set('note', str(b.note, 'note', { max: 1000 }));
     // Ngừng/khôi phục lớp — dùng cho lớp tạm nghỉ hoặc nhập nhầm rồi bật lại.

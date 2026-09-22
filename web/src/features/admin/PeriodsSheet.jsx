@@ -87,7 +87,7 @@ export default function PeriodsSheet({ open, onClose }) {
                 <input type="time" className="input !py-2" value={p.end}
                   onChange={(e) => set(i, 'end', e.target.value)} aria-label={`Giờ kết thúc tiết ${p.no}`} />
                 <span className="text-[12px] text-ink-muted w-[64px] shrink-0">
-                  {String(p.start) < '12:00' ? 'sáng' : 'chiều'}
+                  {Number(p.no) <= 5 ? 'sáng' : 'chiều'}
                 </span>
               </div>
             ))}
