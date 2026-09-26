@@ -46,8 +46,8 @@ function HeroBand({ tone = 'light', chip, children }) {
     return (
       <div className="rise rounded-[22px] bg-brand-grad text-white px-5 py-4 shadow-card relative overflow-hidden">
         <div className="absolute -right-7 -top-9 text-[110px] opacity-[.12] select-none" aria-hidden>🤖</div>
-        <div className="text-[12.5px] opacity-85">{greeting()} · {fmtDateLong(today())}</div>
-        <div className="text-[21px] font-extrabold leading-tight mt-0.5">
+        <div className="text-sm opacity-85">{greeting()} · {fmtDateLong(today())}</div>
+        <div className="text-xl font-extrabold leading-tight mt-0.5">
           Xin chào, {auth.user?.full_name}!
         </div>
         {children}
@@ -57,11 +57,11 @@ function HeroBand({ tone = 'light', chip, children }) {
   return (
     <div className="rise flex flex-wrap items-end justify-between gap-2">
       <div>
-        <div className="text-[12.5px] text-ink-muted">{greeting()} · {fmtDateLong(today())}</div>
-        <h1 className="text-[21px] font-extrabold leading-tight">Xin chào, {auth.user?.full_name}!</h1>
+        <div className="text-sm text-ink-muted">{greeting()} · {fmtDateLong(today())}</div>
+        <h1 className="text-xl font-extrabold leading-tight">Xin chào, {auth.user?.full_name}!</h1>
       </div>
       {chip && (
-        <span className="rounded-full bg-brand-100 text-brand-800 px-3 py-1 text-[12px] font-bold">
+        <span className="rounded-full bg-brand-100 text-brand-800 px-3 py-1 text-xs font-bold">
           {chip}
         </span>
       )}
@@ -75,7 +75,7 @@ function Section({ kind = 'watch', title, to, toLabel = 'Xem tất cả ›', cl
     <div className={`flex items-center justify-between mt-5 mb-2 ${className}`}>
       <span className={`eyebrow eyebrow-${kind}`}>{title}</span>
       {to && (
-        <Link to={to} className="text-[12.5px] font-semibold text-brand-700 hover:underline">
+        <Link to={to} className="text-sm font-semibold text-brand-700 hover:underline">
           {toLabel}
         </Link>
       )}
@@ -91,8 +91,8 @@ function Tile({ icon, chipCls = 'bg-brand-50', num, numCls = 'text-brand-800', l
       <span className={`tile-chip ${chipCls}`}>{icon}</span>
       <span className="min-w-0">
         <span className={`tile-num block ${numCls}`}>{Number.isFinite(n) ? fmtNumber(n) : '—'}</span>
-        <span className="block text-[11.5px] text-ink-muted mt-0.5 truncate">{label}</span>
-        {sub && <span className="block text-[11px] text-ink-muted/80 truncate">{sub}</span>}
+        <span className="block text-xs text-ink-muted mt-0.5 truncate">{label}</span>
+        {sub && <span className="block text-xs text-ink-muted/80 truncate">{sub}</span>}
       </span>
     </div>
   );
@@ -104,11 +104,11 @@ function QueueRow({ icon, chipCls, label, sub, count, countCls = 'bg-rose-100 te
     <Link to={to} className="queue-row">
       <span className={`tile-chip ${chipCls}`}>{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13.5px] font-semibold truncate">{label}</span>
-        {sub && <span className="block text-[11.5px] text-ink-muted truncate">{sub}</span>}
+        <span className="block text-sm font-semibold truncate">{label}</span>
+        {sub && <span className="block text-xs text-ink-muted truncate">{sub}</span>}
       </span>
       {count > 0 && (
-        <span className={`rounded-full px-2.5 py-0.5 text-[12.5px] font-extrabold ${countCls}`}>
+        <span className={`rounded-full px-2.5 py-0.5 text-sm font-extrabold ${countCls}`}>
           {fmtNumber(count)}
         </span>
       )}
@@ -120,7 +120,7 @@ function QueueRow({ icon, chipCls, label, sub, count, countCls = 'bg-rose-100 te
 /** Lưới hành động nhanh. */
 function QuickActions({ items, className = '' }) {
   return (
-    <div className={`grid grid-cols-4 gap-2 ${className}`}>
+    <div className={`grid grid-cols-2 sm:grid-cols-4 gap-2 ${className}`}>
       {items.map((a) => (
         <Link key={a.label} to={a.to} className="qa">
           <span className="qa-ic">{a.icon}</span>
@@ -212,7 +212,7 @@ const tietLabel = (s) => (s.period ? `Tiết ${s.period}` : fmtTime(s.start_time
 function NextTietCard({ next, now }) {
   if (!next) {
     return (
-      <div className="rise rise-1 card px-4 py-3.5 text-[13.5px] text-ink-soft">
+      <div className="rise rise-1 card px-4 py-3.5 text-sm text-ink-soft">
         🎉 Đã hết tiết cần dạy hôm nay. Nhớ <b>chấm công ra</b> cho buổi đang làm nếu chưa.
       </div>
     );
@@ -228,25 +228,25 @@ function NextTietCard({ next, now }) {
   return (
     <div className="rise rise-1 card overflow-hidden flex">
       <div className="w-[96px] shrink-0 bg-brand-grad text-white px-2 py-3.5 flex flex-col items-center justify-center text-center">
-        <div className="text-[11px] font-bold uppercase opacity-85">{s.period ? 'Tiết' : 'Giờ'}</div>
-        <div className="text-[30px] font-extrabold leading-none">{s.period || fmtTime(s.start_time)}</div>
-        <div className="text-[11.5px] opacity-90 mt-1.5">{fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>
+        <div className="text-xs font-bold uppercase opacity-85">{s.period ? 'Tiết' : 'Giờ'}</div>
+        <div className="text-2xl font-extrabold leading-none">{s.period || fmtTime(s.start_time)}</div>
+        <div className="text-xs opacity-90 mt-1.5">{fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>
       </div>
       <div className="flex-1 min-w-0 px-4 py-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="font-extrabold text-[16px] truncate">Lớp {s.class_name}</div>
-            <div className="text-[12.5px] text-ink-muted truncate">
+            <div className="font-extrabold text-lg truncate">Lớp {s.class_name}</div>
+            <div className="text-sm text-ink-muted truncate">
               {s.school_name}{s.room_name ? ` · ${s.room_name}` : ''}{s.subject ? ` · ${s.subject}` : ''}
             </div>
           </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold
+          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold
             ${live ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-800'}`}>
             {live ? '● Đang dạy' : 'Sắp tới'}
           </span>
         </div>
-        <div className={`mt-2 text-[13px] font-semibold ${live ? 'text-brand-800' : 'text-ink-soft'}`}>⏱ {when}</div>
-        <div className="text-[11.5px] text-ink-muted mt-0.5">
+        <div className={`mt-2 text-sm font-semibold ${live ? 'text-brand-800' : 'text-ink-soft'}`}>⏱ {when}</div>
+        <div className="text-xs text-ink-muted mt-0.5">
           {SESSION_META[s.work_session]?.label} · {s.my_role === 'assistant' ? 'bạn là trợ giảng' : 'bạn là giáo viên'}
           {' '}· điểm danh sĩ số tại lớp ở mục Điểm danh
         </div>
@@ -258,17 +258,17 @@ function NextTietCard({ next, now }) {
 /** Trạng thái chấm công của một buổi. */
 function ShiftStatus({ shift }) {
   if (!shift?.check_in_at) {
-    return <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-[11.5px] font-bold">Chưa chấm công vào</span>;
+    return <span className="rounded-full bg-amber-100 text-amber-800 px-2.5 py-0.5 text-xs font-bold">Chưa chấm công vào</span>;
   }
   if (!shift.check_out_at) {
     return (
-      <span className="rounded-full bg-brand-100 text-brand-800 px-2.5 py-0.5 text-[11.5px] font-bold">
+      <span className="rounded-full bg-brand-100 text-brand-800 px-2.5 py-0.5 text-xs font-bold">
         Đã vào {fmtTime(shift.check_in_at)}{shift.label === 'late' ? ` · trễ ${shift.late_minutes}p` : ''}
       </span>
     );
   }
   return (
-    <span className="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-0.5 text-[11.5px] font-bold">
+    <span className="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-0.5 text-xs font-bold">
       ✓ {fmtTime(shift.check_in_at)} – {fmtTime(shift.check_out_at)}
     </span>
   );
@@ -287,13 +287,13 @@ function ShiftCard({ g, now, nextId }) {
     <div className="card overflow-hidden">
       <div className="px-3.5 py-3 flex flex-wrap items-start justify-between gap-2 border-b border-line bg-zinc-50/70">
         <div className="min-w-0">
-          <div className="font-extrabold text-[15px]">
+          <div className="font-extrabold text-lg">
             {meta.icon} {meta.label}
-            <span className="text-[12.5px] font-semibold text-ink-muted">
+            <span className="text-sm font-semibold text-ink-muted">
               {' '}· {active.length} tiết{nums.length ? ` (tiết ${nums.join(', ')})` : ''}
             </span>
           </div>
-          <div className="text-[12.5px] text-ink-muted truncate">{g.school_name}</div>
+          <div className="text-sm text-ink-muted truncate">{g.school_name}</div>
         </div>
         <ShiftStatus shift={g.shift} />
       </div>
@@ -307,7 +307,7 @@ function ShiftCard({ g, now, nextId }) {
         ) : (
           <Link to={to} className="btn-line w-full !py-2">Xem chấm công {meta.label.toLowerCase()}</Link>
         )}
-        <div className="text-[11.5px] text-ink-muted mt-1.5">
+        <div className="text-xs text-ink-muted mt-1.5">
           Chấm công một lần vào, một lần ra cho cả buổi — không chấm theo từng tiết.
         </div>
       </div>
@@ -326,26 +326,26 @@ function ShiftCard({ g, now, nextId }) {
                       : hot ? 'bg-brand-grad text-white' : muted ? 'bg-zinc-100 text-ink-muted' : 'bg-brand-50 text-brand-800'}`}>
                     <span>
                       <span className="block text-[9.5px] font-bold uppercase opacity-80">{s.period ? 'Tiết' : ''}</span>
-                      <span className="block text-[15px] font-extrabold">{s.period || fmtTime(s.start_time)}</span>
+                      <span className="block text-lg font-extrabold">{s.period || fmtTime(s.start_time)}</span>
                     </span>
                   </span>
                   <span className={`min-w-0 flex-1 ${muted ? 'opacity-60' : ''}`}>
-                    <span className={`block text-[13.5px] font-semibold truncate ${muted ? 'line-through' : ''}`}>
+                    <span className={`block text-sm font-semibold truncate ${muted ? 'line-through' : ''}`}>
                       {fmtTime(s.start_time)}–{fmtTime(s.end_time)} · Lớp {s.class_name}
                     </span>
-                    <span className="block text-[11.5px] text-ink-muted truncate">
+                    <span className="block text-xs text-ink-muted truncate">
                       {muted && s.status_reason ? `Lý do: ${s.status_reason}`
                         : [s.room_name, s.subject, s.my_role === 'assistant' ? 'trợ giảng' : null].filter(Boolean).join(' · ') || ' '}
                     </span>
                   </span>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${st.cls}`}>{st.text}</span>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${st.cls}`}>{st.text}</span>
                 </li>
               );
             })}
           </ol>
           {active.length > 0 && (
             <div className="px-3.5 py-2.5 border-t border-line">
-              <div className="flex items-center justify-between text-[11.5px] text-ink-muted mb-1">
+              <div className="flex items-center justify-between text-xs text-ink-muted mb-1">
                 <span>Đã điểm danh {done}/{active.length} tiết</span><span>{pct}%</span>
               </div>
               <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
@@ -355,7 +355,7 @@ function ShiftCard({ g, now, nextId }) {
           )}
         </>
       ) : (
-        <div className="px-3.5 py-3 text-[12.5px] text-ink-muted">
+        <div className="px-3.5 py-3 text-sm text-ink-muted">
           Buổi này không có tiết nào trong lịch dạy (đã chấm công ngoài lịch).
         </div>
       )}
@@ -400,18 +400,18 @@ function MyWeekBoard({ from, items }) {
               className={`min-h-[92px] border-r border-b border-line/70 last:border-r-0 p-1.5
                 ${isToday ? 'bg-brand-50/50' : ''}`}>
               <div className="text-center mb-1">
-                <span className={`inline-grid place-items-center h-6 w-6 rounded-full text-[11px] font-extrabold
+                <span className={`inline-grid place-items-center h-6 w-6 rounded-full text-xs font-extrabold
                   ${isToday ? 'bg-brand-grad text-white' : 'text-ink-soft'}`}>
                   {d.dayNum}
                 </span>
-                <span className="block text-[10px] font-bold uppercase text-ink-muted">{d.label}</span>
+                <span className="block text-xs font-bold uppercase text-ink-muted">{d.label}</span>
               </div>
               <div className="grid gap-1">
                 {list.slice(0, 3).map((s) => (
                   <span key={s.id}
                     title={`${s.period ? `Tiết ${s.period} · ` : ''}${fmtTime(s.start_time)} · Lớp ${s.class_name} — ${s.school_name}`}
                     className="block rounded-md bg-white ring-1 ring-inset ring-brand-100 px-1 py-[3px]
-                               text-[10px] font-bold text-brand-900 text-center truncate">
+                               text-xs font-bold text-brand-900 text-center truncate">
                     {s.period ? `T${s.period}` : fmtTime(s.start_time)}
                     <span className="block font-semibold text-ink-muted truncate">{s.class_name}</span>
                   </span>
@@ -424,7 +424,7 @@ function MyWeekBoard({ from, items }) {
           );
         })}
       </div>
-      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+      <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
         Tổng <b>{(items || []).length}</b> tiết trong tuần · T1 = tiết 1
       </div>
     </div>
@@ -479,7 +479,7 @@ function FieldDashboard({ data }) {
   return (
     <>
       <HeroBand tone="gradient">
-        <div className="text-[12.5px] mt-1 opacity-90">
+        <div className="text-sm mt-1 opacity-90">
           {active.length > 0
             ? `Hôm nay bạn có ${active.length} tiết dạy — sáng ${nMorning} · chiều ${nAfternoon}`
               + (next ? ` · tiếp theo: ${tietLabel(next.s)} lớp ${next.s.class_name}` : ' · đã dạy xong 🎉')
@@ -494,7 +494,7 @@ function FieldDashboard({ data }) {
           <div className="grid gap-1.5">
             {tasks.map((t) => (
               <Link key={t.key} to={t.to}
-                className="flex items-center justify-between rounded-xl bg-white/80 border border-amber-200 px-3 py-2 text-[13.5px] font-medium text-amber-900 hover:bg-white">
+                className="flex items-center justify-between rounded-xl bg-white/80 border border-amber-200 px-3 py-2 text-sm font-medium text-amber-900 hover:bg-white">
                 <span>{t.label}</span><span className="text-amber-500">›</span>
               </Link>
             ))}
@@ -549,7 +549,7 @@ function FieldDashboard({ data }) {
         <Tile icon="🚫" chipCls="bg-rose-50" numCls="text-rose-600" num={m.absent ?? 0} label="Vắng" />
       </div>
       <div className="rise rise-6 card mt-2 px-4 py-3 flex items-center justify-between">
-        <span className="text-[13.5px] text-ink-soft font-medium">⏱️ Tổng giờ làm việc tháng này</span>
+        <span className="text-sm text-ink-soft font-medium">⏱️ Tổng giờ làm việc tháng này</span>
         <span className="font-extrabold text-brand-800">{fmtDuration(m.work_minutes)}</span>
       </div>
     </>
@@ -604,7 +604,7 @@ function ManagerDashboard({ data }) {
       </div>
 
       <div className="rise rise-2 card px-4 py-3 mt-2">
-        <div className="flex items-center justify-between text-[12.5px] font-semibold mb-1.5">
+        <div className="flex items-center justify-between text-sm font-semibold mb-1.5">
           <span className="text-ink-soft">Điểm danh học sinh hôm nay</span>
           <span className="text-brand-800">{attDone}/{t.sessions ?? 0} buổi</span>
         </div>
@@ -617,7 +617,7 @@ function ManagerDashboard({ data }) {
             </>
           )}
         </div>
-        <div className="flex gap-4 mt-1.5 text-[11px] text-ink-muted">
+        <div className="flex gap-4 mt-1.5 text-xs text-ink-muted">
           <span>● <b className="text-emerald-600">{attDone}</b> đã điểm danh</span>
           <span>● <b className="text-amber-600">{attPending}</b> quá giờ chưa làm</span>
           <span>● <b>{attRest}</b> chưa tới giờ</span>
@@ -643,7 +643,7 @@ function ManagerDashboard({ data }) {
       {/* Buổi chưa điểm danh */}
       <Section kind="act" title="Buổi quá giờ chưa điểm danh" to="/diem-danh" />
       {pendingList.length === 0 ? (
-        <div className="rise rise-4 card px-4 py-3 text-[13.5px] text-ink-muted">
+        <div className="rise rise-4 card px-4 py-3 text-sm text-ink-muted">
           ✅ Tất cả các buổi đã tới giờ đều được điểm danh.
         </div>
       ) : (
@@ -654,12 +654,12 @@ function ManagerDashboard({ data }) {
             return (
               <div key={sid ?? i} className="card p-3 flex items-center gap-3">
                 <span className="w-[52px] shrink-0 text-center">
-                  <span className="block text-[15px] font-extrabold text-rose-600 leading-none">{fmtTime(p.start_time)}</span>
-                  <span className="block text-[10px] text-ink-muted mt-0.5">{fmtDate(p.session_date)}</span>
+                  <span className="block text-lg font-extrabold text-rose-600 leading-none">{fmtTime(p.start_time)}</span>
+                  <span className="block text-xs text-ink-muted mt-0.5">{fmtDate(p.session_date)}</span>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13.5px] font-semibold truncate">Lớp {p.class_name}</span>
-                  <span className="block text-[11.5px] text-ink-muted truncate">
+                  <span className="block text-sm font-semibold truncate">Lớp {p.class_name}</span>
+                  <span className="block text-xs text-ink-muted truncate">
                     {p.school_name}{p.teacher_name ? ` · GV ${p.teacher_name}` : ''}
                   </span>
                 </span>
@@ -679,7 +679,7 @@ function ManagerDashboard({ data }) {
         <div>
           <Section kind="ref" title="Sự cố thiết bị gần đây" to="/thiet-bi" />
           {recentIssues.length === 0 ? (
-            <div className="rise rise-5 card px-4 py-3 text-[13.5px] text-ink-muted">Không có sự cố nào gần đây.</div>
+            <div className="rise rise-5 card px-4 py-3 text-sm text-ink-muted">Không có sự cố nào gần đây.</div>
           ) : (
             <div className="rise rise-5 card divide-y divide-line">
               {recentIssues.map((it, i) => (
@@ -687,10 +687,10 @@ function ManagerDashboard({ data }) {
                   <span className={`h-2 w-2 rounded-full shrink-0 ${
                     it.priority === 'urgent' ? 'bg-rose-500' : it.priority === 'high' ? 'bg-amber-500' : 'bg-slate-300'}`} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-medium truncate">
+                    <span className="block text-sm font-medium truncate">
                       {it.device_name || 'Thiết bị'} — {it.description || ''}
                     </span>
-                    <span className="block text-[11.5px] text-ink-muted truncate">
+                    <span className="block text-xs text-ink-muted truncate">
                       {it.school_name}{it.room_name ? ` · ${it.room_name}` : ''} · {fmtAgo(it.created_at)}
                     </span>
                   </span>
@@ -722,14 +722,14 @@ function ManagerDashboard({ data }) {
 function TodayScheduleTable({ items }) {
   if (!items?.length) {
     return (
-      <div className="rise rise-4 card px-4 py-3 text-[13.5px] text-ink-muted">
+      <div className="rise rise-4 card px-4 py-3 text-sm text-ink-muted">
         Hôm nay chưa có buổi dạy nào được xếp lịch.
       </div>
     );
   }
   return (
     <div className="rise rise-4 card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto table-cards stagger">
         <table className="w-full min-w-[620px]">
           <thead>
             <tr>
@@ -743,19 +743,19 @@ function TodayScheduleTable({ items }) {
           <tbody>
             {items.map((s) => (
               <tr key={s.id}>
-                <td className="td whitespace-nowrap font-bold text-brand-800">
+                <td data-label="Giờ" className="td whitespace-nowrap font-bold text-brand-800">
                   {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
                 </td>
-                <td className="td font-semibold">{s.class_name}</td>
-                <td className="td text-ink-soft">{s.school_name}</td>
-                <td className="td text-ink-soft">
+                <td data-label="Lớp" className="td font-semibold">{s.class_name}</td>
+                <td data-label="Trường" className="td text-ink-soft">{s.school_name}</td>
+                <td data-label="Giáo viên" className="td text-ink-soft">
                   {s.teacher_name || '—'}
                   {s.assistant_name && (
-                    <span className="block text-[11.5px] text-ink-muted">TG: {s.assistant_name}</span>
+                    <span className="block text-xs text-ink-muted">TG: {s.assistant_name}</span>
                   )}
                 </td>
-                <td className="td">
-                  <span className="flex flex-col gap-0.5 text-[11.5px]">
+                <td data-label="Trạng thái" className="td">
+                  <span className="flex flex-col gap-0.5 text-xs">
                     <span className={s.has_timesheet ? 'text-emerald-600 font-semibold' : 'text-ink-muted'}>
                       {s.has_timesheet ? '✓' : '○'} Chấm công
                     </span>
@@ -769,7 +769,7 @@ function TodayScheduleTable({ items }) {
           </tbody>
         </table>
       </div>
-      <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
+      <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
         Tổng <b>{items.length}</b> buổi hôm nay
       </div>
     </div>
@@ -822,11 +822,11 @@ function AdminDashboard({ data }) {
             ].map(([role, ic, chip]) => (
               <div key={role} className="flex items-center gap-3 px-3.5 py-2.5">
                 <span className={`tile-chip ${chip}`}>{ic}</span>
-                <span className="flex-1 text-[13.5px] font-semibold">{LABEL.role[role]}</span>
-                <span className="tile-num !text-[18px] text-ink">{fmtNumber(staff[role] ?? 0)}</span>
+                <span className="flex-1 text-sm font-semibold">{LABEL.role[role]}</span>
+                <span className="tile-num !text-xl text-ink">{fmtNumber(staff[role] ?? 0)}</span>
               </div>
             ))}
-            <Link to="/tai-khoan" className="queue-row !py-3 text-brand-700 font-bold text-[13.5px] justify-center">
+            <Link to="/tai-khoan" className="queue-row !py-3 text-brand-700 font-bold text-sm justify-center">
               ➕ Tạo tài khoản mới
             </Link>
           </div>
@@ -862,17 +862,17 @@ function AdminDashboard({ data }) {
         <div>
           <Section kind="ref" title="Thao tác gần đây" to="/nhat-ky" />
           {auditRows.length === 0 ? (
-            <div className="rise rise-5 card px-4 py-3 text-[13.5px] text-ink-muted">Chưa có thao tác nào được ghi.</div>
+            <div className="rise rise-5 card px-4 py-3 text-sm text-ink-muted">Chưa có thao tác nào được ghi.</div>
           ) : (
             <div className="rise rise-5 card divide-y divide-line">
               {auditRows.map((a) => (
                 <div key={a.id} className="flex items-start gap-2.5 px-3.5 py-2.5">
-                  <span className="text-[14px] mt-px">{AUDIT_ICON[a.action] || '•'}</span>
+                  <span className="text-base mt-px">{AUDIT_ICON[a.action] || '•'}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[12.5px] leading-snug text-ink-soft">
+                    <span className="block text-sm leading-snug text-ink-soft">
                       <b className="text-ink">{a.actor_name || 'Hệ thống'}</b> — {a.summary || `${a.action} ${a.entity}`}
                     </span>
-                    <span className="block text-[11px] text-ink-muted mt-0.5">{fmtAgo(a.created_at)}</span>
+                    <span className="block text-xs text-ink-muted mt-0.5">{fmtAgo(a.created_at)}</span>
                   </span>
                 </div>
               ))}
@@ -886,12 +886,12 @@ function AdminDashboard({ data }) {
           <div className="rise rise-6 card divide-y divide-line">
             {newUsers.map((u) => (
               <div key={u.id} className="flex items-center gap-3 px-3.5 py-2.5">
-                <span className="h-8 w-8 rounded-full bg-brand-grad-soft text-white grid place-items-center text-[12.5px] font-bold shrink-0">
+                <span className="h-8 w-8 rounded-full bg-brand-grad-soft text-white grid place-items-center text-sm font-bold shrink-0">
                   {(u.full_name || '?').trim().split(/\s+/).pop()[0]?.toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[13px] font-semibold truncate">{u.full_name}</span>
-                  <span className="block text-[11px] text-ink-muted">
+                  <span className="block text-sm font-semibold truncate">{u.full_name}</span>
+                  <span className="block text-xs text-ink-muted">
                     {LABEL.role[u.role]} · tạo {fmtAgo(u.created_at)}
                   </span>
                 </span>

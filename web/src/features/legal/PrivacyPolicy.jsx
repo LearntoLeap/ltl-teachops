@@ -10,8 +10,8 @@ const UPDATED = '13/09/2026';
 function Section({ n, title, children }) {
   return (
     <section className="mb-6">
-      <h2 className="text-[16.5px] font-bold text-brand-900 mb-2">{n}. {title}</h2>
-      <div className="text-[14px] text-ink-soft leading-relaxed space-y-2">{children}</div>
+      <h2 className="text-lg font-bold text-brand-900 mb-2">{n}. {title}</h2>
+      <div className="text-base text-ink-soft leading-relaxed space-y-2">{children}</div>
     </section>
   );
 }
@@ -21,9 +21,9 @@ export default function PrivacyPolicy() {
     <div className="min-h-dvh bg-canvas">
       <header className="bg-brand-grad text-white">
         <div className="max-w-3xl mx-auto px-5 py-6">
-          <div className="text-[13px] opacity-90">LtL TeachOps · Learn to Leap</div>
+          <div className="text-sm opacity-90">LtL TeachOps · Learn to Leap</div>
           <h1 className="text-2xl font-extrabold mt-1">Chính sách bảo mật</h1>
-          <div className="text-[12.5px] opacity-85 mt-1">Cập nhật lần cuối: {UPDATED}</div>
+          <div className="text-sm opacity-85 mt-1">Cập nhật lần cuối: {UPDATED}</div>
         </div>
       </header>
 
@@ -66,7 +66,7 @@ export default function PrivacyPolicy() {
           <Section n={5} title="Dữ liệu người dùng Google (Google user data)">
             <p>
               Khi Quản trị viên kết nối Google Drive, ứng dụng chỉ xin quyền
-              {' '}<code className="text-[12.5px] bg-canvas px-1 rounded">https://www.googleapis.com/auth/drive.file</code>{' '}
+              {' '}<code className="text-sm bg-canvas px-1 rounded">https://www.googleapis.com/auth/drive.file</code>{' '}
               — quyền này chỉ cho phép tạo, đọc và cập nhật <b>các tệp, thư mục do chính ứng dụng tạo</b>
               {' '}(thư mục “LtL TeachOps — Ảnh &amp; Video” và nội dung bên trong). Ứng dụng <b>không</b> xem, đọc
               hay thay đổi bất kỳ tệp nào khác trong Google Drive của bạn.
@@ -77,7 +77,7 @@ export default function PrivacyPolicy() {
               của công ty, không chia sẻ cho bên thứ ba, và có thể bị thu hồi bất cứ lúc nào bằng nút
               “Ngắt kết nối” trong ứng dụng hoặc tại trang quản lý quyền của tài khoản Google.
             </p>
-            <p className="rounded-xl bg-canvas border border-line px-3 py-2 text-[13px]">
+            <p className="rounded-xl bg-canvas border border-line px-3 py-2 text-sm">
               LtL TeachOps’s use and transfer of information received from Google APIs will adhere to the
               {' '}<a className="text-brand-700 underline" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google API Services User Data Policy</a>,
               including the Limited Use requirements.
@@ -114,7 +114,7 @@ export default function PrivacyPolicy() {
             </p>
           </Section>
 
-          <div className="pt-4 border-t border-line text-[13px]">
+          <div className="pt-4 border-t border-line text-sm">
             <Link to="/" className="text-brand-700 font-semibold hover:underline">← Về LtL TeachOps</Link>
           </div>
         </div>

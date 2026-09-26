@@ -74,8 +74,8 @@ const timeOf = (r) => r.created_at || r.at || r.timestamp;
 function Meta({ label, value }) {
   return (
     <div>
-      <div className="text-[11.5px] text-ink-muted font-semibold uppercase">{label}</div>
-      <div className="text-[13.5px] break-all">{value || '—'}</div>
+      <div className="text-xs text-ink-muted font-semibold uppercase">{label}</div>
+      <div className="text-sm break-all">{value || '—'}</div>
     </div>
   );
 }
@@ -84,7 +84,7 @@ function JsonPane({ title, data }) {
   return (
     <div className="min-w-0">
       <div className="label">{title}</div>
-      <pre className="rounded-xl bg-ink text-white/90 text-[11.5px] leading-relaxed p-3 overflow-auto max-h-72 whitespace-pre-wrap break-words">
+      <pre className="rounded-xl bg-ink text-white/90 text-xs leading-relaxed p-3 overflow-auto max-h-72 whitespace-pre-wrap break-words">
         {prettyJson(data)}
       </pre>
     </div>
@@ -194,14 +194,14 @@ export default function AuditLog() {
         />
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto table-cards stagger">
             <table className="w-full min-w-[720px]">
               <thead>
                 <tr>
                   <th className="th">Thời gian</th>
                   <th className="th">Người thao tác</th>
                   <th className="th">Hành động</th>
-                  <th className="th">Đối tượng</th>
+                  <th className="th hidden xl:table-cell">Đối tượng</th>
                   <th className="th">Nội dung</th>
                 </tr>
               </thead>
@@ -213,16 +213,16 @@ export default function AuditLog() {
                       key={r.id || i}
                       className="hover:bg-brand-50/50 cursor-pointer"
                       onClick={() => setDetail(r)}>
-                      <td className="td whitespace-nowrap">{fmtDateTime(timeOf(r))}</td>
-                      <td className="td">{actorOf(r)}</td>
-                      <td className="td">
+                      <td data-label="Thời gian" className="td whitespace-nowrap">{fmtDateTime(timeOf(r))}</td>
+                      <td data-label="Người thao tác" className="td">{actorOf(r)}</td>
+                      <td data-label="Hành động" className="td">
                         <Badge tone={meta?.tone || 'neutral'}>{meta?.label || r.action || '—'}</Badge>
                       </td>
-                      <td className="td whitespace-nowrap">
+                      <td data-label="Đối tượng" className="hidden xl:table-cell td whitespace-nowrap">
                         <span className="font-medium">{ENTITY_LABEL[r.entity] || r.entity || '—'}</span>
                         {r.entity_id && <span className="text-ink-muted"> #{shortId(r.entity_id)}</span>}
                       </td>
-                      <td className="td max-w-[320px]">
+                      <td data-label="Nội dung" className="td max-w-[320px]">
                         <span className="line-clamp-2">{r.summary || ''}</span>
                       </td>
                     </tr>
@@ -255,7 +255,7 @@ export default function AuditLog() {
             </div>
 
             {detail.summary && (
-              <div className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-[13.5px] text-ink-soft mb-4">
+              <div className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm text-ink-soft mb-4">
                 {detail.summary}
               </div>
             )}

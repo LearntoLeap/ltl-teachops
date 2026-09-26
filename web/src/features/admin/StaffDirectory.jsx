@@ -112,12 +112,12 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
           </Field>
         </div>
       ) : (
-        <div className="grid gap-1.5 text-[13.5px] mb-3">
+        <div className="grid gap-1.5 text-sm mb-3">
           <div>📞 {user.phone || '— chưa có số điện thoại —'}</div>
         </div>
       )}
 
-      <div className="grid gap-1.5 text-[13.5px] text-ink-soft mb-3">
+      <div className="grid gap-1.5 text-sm text-ink-soft mb-3">
         <div>✉️ {user.email}</div>
         {user.birth_date && <div>🎂 {fmtDate(user.birth_date)}</div>}
         <div>🕘 Đăng nhập lần cuối: {user.last_login_at ? fmtAgo(user.last_login_at) : 'chưa bao giờ'}</div>
@@ -127,8 +127,8 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
       </div>
 
       <div className="border-t border-line pt-3 mb-3">
-        <div className="font-bold text-[14px] mb-1">Lớp phụ trách</div>
-        <p className="text-[12.5px] text-ink-muted mb-2">
+        <div className="font-bold text-base mb-1">Lớp phụ trách</div>
+        <p className="text-sm text-ink-muted mb-2">
           Quyết định người này thấy trường/lớp nào trong app — chưa gắn lớp thì họ
           không tự thêm được buổi dạy và không có buổi nào để chấm công.
         </p>
@@ -138,7 +138,7 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
         ) : (
           <>
             {mine.length === 0 && (
-              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-[13px] text-amber-900 mb-2">
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2 text-sm text-amber-900 mb-2">
                 ⚠️ Chưa phụ trách lớp nào.
               </div>
             )}
@@ -153,7 +153,7 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
                 </Field>
                 {loadingClasses && <Spinner className="h-4 w-4" />}
                 {pickSchool && !loadingClasses && classes.length === 0 && (
-                  <div className="text-[13px] text-ink-muted mb-2">Trường này chưa có lớp nào đang dùng.</div>
+                  <div className="text-sm text-ink-muted mb-2">Trường này chưa có lớp nào đang dùng.</div>
                 )}
                 {classes.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 mb-2">
@@ -161,7 +161,7 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
                       const on = mine.includes(c.id);
                       return (
                         <button key={c.id} type="button" onClick={() => toggleClass(c.id)}
-                          className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                          className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                             ${on ? 'bg-brand-grad text-white ring-transparent'
                                  : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
                           {on ? '✓ ' : ''}{c.name}{c.grade ? ` — Khối ${c.grade}` : ''}
@@ -173,7 +173,7 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
               </>
             )}
 
-            <div className="text-[12.5px] text-ink-muted">
+            <div className="text-sm text-ink-muted">
               Đang phụ trách <b>{mine.length}</b> lớp.
               {canEdit ? ' Bấm "Lưu hồ sơ" để áp dụng.' : ''}
             </div>
@@ -182,15 +182,15 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
       </div>
 
       <div className="border-t border-line pt-3">
-        <div className="font-bold text-[14px] mb-2">Buổi dạy gần đây</div>
+        <div className="font-bold text-base mb-2">Buổi dạy gần đây</div>
         {sessions === null && <Spinner className="h-4 w-4" />}
         {sessions?.length === 0 && (
-          <div className="text-[13px] text-ink-muted">Chưa có buổi dạy nào được phân công.</div>
+          <div className="text-sm text-ink-muted">Chưa có buổi dạy nào được phân công.</div>
         )}
         {sessions?.length > 0 && (
           <div className="grid gap-1.5">
             {sessions.map((s) => (
-              <div key={s.id} className="flex items-center gap-2 text-[13px] rounded-xl border border-line px-2.5 py-1.5">
+              <div key={s.id} className="flex items-center gap-2 text-sm rounded-xl border border-line px-2.5 py-1.5">
                 <span className="font-semibold text-brand-800 shrink-0">
                   {s.period ? `Tiết ${s.period}` : String(s.start_time || '').slice(0, 5)}
                 </span>
@@ -205,7 +205,7 @@ function StaffSheet({ user, canEdit, schools, onClose, onSaved }) {
         )}
       </div>
 
-      <div className="flex justify-end gap-2.5 mt-4">
+      <div className="form-actions flex justify-end gap-2.5 mt-4">
         <button className="btn-line" onClick={onClose} disabled={saving}>Đóng</button>
         {canEdit && (
           <button className="btn-primary" onClick={save} disabled={saving}>
@@ -295,7 +295,7 @@ export default function StaffDirectory() {
           <option value="">Mọi trường</option>
           {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <label className="flex items-center gap-2 text-[13px] text-ink-muted cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-ink-muted cursor-pointer">
           <input type="checkbox" className="accent-brand-600" checked={onlyActive}
             onChange={(e) => { setOnlyActive(e.target.checked); setPage(1); }} />
           Chỉ người đang hoạt động
@@ -318,7 +318,7 @@ export default function StaffDirectory() {
         />
       ) : (
         <>
-          <div className="text-[13px] text-ink-muted mb-2">
+          <div className="text-sm text-ink-muted mb-2">
             {fmtNumber(items.length)} người — 🧑‍🏫 {counts.teacher} giáo viên · 🤝 {counts.assistant} trợ giảng
             {counts.noPhone > 0 && (
               <span className="text-amber-700"> · ⚠️ {counts.noPhone} người chưa có số điện thoại</span>
@@ -331,47 +331,47 @@ export default function StaffDirectory() {
                 <tr>
                   <th className="th">Họ và tên</th>
                   <th className="th">Vai trò</th>
-                  <th className="th">Điện thoại</th>
+                  <th className="th hidden xl:table-cell">Điện thoại</th>
                   <th className="th">Email</th>
                   <th className="th">Trường phụ trách</th>
-                  <th className="th">Đăng nhập cuối</th>
+                  <th className="th hidden xl:table-cell">Đăng nhập cuối</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((u) => (
                   <tr key={u.id} className={`hover:bg-brand-50/40 cursor-pointer${u.is_active ? '' : ' opacity-55'}`}
                     onClick={() => setOpen(u)}>
-                    <td className="td">
+                    <td data-label="Họ và tên" className="td">
                       <span className="flex items-center gap-2">
-                        <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-[12px] font-bold">
+                        <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-xs font-bold">
                           {initials(nameOf(u))}
                         </span>
                         <span className="font-semibold text-brand-800">{nameOf(u)}</span>
                         {schoolId && u.at_school && (
-                          <Badge tone="approved" className="!text-[10.5px]">ở trường này</Badge>
+                          <Badge tone="approved" className="!text-xs">ở trường này</Badge>
                         )}
                       </span>
                     </td>
-                    <td className="td whitespace-nowrap">
+                    <td data-label="Vai trò" className="td whitespace-nowrap">
                       <Badge tone={u.role === 'assistant' ? 'normal' : 'neutral'}>
                         {LABEL.role[u.role] || u.role}
                       </Badge>
                     </td>
-                    <td className="td whitespace-nowrap">
+                    <td data-label="Điện thoại" className="hidden xl:table-cell td whitespace-nowrap">
                       {u.phone || <span className="text-amber-700">— chưa có —</span>}
                     </td>
-                    <td className="td max-w-[220px] truncate text-ink-muted">{u.email}</td>
-                    <td className="td max-w-[240px] truncate">
+                    <td data-label="Email" className="td max-w-[220px] truncate text-ink-muted">{u.email}</td>
+                    <td data-label="Trường phụ trách" className="td max-w-[240px] truncate">
                       {(u.school_names || []).length ? u.school_names.join(', ') : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="td whitespace-nowrap text-ink-muted">
+                    <td data-label="Đăng nhập cuối" className="hidden xl:table-cell td whitespace-nowrap text-ink-muted">
                       {u.last_login_at ? fmtAgo(u.last_login_at) : 'chưa bao giờ'}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
+            <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
               Bấm một dòng để xem hồ sơ và buổi dạy gần đây
               {canEdit ? ' · sửa được họ tên và số điện thoại ngay tại đó.' : '.'}
             </div>

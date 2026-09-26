@@ -14,9 +14,9 @@ import { PageHeader, ConfirmSheet } from '../../components/ui.jsx';
 function MenuRow({ to, icon, label }) {
   return (
     <Link to={to} className="flex items-center gap-3.5 px-4 py-3.5 hover:bg-canvas active:bg-canvas transition">
-      <span className="text-[20px] w-7 text-center leading-none">{icon}</span>
-      <span className="flex-1 text-[14.5px] font-medium text-ink">{label}</span>
-      <span className="text-ink-muted text-[18px] leading-none">›</span>
+      <span className="text-xl w-7 text-center leading-none">{icon}</span>
+      <span className="flex-1 text-base font-medium text-ink">{label}</span>
+      <span className="text-ink-muted text-xl leading-none">›</span>
     </Link>
   );
 }
@@ -72,8 +72,8 @@ export default function MoreScreen() {
           </span>
           <div className="min-w-0 flex-1">
             <div className="font-bold truncate">{auth.user?.full_name}</div>
-            <div className="text-[13px] text-ink-muted truncate">{auth.user?.email}</div>
-            <div className="text-[12px] text-brand-700 font-semibold">{auth.roleLabel}</div>
+            <div className="text-sm text-ink-muted truncate">{auth.user?.email}</div>
+            <div className="text-xs text-brand-700 font-semibold">{auth.roleLabel}</div>
           </div>
         </div>
         <button className="btn-danger w-full mt-4" onClick={() => setAskSignOut(true)}>
@@ -81,7 +81,7 @@ export default function MoreScreen() {
         </button>
       </div>
 
-      <div className="text-center text-[12px] text-ink-muted mt-5">LtL TeachOps v1.0</div>
+      <div className="text-center text-xs text-ink-muted mt-5">LtL TeachOps v1.0</div>
 
       {/* Xác nhận đăng xuất */}
       <ConfirmSheet

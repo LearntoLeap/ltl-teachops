@@ -50,7 +50,7 @@ function checkMismatch(c) {
 /** Dải ảnh thu nhỏ — bấm mở bản đầy đủ ở tab mới. */
 function PhotoStrip({ rec, size = 'h-9 w-9' }) {
   const ids = photoIds(rec);
-  if (!ids.length) return <span className="text-ink-muted text-[12px]">—</span>;
+  if (!ids.length) return <span className="text-ink-muted text-xs">—</span>;
   return (
     <div className="flex gap-1.5 items-center">
       {ids.slice(0, 4).map((id) => (
@@ -59,7 +59,7 @@ function PhotoStrip({ rec, size = 'h-9 w-9' }) {
             className={`${size} rounded-lg object-cover border border-line`} />
         </a>
       ))}
-      {ids.length > 4 && <span className="text-[11px] text-ink-muted">+{ids.length - 4}</span>}
+      {ids.length > 4 && <span className="text-xs text-ink-muted">+{ids.length - 4}</span>}
     </div>
   );
 }
@@ -145,7 +145,7 @@ function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
 
   return (
     <div>
-      <div className="text-[13px] text-ink-muted mb-2.5">Hôm nay — {fmtDateLong(today())}</div>
+      <div className="text-sm text-ink-muted mb-2.5">Hôm nay — {fmtDateLong(today())}</div>
 
       {slots.length === 0 ? (
         <EmptyState icon="⏰" title="Trường chưa cấu hình mốc kiểm kê"
@@ -159,11 +159,11 @@ function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
             if (done) {
               return (
                 <div key={slot} className="card p-3.5 border-emerald-200 bg-emerald-50/50">
-                  <div className="text-[13px] font-semibold text-ink">{LABEL.slot[slot]}</div>
-                  <div className="text-emerald-700 text-[12.5px] font-semibold mt-1">
+                  <div className="text-sm font-semibold text-ink">{LABEL.slot[slot]}</div>
+                  <div className="text-emerald-700 text-sm font-semibold mt-1">
                     ✓ Đã kiểm{fmtTime(done.created_at || done.checked_at) ? ` · ${fmtTime(done.created_at || done.checked_at)}` : ''}
                   </div>
-                  <div className="text-[11.5px] text-ink-muted mt-0.5 truncate">{personName(done)}</div>
+                  <div className="text-xs text-ink-muted mt-0.5 truncate">{personName(done)}</div>
                 </div>
               );
             }
@@ -172,10 +172,10 @@ function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
                 disabled={!auth.can('device.check')}
                 onClick={() => setFormSlot(slot)}
                 className="card p-3.5 text-left hover:border-brand-300 transition disabled:opacity-60">
-                <div className="text-[13px] font-semibold text-ink">{LABEL.slot[slot]}</div>
-                <div className="text-amber-600 text-[12.5px] font-semibold mt-1">○ Chưa kiểm</div>
+                <div className="text-sm font-semibold text-ink">{LABEL.slot[slot]}</div>
+                <div className="text-amber-600 text-sm font-semibold mt-1">○ Chưa kiểm</div>
                 {auth.can('device.check') && (
-                  <div className="text-[11.5px] text-brand-600 mt-0.5">Bấm để kiểm kê →</div>
+                  <div className="text-xs text-brand-600 mt-0.5">Bấm để kiểm kê →</div>
                 )}
               </button>
             );
@@ -184,13 +184,13 @@ function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
       )}
 
       {/* ----------------------- Lịch sử kiểm kê ----------------------- */}
-      <h2 className="text-[14.5px] font-bold text-ink mt-6 mb-2.5">Lịch sử kiểm kê</h2>
+      <h2 className="text-base font-bold text-ink mt-6 mb-2.5">Lịch sử kiểm kê</h2>
       {history.length === 0 ? (
         <EmptyState icon="📋" title="Chưa có lần kiểm kê nào"
           hint="Bấm vào một mốc chưa kiểm ở trên để bắt đầu kiểm kê phòng này." />
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto table-cards stagger">
             <table className="w-full min-w-[520px]">
               <thead>
                 <tr>
@@ -206,15 +206,15 @@ function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
                   const mm = checkMismatch(c);
                   return (
                     <tr key={c.id}>
-                      <td className="td whitespace-nowrap">{fmtDate(c.check_date || c.date || c.created_at)}</td>
-                      <td className="td whitespace-nowrap">{LABEL.slot[c.slot] || c.slot}</td>
-                      <td className="td">{personName(c)}</td>
-                      <td className="td">
+                      <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(c.check_date || c.date || c.created_at)}</td>
+                      <td data-label="Mốc" className="td whitespace-nowrap">{LABEL.slot[c.slot] || c.slot}</td>
+                      <td data-label="Người kiểm" className="td">{personName(c)}</td>
+                      <td data-label="Lệch?" className="td">
                         {mm === true && <Badge tone="urgent">Lệch</Badge>}
                         {mm === false && <Badge tone="approved">Đủ</Badge>}
                         {mm === null && <span className="text-ink-muted">—</span>}
                       </td>
-                      <td className="td"><PhotoStrip rec={c} /></td>
+                      <td data-label="Ảnh" className="td"><PhotoStrip rec={c} /></td>
                     </tr>
                   );
                 })}
@@ -303,7 +303,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
       {rows !== null && !catalogErr && (
         <>
           {rows.length === 0 ? (
-            <div className="rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-[13px] px-3.5 py-2.5 mb-3">
+            <div className="rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-sm px-3.5 py-2.5 mb-3">
               Phòng chưa có danh mục thiết bị — vẫn có thể ghi nhận ảnh và ghi chú.
             </div>
           ) : (
@@ -316,8 +316,8 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
                     className={`rounded-xl border px-3 py-2.5 mb-2 transition ${bad ? 'border-rose-300 bg-rose-50/60' : 'border-line'}`}>
                     <div className="flex items-center gap-2.5">
                       <div className="flex-1 min-w-0">
-                        <div className={`text-[13.5px] font-semibold truncate ${diff ? 'text-rose-700' : 'text-ink'}`}>{r.name}</div>
-                        <div className={`text-[11.5px] ${diff ? 'text-rose-600 font-semibold' : 'text-ink-muted'}`}>
+                        <div className={`text-sm font-semibold truncate ${diff ? 'text-rose-700' : 'text-ink'}`}>{r.name}</div>
+                        <div className={`text-xs ${diff ? 'text-rose-600 font-semibold' : 'text-ink-muted'}`}>
                           Chuẩn: {r.expected_qty ?? '—'}{r.unit ? ` ${r.unit}` : ''}
                         </div>
                       </div>
@@ -332,7 +332,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
                     <div className="flex gap-1.5 mt-2">
                       {[['ok', '✅ Tốt'], ['damaged', '🛠️ Có hỏng'], ['missing', '❓ Thiếu / mất']].map(([v, l]) => (
                         <button key={v} type="button" onClick={() => setRow(idx, { cond: v })}
-                          className={`rounded-full px-2.5 py-1 text-[11.5px] font-semibold ring-1 ring-inset transition
+                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset transition
                             ${(r.cond || 'ok') === v
                               ? v === 'ok' ? 'bg-emerald-500 text-white ring-transparent'
                                 : v === 'damaged' ? 'bg-amber-500 text-white ring-transparent'
@@ -343,7 +343,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
                       ))}
                     </div>
                     <input
-                      className="input !py-1.5 mt-2 text-[13px]"
+                      className="input !py-1.5 mt-2 text-sm"
                       placeholder="Ghi chú ngắn (nếu lệch/hỏng)…"
                       value={r.noteText}
                       onChange={(e) => setRow(idx, { noteText: e.target.value })}
@@ -367,7 +367,7 @@ function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
               value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
 
-          <div className="flex gap-2.5 justify-end mt-1">
+          <div className="form-actions flex gap-2.5 justify-end mt-1">
             <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
             <button className="btn-primary" onClick={submit} disabled={busy}>
               {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : 'Gửi kiểm kê'}
@@ -484,7 +484,7 @@ function IssueCard({ issue, canResolve, onChangeStatus }) {
   return (
     <div className="card p-4">
       <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0 font-semibold text-[14.5px] text-ink">
+        <div className="flex-1 min-w-0 font-semibold text-base text-ink">
           {name}
           {issue.qty != null && <span className="text-ink-muted font-normal"> × {issue.qty}</span>}
         </div>
@@ -492,27 +492,27 @@ function IssueCard({ issue, canResolve, onChangeStatus }) {
         <Badge tone={issue.status}>{LABEL.issue[issue.status] || issue.status}</Badge>
       </div>
 
-      {issue.description && <p className="text-[13.5px] text-ink-soft mt-1.5">{issue.description}</p>}
+      {issue.description && <p className="text-sm text-ink-soft mt-1.5">{issue.description}</p>}
 
       {photoIds(issue).length > 0 && (
         <div className="mt-2.5"><PhotoStrip rec={issue} size="h-14 w-14" /></div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-ink-muted mt-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted mt-2.5">
         {place && <span>🏫 {place}</span>}
         <span>👤 {personName(issue)}</span>
         <span>🕒 {fmtAgo(issue.created_at)}</span>
       </div>
 
       {issue.status === 'resolved' && issue.resolution && (
-        <div className="mt-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[12.5px] px-3 py-2">
+        <div className="mt-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm px-3 py-2">
           ✓ Khắc phục: {issue.resolution}
         </div>
       )}
 
       {canResolve && (
         <div className="mt-3">
-          <button className="btn-line !py-1.5 text-[13px]" onClick={onChangeStatus}>🔧 Đổi trạng thái</button>
+          <button className="btn-line !py-1.5 text-sm" onClick={onChangeStatus}>🔧 Đổi trạng thái</button>
         </div>
       )}
     </div>
@@ -656,7 +656,7 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
       <PhotoInput value={photos} onChange={setPhotos} label="Ảnh / video thiết bị hỏng" allowVideo
         hint="Chụp rõ vị trí hỏng; quay video nếu lỗi chỉ thấy khi thiết bị chạy." />
 
-      <div className="flex gap-2.5 justify-end mt-1">
+      <div className="form-actions flex gap-2.5 justify-end mt-1">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={busy}>
           {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : 'Gửi báo hỏng'}
@@ -704,7 +704,7 @@ function IssueStatusSheet({ issue, onClose, onDone }) {
     <Sheet open={!!issue} onClose={busy ? undefined : onClose} title="Đổi trạng thái sự cố">
       {issue && (
         <>
-          <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5 text-[13.5px]">
+          <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5 text-sm">
             <span className="font-semibold">{issue.device_name || issue.catalog_name || issue.catalog?.name || 'Thiết bị'}</span>
             <span className="text-ink-muted"> — hiện tại: {LABEL.issue[issue.status] || issue.status}</span>
           </div>
@@ -721,7 +721,7 @@ function IssueStatusSheet({ issue, onClose, onDone }) {
               value={resolution} onChange={(e) => setResolution(e.target.value)} />
           </Field>
 
-          <div className="flex gap-2.5 justify-end mt-1">
+          <div className="form-actions flex gap-2.5 justify-end mt-1">
             <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
             <button className="btn-primary" onClick={submit} disabled={busy}>
               {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : 'Cập nhật'}
@@ -795,7 +795,7 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
           action={<button className="btn-primary" onClick={() => setEditing({})}>+ Thêm thiết bị</button>} />
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto table-cards stagger">
             <table className="w-full min-w-[560px]">
               <thead>
                 <tr>
@@ -810,14 +810,14 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
               <tbody>
                 {items.map((it) => (
                   <tr key={it.id}>
-                    <td className="td font-semibold">{it.name}</td>
-                    <td className="td text-ink-muted">{it.sku || '—'}</td>
-                    <td className="td">{it.unit || '—'}</td>
-                    <td className="td">{it.expected_qty ?? '—'}</td>
-                    <td className="td text-ink-muted">{it.sort_order ?? 0}</td>
+                    <td data-label="Tên thiết bị" className="td font-semibold">{it.name}</td>
+                    <td data-label="SKU" className="td text-ink-muted">{it.sku || '—'}</td>
+                    <td data-label="Đơn vị" className="td">{it.unit || '—'}</td>
+                    <td data-label="SL chuẩn" className="td">{it.expected_qty ?? '—'}</td>
+                    <td data-label="Sắp xếp" className="td text-ink-muted">{it.sort_order ?? 0}</td>
                     <td className="td whitespace-nowrap text-right">
-                      <button className="btn-ghost !px-2.5 !py-1 text-[13px]" onClick={() => setEditing(it)}>✏️ Sửa</button>
-                      <button className="btn-ghost !px-2.5 !py-1 text-[13px] !text-rose-600" onClick={() => setDeleting(it)}>🗑 Xoá</button>
+                      <button className="btn-ghost !px-2.5 !py-1 text-sm" onClick={() => setEditing(it)}>✏️ Sửa</button>
+                      <button className="btn-ghost !px-2.5 !py-1 text-sm !text-rose-600" onClick={() => setDeleting(it)}>🗑 Xoá</button>
                     </td>
                   </tr>
                 ))}
@@ -962,14 +962,14 @@ function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
         <PageLoading label="Đang tải danh mục đề xuất…" />
       ) : (
         <>
-          <div className="text-[13px] text-ink-muted mb-3">
+          <div className="text-sm text-ink-muted mb-3">
             Bật thiết bị có trong phòng rồi nhập số lượng thực tế. Thiết bị phòng đã khai báo
             được tick sẵn — sửa số là cập nhật lại.
           </div>
 
           {groups.map(([cat, arr]) => (
             <div key={cat} className="mb-3">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-1.5">
+              <div className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-1.5">
                 {CAT_LABEL[cat]}
               </div>
               <div className="grid gap-1.5">
@@ -980,14 +980,14 @@ function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
                       className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition
                         ${on ? 'border-brand-300 bg-brand-50/50' : 'border-line'}`}>
                       <button type="button" onClick={() => toggle(sg)}
-                        className={`h-5 w-5 rounded-md grid place-items-center text-[12px] font-bold shrink-0 transition
+                        className={`h-5 w-5 rounded-md grid place-items-center text-xs font-bold shrink-0 transition
                           ${on ? 'bg-brand-grad text-white' : 'bg-white ring-1 ring-inset ring-line'}`}
                         aria-label={on ? 'Bỏ chọn' : 'Chọn'}>
                         {on ? '✓' : ''}
                       </button>
-                      <span className="text-[16px] w-6 text-center shrink-0">{sg.icon}</span>
+                      <span className="text-lg w-6 text-center shrink-0">{sg.icon}</span>
                       <button type="button" onClick={() => toggle(sg)}
-                        className="flex-1 min-w-0 text-left text-[13.5px] font-semibold truncate">
+                        className="flex-1 min-w-0 text-left text-sm font-semibold truncate">
                         {sg.name}
                       </button>
                       {on ? (
@@ -997,10 +997,10 @@ function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
                             className="input !w-20 !py-1.5 text-center font-bold"
                             value={picked[keyOf(sg)]}
                             onChange={(e) => setQty(sg, e.target.value)} />
-                          <span className="text-[12px] text-ink-muted w-10">{sg.unit}</span>
+                          <span className="text-xs text-ink-muted w-10">{sg.unit}</span>
                         </span>
                       ) : (
-                        <span className="text-[12px] text-ink-muted shrink-0 w-[122px] text-right">
+                        <span className="text-xs text-ink-muted shrink-0 w-[122px] text-right">
                           gợi ý {sg.default_qty} {sg.unit}
                         </span>
                       )}
@@ -1034,7 +1034,7 @@ function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
           )}
 
           <div className="flex gap-2.5 justify-end items-center mt-2">
-            <span className="text-[12.5px] text-ink-muted mr-auto">Đã chọn <b>{count}</b> thiết bị</span>
+            <span className="text-sm text-ink-muted mr-auto">Đã chọn <b>{count}</b> thiết bị</span>
             <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
             <button type="button" className="btn-primary" onClick={submit} disabled={busy || !count}>
               {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu danh mục'}
@@ -1124,7 +1124,7 @@ function CatalogFormSheet({ open, item, roomId, onClose, onDone }) {
         </Field>
       </div>
 
-      <div className="flex gap-2.5 justify-end mt-1">
+      <div className="form-actions flex gap-2.5 justify-end mt-1">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={busy}>
           {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : (isEdit ? 'Lưu thay đổi' : 'Thêm thiết bị')}

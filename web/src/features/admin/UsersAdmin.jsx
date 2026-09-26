@@ -39,7 +39,7 @@ const lastLoginText = (u) => {
 
 /* --------------------------- Thành phần nhỏ dùng chung --------------------------- */
 
-function Avatar({ name, className = 'h-10 w-10 text-[15px]' }) {
+function Avatar({ name, className = 'h-10 w-10 text-lg' }) {
   return (
     <span className={`${className} shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center font-bold`}>
       {initials(name)}
@@ -60,8 +60,8 @@ function StatusBadge({ active }) {
 function InfoRow({ label, value }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-line/70 pb-2">
-      <span className="text-[13px] text-ink-muted shrink-0 pt-0.5">{label}</span>
-      <span className="text-[14px] font-medium text-right break-all">{value}</span>
+      <span className="text-sm text-ink-muted shrink-0 pt-0.5">{label}</span>
+      <span className="text-base font-medium text-right break-all">{value}</span>
     </div>
   );
 }
@@ -73,7 +73,7 @@ function SchoolChecklist({ schools, loading, selected, onToggle, onRetry }) {
   }
   if (schools === null) {
     return (
-      <div className="text-[13px] text-ink-muted py-2">
+      <div className="text-sm text-ink-muted py-2">
         Chưa tải được danh sách trường.{' '}
         {onRetry && (
           <button type="button" className="text-brand-700 font-semibold hover:underline" onClick={onRetry}>
@@ -84,12 +84,12 @@ function SchoolChecklist({ schools, loading, selected, onToggle, onRetry }) {
     );
   }
   if (!schools.length) {
-    return <div className="text-[13px] text-ink-muted py-2">Chưa có trường nào trong hệ thống.</div>;
+    return <div className="text-sm text-ink-muted py-2">Chưa có trường nào trong hệ thống.</div>;
   }
   return (
     <div className="max-h-56 overflow-y-auto rounded-xl border border-line divide-y divide-line/70">
       {schools.map((s) => (
-        <label key={s.id} className="flex items-center gap-2.5 px-3.5 py-2.5 text-[14px] cursor-pointer hover:bg-canvas">
+        <label key={s.id} className="flex items-center gap-2.5 px-3.5 py-2.5 text-base cursor-pointer hover:bg-canvas">
           <input
             type="checkbox"
             className="h-4 w-4 accent-brand-600 shrink-0"
@@ -168,16 +168,16 @@ function TempPasswordSheet({ result, onClose }) {
     <Sheet open={!!result} onClose={onClose} title="Mật khẩu tạm">
       {result && (
         <>
-          <p className="text-[14px] text-ink-soft mb-3">
+          <p className="text-base text-ink-soft mb-3">
             Mật khẩu tạm của tài khoản <b>{result.email}</b>:
           </p>
           <div className="rounded-xl2 border-2 border-dashed border-brand-300 bg-brand-50 px-4 py-5 text-center mb-3">
-            <div className="font-mono text-[26px] font-extrabold tracking-[0.15em] text-brand-800 select-all break-all">
+            <div className="font-mono text-2xl font-extrabold tracking-[0.15em] text-brand-800 select-all break-all">
               {result.temp_password}
             </div>
           </div>
           <button className="btn-primary w-full mb-3" onClick={copy}>📋 Sao chép</button>
-          <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-3.5 py-2.5">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3.5 py-2.5">
             ⚠ SMTP chưa cấu hình — hãy gửi mật khẩu này cho người dùng qua kênh khác
             (Zalo, tin nhắn…). Người dùng sẽ phải đổi mật khẩu ngay lần đăng nhập đầu tiên.
           </div>
@@ -294,7 +294,7 @@ function CreateUserSheet({ open, onClose, schools, schoolsLoading, ensureSchools
           </Field>
         )}
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Tạo tài khoản'}
@@ -382,7 +382,7 @@ function EditUserSheet({ open, onClose, user, isSelf, onSaved }) {
             ))}
           </select>
         </Field>
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu'}
@@ -433,10 +433,10 @@ function ManagerSchoolsSheet({ open, onClose, user, schools, schoolsLoading, ens
         onToggle={toggle}
         onRetry={ensureSchools}
       />
-      <div className="text-[12px] text-ink-muted mt-2">
+      <div className="text-xs text-ink-muted mt-2">
         Phòng chuyên môn chỉ thấy dữ liệu của các trường được chọn.
       </div>
-      <div className="flex gap-2.5 justify-end mt-4">
+      <div className="form-actions flex gap-2.5 justify-end mt-4">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={busy}>
           {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu'}
@@ -481,7 +481,7 @@ function ScheduleSheet({ open, onClose, user }) {
           />
         ) : (
           <>
-            <div className="overflow-x-auto rounded-xl border border-line">
+            <div className="overflow-x-auto table-cards stagger rounded-xl border border-line">
               <table className="w-full">
                 <thead>
                   <tr>
@@ -495,11 +495,11 @@ function ScheduleSheet({ open, onClose, user }) {
                 <tbody>
                   {rows.map((it) => (
                     <tr key={it.id}>
-                      <td className="td whitespace-nowrap">{fmtDate(it.session_date || it.date)}</td>
-                      <td className="td whitespace-nowrap">{fmtRange(it.start_time, it.end_time)}</td>
-                      <td className="td">{it.class_name || it.class?.name || '—'}</td>
-                      <td className="td">{it.school_name || it.school?.name || '—'}</td>
-                      <td className="td">
+                      <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(it.session_date || it.date)}</td>
+                      <td data-label="Giờ" className="td whitespace-nowrap">{fmtRange(it.start_time, it.end_time)}</td>
+                      <td data-label="Lớp" className="td">{it.class_name || it.class?.name || '—'}</td>
+                      <td data-label="Trường" className="td">{it.school_name || it.school?.name || '—'}</td>
+                      <td data-label="Trạng thái" className="td">
                         <Badge tone={SCHEDULE_TONE[it.status] || 'neutral'}>
                           {LABEL.scheduleStatus[it.status] || it.status || '—'}
                         </Badge>
@@ -510,7 +510,7 @@ function ScheduleSheet({ open, onClose, user }) {
               </table>
             </div>
             {items.length > rows.length && (
-              <div className="text-[12px] text-ink-muted mt-2 text-center">
+              <div className="text-xs text-ink-muted mt-2 text-center">
                 Hiển thị {rows.length}/{items.length} buổi — xem đầy đủ ở mục Lịch dạy.
               </div>
             )}
@@ -724,7 +724,7 @@ export default function UsersAdmin() {
           value={role}
           onChange={(v) => { setRole(v); resetToFirstPage(); }}
         />
-        <label className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink-soft cursor-pointer select-none sm:ml-auto">
+        <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink-soft cursor-pointer select-none sm:ml-auto">
           <input
             type="checkbox"
             className="h-4 w-4 accent-brand-600"
@@ -755,7 +755,7 @@ export default function UsersAdmin() {
             <>
               {/* Bảng desktop */}
               <div className="hidden md:block card overflow-hidden">
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto table-cards stagger">
                   <table className="w-full">
                     <thead>
                       <tr>
@@ -770,24 +770,24 @@ export default function UsersAdmin() {
                     <tbody>
                       {items.map((u) => (
                         <tr key={u.id} className="cursor-pointer hover:bg-brand-50/40 transition" onClick={() => openUser(u)}>
-                          <td className="td">
+                          <td data-label="Người dùng" className="td">
                             <div className="flex items-center gap-3 min-w-[220px]">
                               <Avatar name={u.full_name} />
                               <div className="min-w-0">
                                 <div className="font-semibold truncate">{u.full_name}</div>
-                                <div className="text-[12.5px] text-ink-muted truncate">
+                                <div className="text-sm text-ink-muted truncate">
                                   {u.email}{u.birth_date ? ` · 🎂 ${fmtDate(u.birth_date)}` : ''}
                                 </div>
                               </div>
                             </div>
                           </td>
-                          <td className="td whitespace-nowrap">{u.phone || '—'}</td>
-                          <td className="td"><RoleBadge role={u.role} /></td>
-                          <td className="td whitespace-nowrap">
+                          <td data-label="SĐT" className="td whitespace-nowrap">{u.phone || '—'}</td>
+                          <td data-label="Vai trò" className="td"><RoleBadge role={u.role} /></td>
+                          <td data-label="Khu vực" className="td whitespace-nowrap">
                             {u.region_name ? `📍 ${u.region_name}` : '—'}
                           </td>
-                          <td className="td"><StatusBadge active={u.is_active} /></td>
-                          <td className="td whitespace-nowrap text-ink-muted">{lastLoginText(u)}</td>
+                          <td data-label="Trạng thái" className="td"><StatusBadge active={u.is_active} /></td>
+                          <td data-label="Đăng nhập gần nhất" className="td whitespace-nowrap text-ink-muted">{lastLoginText(u)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -798,11 +798,11 @@ export default function UsersAdmin() {
               {/* Danh sách thẻ mobile */}
               <div className="md:hidden grid gap-2">
                 {items.map((u) => (
-                  <button key={u.id} onClick={() => openUser(u)} className="card w-full text-left px-4 py-3 flex items-center gap-3">
+                  <button key={u.id} onClick={() => openUser(u)} className="card card-hover w-full text-left px-4 py-3 flex items-center gap-3">
                     <Avatar name={u.full_name} />
                     <div className="min-w-0 flex-1">
                       <div className="font-semibold truncate">{u.full_name}</div>
-                      <div className="text-[12.5px] text-ink-muted truncate">
+                      <div className="text-sm text-ink-muted truncate">
                         {u.email}{u.phone ? ` · ${u.phone}` : ''}
                       </div>
                       <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -810,7 +810,7 @@ export default function UsersAdmin() {
                         <StatusBadge active={u.is_active} />
                       </div>
                     </div>
-                    <div className="text-[11px] text-ink-muted shrink-0 text-right max-w-[84px]">
+                    <div className="text-xs text-ink-muted shrink-0 text-right max-w-[84px]">
                       {lastLoginText(u)}
                     </div>
                   </button>
@@ -829,7 +829,7 @@ export default function UsersAdmin() {
             <div className="flex items-center gap-3.5 mb-4">
               <Avatar name={detail.full_name} className="h-14 w-14 text-xl" />
               <div className="min-w-0">
-                <div className="font-bold text-[16px] truncate">{detail.full_name}</div>
+                <div className="font-bold text-lg truncate">{detail.full_name}</div>
                 <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                   <RoleBadge role={detail.role} />
                   <StatusBadge active={detail.is_active} />
@@ -861,7 +861,7 @@ export default function UsersAdmin() {
                     {detail.schools.map((s) => <Badge key={s.id} tone="neutral">🏫 {s.name}</Badge>)}
                   </div>
                 ) : (
-                  <div className="text-[13px] text-ink-muted">Chưa gán trường nào — bấm "Trường phụ trách" để gán.</div>
+                  <div className="text-sm text-ink-muted">Chưa gán trường nào — bấm "Trường phụ trách" để gán.</div>
                 )}
               </div>
             )}
@@ -880,7 +880,7 @@ export default function UsersAdmin() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[13px] text-ink-muted">Chưa được phân công lớp nào.</div>
+                  <div className="text-sm text-ink-muted">Chưa được phân công lớp nào.</div>
                 )}
               </div>
             )}
@@ -920,7 +920,7 @@ export default function UsersAdmin() {
               )}
             </div>
             {!isSelf && (
-              <p className="text-[12px] text-ink-muted mt-2 leading-relaxed">
+              <p className="text-xs text-ink-muted mt-2 leading-relaxed">
                 <b>Khoá</b> giữ lại toàn bộ dữ liệu chấm công, người dùng chỉ không đăng nhập được.
                 <b> Xoá hẳn</b> dùng khi tạo nhầm — chỉ thực hiện được nếu tài khoản chưa phát sinh
                 dữ liệu nào, và sau đó email được giải phóng để tạo lại.

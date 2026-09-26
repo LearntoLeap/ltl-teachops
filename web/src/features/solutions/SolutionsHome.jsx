@@ -62,7 +62,7 @@ function ChildNode({ node, depth, onOpen }) {
         style={{ marginLeft: depth * 14 }}
         className="flex items-center gap-2 max-w-full rounded-lg px-2 py-1 text-left hover:bg-brand-50 transition">
         <span className="text-brand-400">↳</span>
-        <span className="font-medium text-[13.5px] text-ink-soft truncate">{node.name}</span>
+        <span className="font-medium text-sm text-ink-soft truncate">{node.name}</span>
         {node.level && <Badge tone="low">{LABEL.level[node.level] || node.level}</Badge>}
       </button>
       {(node.children || []).map((c) => (
@@ -295,12 +295,12 @@ export default function SolutionsHome() {
             <div key={node.id} className="card p-4">
               <button type="button" className="w-full text-left" onClick={() => openNode(node, true)}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-[15px]">{node.name}</span>
+                  <span className="font-bold text-lg">{node.name}</span>
                   <Badge tone="neutral">{LABEL.solutionGroup[node.grp] || node.grp || 'Khác'}</Badge>
                   {node.level && <Badge tone="low">{LABEL.level[node.level] || node.level}</Badge>}
                 </div>
                 {node.description && (
-                  <div className="text-[13px] text-ink-muted mt-1">{node.description}</div>
+                  <div className="text-sm text-ink-muted mt-1">{node.description}</div>
                 )}
               </button>
               {(node.children || []).length > 0 && (
@@ -325,13 +325,13 @@ export default function SolutionsHome() {
             </div>
 
             {detail.node.description && (
-              <p className="text-[14px] text-ink-soft whitespace-pre-wrap mb-4">{detail.node.description}</p>
+              <p className="text-base text-ink-soft whitespace-pre-wrap mb-4">{detail.node.description}</p>
             )}
 
             <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="font-bold text-[13.5px] text-brand-900">Tài liệu & thiết bị</div>
+              <div className="font-bold text-sm text-brand-900">Tài liệu & thiết bị</div>
               {canChild && (
-                <button className="btn-ghost !px-2.5 !py-1 text-[13px]" onClick={openCreateItem}>
+                <button className="btn-ghost !px-2.5 !py-1 text-sm" onClick={openCreateItem}>
                   + Thêm nội dung
                 </button>
               )}
@@ -342,7 +342,7 @@ export default function SolutionsHome() {
             )}
             {itemsErr && <ErrorBox error={itemsErr} onRetry={() => loadItems(detail.node.id)} />}
             {items && items.length === 0 && (
-              <div className="text-[13px] text-ink-muted text-center py-3">
+              <div className="text-sm text-ink-muted text-center py-3">
                 Chưa có tài liệu hay danh mục thiết bị nào.
               </div>
             )}
@@ -353,13 +353,13 @@ export default function SolutionsHome() {
                   const fid = fileIdOf(it);
                   return (
                     <div key={it.id} className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2">
-                      <span className="text-[18px]">📄</span>
+                      <span className="text-xl">📄</span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13.5px] font-medium truncate">{it.label}</div>
-                        {it.note && <div className="text-[12px] text-ink-muted truncate">{it.note}</div>}
+                        <div className="text-sm font-medium truncate">{it.label}</div>
+                        {it.note && <div className="text-xs text-ink-muted truncate">{it.note}</div>}
                       </div>
                       {fid && (
-                        <a className="btn-line !px-3 !py-1.5 text-[13px]" href={fileUrl(fid)} target="_blank" rel="noreferrer">
+                        <a className="btn-line !px-3 !py-1.5 text-sm" href={fileUrl(fid)} target="_blank" rel="noreferrer">
                           ⬇ Tải
                         </a>
                       )}
@@ -376,7 +376,7 @@ export default function SolutionsHome() {
             )}
 
             {checks.length > 0 && (
-              <div className="overflow-x-auto rounded-xl border border-line mb-3">
+              <div className="overflow-x-auto table-cards stagger rounded-xl border border-line mb-3">
                 <table className="w-full min-w-[420px]">
                   <thead>
                     <tr>
@@ -389,9 +389,9 @@ export default function SolutionsHome() {
                   <tbody>
                     {checks.map((it) => (
                       <tr key={it.id}>
-                        <td className="td font-medium">{it.label}</td>
-                        <td className="td text-center">{fmtNumber(it.qty ?? 1)}</td>
-                        <td className="td text-ink-muted">{it.note || '—'}</td>
+                        <td data-label="Thiết bị" className="td font-medium">{it.label}</td>
+                        <td data-label="SL" className="td text-center">{fmtNumber(it.qty ?? 1)}</td>
+                        <td data-label="Ghi chú" className="td text-ink-muted">{it.note || '—'}</td>
                         {canChild && (
                           <td className="td whitespace-nowrap text-right">
                             <button className="btn-ghost !p-1" onClick={() => openEditItem(it)} aria-label="Sửa">✏️</button>
@@ -491,7 +491,7 @@ export default function SolutionsHome() {
                 placeholder="Giải pháp gồm những gì, dùng cho chương trình nào…"
               />
             </Field>
-            <div className="flex justify-end gap-2.5 mt-4">
+            <div className="form-actions flex justify-end gap-2.5 mt-4">
               <button type="button" className="btn-line" onClick={() => setNodeForm(null)} disabled={savingNode}>Huỷ</button>
               <button type="submit" className="btn-primary" disabled={savingNode}>
                 {savingNode
@@ -562,7 +562,7 @@ export default function SolutionsHome() {
                 />
               </Field>
             )}
-            <div className="flex justify-end gap-2.5 mt-4">
+            <div className="form-actions flex justify-end gap-2.5 mt-4">
               <button type="button" className="btn-line" onClick={closeItemForm} disabled={savingItem}>Huỷ</button>
               <button type="submit" className="btn-primary" disabled={savingItem}>
                 {savingItem

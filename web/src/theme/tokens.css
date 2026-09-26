@@ -1,0 +1,100 @@
+/**
+ * tokens.css — NGUỒN SỰ THẬT DUY NHẤT cho màu, bo góc, đổ bóng, chuyển động.
+ *
+ * Quy ước: mọi giá trị màu ghi dưới dạng 3 kênh RGB (không có dấu phẩy) để
+ * Tailwind gắn được độ mờ — `bg-brand-600/40` vẫn chạy. Component KHÔNG được
+ * viết mã hex trực tiếp; luôn dùng tên lớp lấy từ đây (bg-brand-600, shadow-card…).
+ *
+ * Hai thang tím song song (chốt với Ban lãnh đạo):
+ *   brand  = #7C3AED — màu THAO TÁC: nút, liên kết, viền focus, trạng thái chọn.
+ *   accent = #8A3F97 — màu THƯƠNG HIỆU Learn to Leap (logo, PWA theme-color):
+ *            sidebar, gradient, mảng nhận diện. Không dùng cho nút thao tác để
+ *            người dùng không phải phân biệt hai sắc tím gần nhau khi bấm.
+ */
+
+:root {
+  /* ---------------- Tím thao tác (brand) — neo bậc 600 = #7C3AED ---------------- */
+  --brand-50:  245 243 255;
+  --brand-100: 237 233 254;
+  --brand-200: 221 214 254;
+  --brand-300: 196 181 253;
+  --brand-400: 167 139 250;
+  --brand-500: 139 92 246;
+  --brand-600: 124 58 237;   /* trắng trên nền: 5.70:1 */
+  --brand-700: 109 40 217;   /* trắng trên nền: 7.10:1 */
+  --brand-800: 91 33 182;
+  --brand-900: 76 29 149;
+  --brand-950: 46 16 101;
+
+  /* ---------------- Tím thương hiệu (accent) — neo bậc 600 = #8A3F97 ------------- */
+  --accent-50:  251 246 252;
+  --accent-100: 245 233 247;
+  --accent-200: 232 208 236;
+  --accent-300: 215 176 222;
+  --accent-400: 192 134 202;
+  --accent-500: 172 95 185;
+  --accent-600: 138 63 151;  /* trắng trên nền: 6.48:1 */
+  --accent-700: 119 53 130;  /* chữ trên nền trắng: 8.03:1 */
+  --accent-800: 95 44 104;
+  --accent-900: 75 36 82;
+  --accent-950: 45 22 49;
+
+  /* ---------------- Trung tính xám NGẢ TÍM (thay xám trung tính lạnh) ------------ */
+  --neutral-50:  250 249 252;
+  --neutral-100: 244 242 248;
+  --neutral-200: 231 228 239;
+  --neutral-300: 212 207 224;
+  --neutral-400: 169 162 187;
+  --neutral-500: 131 123 150;
+  --neutral-600: 102 94 120;  /* chữ phụ trên trắng: 6.11:1 */
+  --neutral-700: 82 75 97;    /* 8.27:1 */
+  --neutral-800: 58 53 71;
+  --neutral-900: 34 30 45;    /* chữ chính: 16.26:1 */
+  --neutral-950: 21 18 32;
+
+  /* ---------------- Vai trò ngữ nghĩa ---------------- */
+  --canvas:     248 247 251;  /* nền vùng nội dung */
+  --surface:    255 255 255;  /* nền thẻ */
+  --line:       231 228 239;  /* đường kẻ, viền */
+  --ink:        34 30 45;     /* chữ chính */
+  --ink-soft:   82 75 97;     /* chữ phụ */
+  --ink-muted: 102 94 120;    /* chữ mờ (vẫn đạt 6.11:1) */
+
+  /* Nền tối của rail điều hướng — tím than, cùng họ với accent */
+  --night:      29 20 48;
+  --night-deep: 20 13 34;
+  --night-line: 47 35 74;
+
+  /* ---------------- 4 màu trạng thái (đều ≥ 4.5:1 với chữ trắng) ---------------- */
+  --success: 21 128 61;   /* 5.02:1 */
+  --warning: 180 83 9;    /* 5.02:1 */
+  --error:   190 18 60;   /* 6.29:1 */
+  --info:    3 105 161;   /* 5.93:1 */
+
+  /* ---------------- Bo góc: 3 mức ---------------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* ---------------- Đổ bóng: 3 mức, mềm, ám tím thay vì đen xám ---------------- */
+  --shadow-1: 0 1px 2px rgb(45 22 49 / .06);
+  --shadow-2: 0 2px 4px rgb(45 22 49 / .05), 0 8px 20px -6px rgb(45 22 49 / .12);
+  --shadow-3: 0 18px 44px -10px rgb(45 22 49 / .24);
+
+  /* ---------------- Chuyển động: phần mềm làm việc, không phải landing page ------ */
+  --ease-out: cubic-bezier(.22, .8, .36, 1);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 250ms;
+  --stagger: 30ms;
+}
+
+/* Người dùng bật "giảm chuyển động" ⇒ mọi thời lượng về 0, không còn hiệu ứng. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --stagger: 0ms;
+  }
+}

@@ -22,11 +22,11 @@ function Choice({ checked, onChange, title, sub, disabled }) {
     <label className={`flex gap-3 rounded-xl border px-3.5 py-3 cursor-pointer transition
       ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
       ${checked ? 'border-brand-400 bg-brand-50/70 ring-1 ring-brand-300' : 'border-line hover:border-brand-200'}`}>
-      <input type="radio" className="mt-1 accent-[#8A3F97]" checked={checked} disabled={disabled}
+      <input type="radio" className="mt-1 accent-accent-600" checked={checked} disabled={disabled}
         onChange={onChange} />
       <span className="min-w-0">
-        <span className="block font-semibold text-[14px] text-ink">{title}</span>
-        {sub && <span className="block text-[12.5px] text-ink-muted mt-0.5">{sub}</span>}
+        <span className="block font-semibold text-base text-ink">{title}</span>
+        {sub && <span className="block text-sm text-ink-muted mt-0.5">{sub}</span>}
       </span>
     </label>
   );
@@ -117,7 +117,7 @@ export default function MaterialsDownload({
 
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} title="Tải học liệu về máy (.zip)" wide>
-      <div className="text-[12.5px] font-bold uppercase tracking-wide text-ink-muted mb-2">1. Tải những gì</div>
+      <div className="text-sm font-bold uppercase tracking-wide text-ink-muted mb-2">1. Tải những gì</div>
       <div className="grid gap-2 mb-4">
         <Choice
           checked={scope === 'selected'}
@@ -148,16 +148,16 @@ export default function MaterialsDownload({
 
       {showTypes && (
         <>
-          <div className="text-[12.5px] font-bold uppercase tracking-wide text-ink-muted mb-2">2. Loại tài liệu</div>
+          <div className="text-sm font-bold uppercase tracking-wide text-ink-muted mb-2">2. Loại tài liệu</div>
           <div className="flex flex-wrap gap-1.5 mb-4">
             <button type="button" onClick={() => setTypeIds([])}
-              className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+              className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                 ${typeIds.length === 0 ? 'bg-brand-grad text-white ring-transparent' : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
               Tất cả loại
             </button>
             {types.map((t) => (
               <button key={t.id} type="button" onClick={() => toggleType(t.id)}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                   ${typeIds.includes(t.id) ? 'bg-brand-grad text-white ring-transparent' : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
                 {typeIds.includes(t.id) ? '✓ ' : ''}{t.icon} {t.name}
               </button>
@@ -166,7 +166,7 @@ export default function MaterialsDownload({
         </>
       )}
 
-      <div className="text-[12.5px] font-bold uppercase tracking-wide text-ink-muted mb-2">
+      <div className="text-sm font-bold uppercase tracking-wide text-ink-muted mb-2">
         {showTypes ? '3' : '2'}. Xếp thư mục trong ZIP
       </div>
       <div className="grid sm:grid-cols-2 gap-2 mb-4">
@@ -184,7 +184,7 @@ export default function MaterialsDownload({
         />
       </div>
 
-      <div className={`rounded-xl px-3.5 py-3 text-[13px] border
+      <div className={`rounded-xl px-3.5 py-3 text-sm border
         ${preview && blocked ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-canvas border-line text-ink-soft'}`}>
         {loading || !preview ? (
           <span className="flex items-center gap-2"><Spinner className="h-4 w-4" /> Đang tính dung lượng…</span>
@@ -207,7 +207,7 @@ export default function MaterialsDownload({
         )}
       </div>
 
-      <div className="flex gap-2.5 justify-end mt-4">
+      <div className="form-actions flex gap-2.5 justify-end mt-4">
         <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button type="button" className="btn-primary" onClick={start} disabled={busy || loading || blocked}>
           {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : '⬇ Tải về (.zip)'}

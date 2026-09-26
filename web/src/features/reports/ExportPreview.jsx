@@ -18,13 +18,13 @@ export function PreviewTable({ sheet, dense = false }) {
   if (!sheet) return null;
   if (!sheet.rows.length) {
     return (
-      <div className="text-[13.5px] text-ink-muted py-6 text-center">
+      <div className="text-sm text-ink-muted py-6 text-center">
         Không có dòng nào trong kỳ đã chọn — đổi tháng hoặc bỏ bớt bộ lọc.
       </div>
     );
   }
   return (
-    <div className="overflow-auto max-h-[58vh] rounded-xl border border-line">
+    <div className="table-scroll table-cards stagger max-h-[58vh] rounded-xl border border-line">
       <table className="w-full min-w-[720px]">
         <thead className="sticky top-0 z-10">
           <tr>
@@ -38,7 +38,7 @@ export function PreviewTable({ sheet, dense = false }) {
             // Dòng xuất ra không có khoá riêng — chỉ số là định danh ổn định ở đây.
             <tr key={i} className="hover:bg-brand-50/40">
               {sheet.columns.map((c) => (
-                <td key={c.key} className={`td ${dense ? '!py-1.5' : ''} ${ALIGN[c.align] || ''}`}>
+                <td key={c.key} data-label={c.header} className={`td ${dense ? '!py-1.5' : ''} ${ALIGN[c.align] || ''}`}>
                   {r[c.key] === null || r[c.key] === undefined || r[c.key] === '' ? '—' : String(r[c.key])}
                 </td>
               ))}
@@ -54,7 +54,7 @@ export function PreviewTable({ sheet, dense = false }) {
 export function PreviewCount({ sheet }) {
   if (!sheet) return null;
   return (
-    <div className="text-[12.5px] text-ink-muted mt-1.5">
+    <div className="text-sm text-ink-muted mt-1.5">
       {sheet.total > sheet.shown
         ? <>Đang xem <b>{fmtNumber(sheet.shown)}</b> dòng đầu trên tổng <b>{fmtNumber(sheet.total)}</b> dòng — tệp Excel có đủ tất cả.</>
         : <>Tổng <b>{fmtNumber(sheet.total)}</b> dòng.</>}
@@ -111,7 +111,7 @@ export default function ExportPreview({ open, exp, query, onClose }) {
     <Sheet open={open} onClose={downloading ? undefined : onClose} title={`Xem trước — ${exp.label}`} wide="xl">
       {error && <ErrorBox error={error} onRetry={reload} />}
       {!error && !data && (
-        <div className="flex items-center gap-2 text-[13.5px] text-ink-muted py-6">
+        <div className="flex items-center gap-2 text-sm text-ink-muted py-6">
           <Spinner className="h-4 w-4" /> Đang lấy dữ liệu…
         </div>
       )}
@@ -122,7 +122,7 @@ export default function ExportPreview({ open, exp, query, onClose }) {
             <div className="flex flex-wrap gap-1.5 mb-2.5">
               {sheets.map((sh, i) => (
                 <button key={sh.name} type="button" onClick={() => setTab(i)}
-                  className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                  className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                     ${i === tab ? 'bg-brand-grad text-white ring-transparent'
                                 : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
                   {sh.name} ({fmtNumber(sh.total)})
@@ -132,7 +132,7 @@ export default function ExportPreview({ open, exp, query, onClose }) {
           )}
 
           {sheet?.subtitle && (
-            <div className="text-[12.5px] text-ink-muted mb-1.5">{sheet.subtitle}</div>
+            <div className="text-sm text-ink-muted mb-1.5">{sheet.subtitle}</div>
           )}
           <PreviewTable sheet={sheet} />
           <PreviewCount sheet={sheet} />

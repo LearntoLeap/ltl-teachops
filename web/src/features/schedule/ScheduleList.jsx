@@ -151,7 +151,7 @@ function StaffPicker({ label, required = false, people, loading, disabled, id, n
 function Dot({ on, label }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-[11px] text-ink-muted"
+      className="inline-flex items-center gap-1.5 text-xs text-ink-muted"
       title={`${on ? 'Đã' : 'Chưa'} ${label.toLowerCase()}`}>
       <span className={`h-2 w-2 rounded-full ${on ? 'bg-emerald-500' : 'bg-slate-300'}`} />
       {label}
@@ -161,7 +161,7 @@ function Dot({ on, label }) {
 
 function Row({ label, children }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-line/60 last:border-0 text-[13.5px]">
+    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-line/60 last:border-0 text-sm">
       <span className="text-ink-muted shrink-0">{label}</span>
       <span className="text-right font-medium min-w-0">{children}</span>
     </div>
@@ -175,9 +175,9 @@ function ScheduleCard({ s, onOpen }) {
     <button
       type="button"
       onClick={onOpen}
-      className={`card w-full text-left p-3.5 transition hover:border-brand-300 ${cancelled ? 'opacity-60' : ''}`}>
+      className={`card card-hover w-full text-left p-3.5 ${cancelled ? 'opacity-60' : ''}`}>
       <div className="flex items-center justify-between gap-2">
-        <span className={`font-bold text-[15px] ${cancelled ? 'line-through text-ink-muted' : 'text-brand-800'}`}>
+        <span className={`font-bold text-lg ${cancelled ? 'line-through text-ink-muted' : 'text-brand-800'}`}>
           <b className="text-brand-800">{periodLabel(s)}</b>
           <span className="text-ink-muted font-normal"> · {fmtRange(s.start_time, s.end_time)}</span>
         </span>
@@ -192,10 +192,10 @@ function ScheduleCard({ s, onOpen }) {
           </Badge>
         </span>
       </div>
-      <div className="font-semibold text-[14px] mt-1 truncate">
+      <div className="font-semibold text-base mt-1 truncate">
         {classNameOf(s) || 'Lớp ?'}{schoolNameOf(s) ? ` · ${schoolNameOf(s)}` : ''}
       </div>
-      <div className="text-[12.5px] text-ink-muted mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+      <div className="text-sm text-ink-muted mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
         {teacherNameOf(s) && <span>GV: {teacherNameOf(s)}</span>}
         {assistantNameOf(s) && <span>TG: {assistantNameOf(s)}</span>}
         {roomNameOf(s) && <span>Phòng: {roomNameOf(s)}</span>}
@@ -262,7 +262,7 @@ function WeekTimetable({ from, items, onOpen, onAddSlot }) {
                 <th key={d.iso}
                   className={`th text-center ${d.iso === todayIso ? '!bg-brand-100 !text-brand-900' : ''}`}>
                   {d.label}
-                  <span className="block font-normal text-[11px] opacity-70">{fmtDate(d.iso).slice(0, 5)}</span>
+                  <span className="block font-normal text-xs opacity-70">{fmtDate(d.iso).slice(0, 5)}</span>
                 </th>
               ))}
             </tr>
@@ -281,7 +281,7 @@ function WeekTimetable({ from, items, onOpen, onAddSlot }) {
                       className={`td !p-1 align-top ${d.iso === todayIso ? 'bg-brand-50/40' : ''}
                         ${onAddSlot && !list.length ? 'cursor-pointer hover:bg-brand-50/70' : ''}`}>
                       {list.length === 0 ? (
-                        <span className="block text-center text-[11px] text-ink-muted/50 py-2">
+                        <span className="block text-center text-xs text-ink-muted/50 py-2">
                           {onAddSlot ? '+' : '–'}
                         </span>
                       ) : list.map((sItem) => (
@@ -292,14 +292,14 @@ function WeekTimetable({ from, items, onOpen, onAddSlot }) {
                             ${sItem.status === 'cancelled'
                               ? 'bg-slate-100 text-slate-400 line-through'
                               : 'bg-brand-50 ring-1 ring-inset ring-brand-200 hover:bg-brand-100'}`}>
-                          <span className="block text-[12px] font-bold text-brand-900 truncate">
+                          <span className="block text-xs font-bold text-brand-900 truncate">
                             {classNameOf(sItem)}
                           </span>
-                          <span className="block text-[10.5px] text-ink-muted truncate">
+                          <span className="block text-xs text-ink-muted truncate">
                             {schoolNameOf(sItem)}
                           </span>
                           {teacherNameOf(sItem) && (
-                            <span className="block text-[10px] text-ink-muted truncate">
+                            <span className="block text-xs text-ink-muted truncate">
                               {teacherNameOf(sItem)}
                             </span>
                           )}
@@ -313,7 +313,7 @@ function WeekTimetable({ from, items, onOpen, onAddSlot }) {
           </tbody>
         </table>
       </div>
-      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+      <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
         Bấm buổi để xem chi tiết{onAddSlot ? ' · bấm ô trống để xếp buổi vào đúng ngày và khung giờ đó' : ''}
       </div>
     </div>
@@ -362,7 +362,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
     <div className="card overflow-hidden">
       <div className="grid grid-cols-7 border-b border-line bg-brand-50/60">
         {['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'].map((w) => (
-          <div key={w} className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-brand-900">
+          <div key={w} className="px-2 py-2 text-center text-xs font-bold uppercase tracking-wide text-brand-900">
             {w}
           </div>
         ))}
@@ -380,13 +380,13 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                 ${c.inMonth ? 'bg-white' : 'bg-canvas/70'}
                 ${onAddDay ? 'cursor-pointer hover:bg-brand-50/40' : ''}`}>
               <div className="flex items-center justify-between px-0.5">
-                <span className={`text-[11.5px] font-bold h-5 w-5 grid place-items-center rounded-full
+                <span className={`text-xs font-bold h-5 w-5 grid place-items-center rounded-full
                   ${isToday ? 'bg-brand-grad text-white' : c.inMonth ? 'text-ink-soft' : 'text-ink-muted/50'}`}>
                   {c.dayNum}
                 </span>
                 {onAddDay && list.length > 0 && (
                   <button
-                    className="text-[12px] text-brand-500 hover:text-brand-800 leading-none px-1"
+                    className="text-xs text-brand-500 hover:text-brand-800 leading-none px-1"
                     title="Thêm tiết ngày này"
                     onClick={(e) => { e.stopPropagation(); onAddDay(c.date); }}>+</button>
                 )}
@@ -397,7 +397,7 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                     key={sItem.id}
                     onClick={(e) => { e.stopPropagation(); onOpen(sItem); }}
                     title={`${fmtTime(sItem.start_time)} · Lớp ${classNameOf(sItem)} — ${schoolNameOf(sItem)}${teacherNameOf(sItem) ? ' · GV ' + teacherNameOf(sItem) : ''}`}
-                    className={`w-full text-left rounded-md px-1.5 py-[3px] text-[10.5px] leading-tight font-semibold truncate transition
+                    className={`w-full text-left rounded-md px-1.5 py-[3px] text-xs leading-tight font-semibold truncate transition
                       ${sItem.status === 'cancelled' || sItem.status === 'skipped'
                         ? 'bg-slate-100 text-slate-400 line-through'
                         : 'bg-brand-50 text-brand-900 hover:bg-brand-100 ring-1 ring-inset ring-brand-100'}`}>
@@ -409,14 +409,14 @@ function MonthGrid({ anchor, items, onOpen, onAddDay }) {
                   </button>
                 ))}
                 {extra > 0 && (
-                  <div className="text-[10px] text-ink-muted px-1">+{extra} buổi khác</div>
+                  <div className="text-xs text-ink-muted px-1">+{extra} buổi khác</div>
                 )}
               </div>
             </div>
           );
         })}
       </div>
-      <div className="px-3 py-2 text-[11px] text-ink-muted bg-canvas/60 border-t border-line">
+      <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
         Bấm vào buổi để xem chi tiết · bấm ô ngày trống để thêm buổi mới
       </div>
     </div>
@@ -562,10 +562,10 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
     return (
       <div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
-          <div className="text-[13.5px] font-bold text-amber-800 mb-2">
+          <div className="text-sm font-bold text-amber-800 mb-2">
             ⚠ {skipped.length} buổi bị bỏ qua (trùng lịch hoặc không hợp lệ):
           </div>
-          <ul className="text-[13px] text-amber-800 space-y-1 max-h-48 overflow-y-auto">
+          <ul className="text-sm text-amber-800 space-y-1 max-h-48 overflow-y-auto">
             {skipped.map((s, i) => <li key={i}>• {skippedLabel(s)}</li>)}
           </ul>
         </div>
@@ -606,7 +606,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
 
       {selfOnly && (
         <>
-          <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
+          <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-sm px-3.5 py-2.5 mb-3.5">
             ℹ️ Tiết này sẽ tự gắn tên bạn làm người phụ trách, và hiện ngay ở mục
             Điểm danh để bạn điểm danh sĩ số.
           </div>
@@ -622,17 +622,17 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
       {/* Danh sách của trường đang chọn — để người sắp lịch nắm ngay nguồn lực */}
       {!selfOnly && f.school_id && !res.loading && (
         <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5 grid gap-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+          <div className="text-xs font-bold uppercase tracking-wide text-ink-muted">
             Nguồn lực của trường này
           </div>
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span>🎓 <b>{res.classes.length}</b> lớp</span>
             <span>🤖 <b>{res.rooms.length}</b> phòng STEM</span>
             <span>🧑‍🏫 <b>{res.teachers.filter((u) => u.at_school).length}</b> giáo viên</span>
             <span>🤝 <b>{res.assistants.filter((u) => u.at_school).length}</b> trợ giảng</span>
           </div>
           {res.classes.length > 0 && (
-            <div className="text-[11.5px] text-ink-muted">
+            <div className="text-xs text-ink-muted">
               Lớp: {res.classes.slice(0, 8).map((c) => c.name).join(', ')}
               {res.classes.length > 8 ? ` … +${res.classes.length - 8}` : ''}
             </div>
@@ -675,7 +675,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
                 return (
                   <label
                     key={w.value}
-                    className={`px-3.5 py-1.5 rounded-xl border text-[13px] font-semibold cursor-pointer select-none transition
+                    className={`px-3.5 py-1.5 rounded-xl border text-sm font-semibold cursor-pointer select-none transition
                       ${on ? 'bg-brand-600 border-brand-600 text-white' : 'border-line text-ink-soft hover:border-brand-300'}`}>
                     <input
                       type="checkbox"
@@ -715,7 +715,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
               <button key={p.no} type="button"
                 onClick={() => setF((x) => ({ ...x, period: String(p.no) }))}
                 title={`${p.start}–${p.end}`}
-                className={`h-10 min-w-[44px] px-2 rounded-xl text-[13.5px] font-semibold ring-1 ring-inset transition
+                className={`h-10 min-w-[44px] px-2 rounded-xl text-sm font-semibold ring-1 ring-inset transition
                   ${on ? 'bg-brand-grad text-white ring-transparent shadow-card-sm'
                        : 'bg-white text-ink-soft ring-line hover:ring-brand-300 hover:text-brand-800'}`}>
                 {p.no}
@@ -724,7 +724,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
           })}
         </div>
         {f.period && (
-          <div className="text-[12.5px] text-ink-muted mt-1.5">
+          <div className="text-sm text-ink-muted mt-1.5">
             Tiết {f.period} · {periods.find((p) => String(p.no) === String(f.period))?.start}
             –{periods.find((p) => String(p.no) === String(f.period))?.end}
             {Number(f.period) <= 5 ? ' (buổi sáng)' : ' (buổi chiều)'}
@@ -739,7 +739,7 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
         <textarea className="input" rows={2} value={f.note} onChange={setField('note')} placeholder="Ghi chú thêm (nếu có)…" />
       </Field>
 
-      <div className="flex gap-2.5 justify-end mt-1">
+      <div className="form-actions flex gap-2.5 justify-end mt-1">
         <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button type="submit" className="btn-primary" disabled={busy}>
           {busy
@@ -864,7 +864,7 @@ export default function ScheduleList() {
           <div className="flex items-center gap-1.5">
             <button className="btn-line !px-3 !py-2" aria-label="Tuần trước"
               onClick={() => setWeekOffset((w) => w - 1)}>‹</button>
-            <span className="font-bold text-[13px] text-brand-900 min-w-[150px] text-center">
+            <span className="font-bold text-sm text-brand-900 min-w-[150px] text-center">
               {fmtDate(range.from)} – {fmtDate(range.to)}
             </span>
             <button className="btn-line !px-3 !py-2" aria-label="Tuần sau"
@@ -900,7 +900,7 @@ export default function ScheduleList() {
           <div className="flex items-center gap-1.5">
             <button className="btn-line !px-3 !py-2" aria-label="Tháng trước"
               onClick={() => setMonthAnchor((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>‹</button>
-            <span className="font-bold text-[14px] text-brand-900 min-w-[110px] text-center">
+            <span className="font-bold text-base text-brand-900 min-w-[110px] text-center">
               Tháng {monthAnchor.getMonth() + 1}/{monthAnchor.getFullYear()}
             </span>
             <button className="btn-line !px-3 !py-2" aria-label="Tháng sau"
@@ -964,11 +964,11 @@ export default function ScheduleList() {
             groups.map(([date, list]) => (
               <section key={date} className="mb-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <h2 className="text-[13.5px] font-bold text-brand-900">{fmtDateLong(date)}</h2>
+                  <h2 className="text-sm font-bold text-brand-900">{fmtDateLong(date)}</h2>
                   {date === todayIso && (
                     <span className="badge bg-brand-50 text-brand-700 ring-brand-200">Hôm nay</span>
                   )}
-                  <span className="text-[12px] text-ink-muted">{list.length} buổi</span>
+                  <span className="text-xs text-ink-muted">{list.length} buổi</span>
                 </div>
                 <div className="grid gap-2.5">
                   {list.map((s) => (
@@ -993,9 +993,9 @@ export default function ScheduleList() {
         {detail && (
           <>
             <div className="flex items-center justify-between mb-1">
-              <div className="text-[17px] font-bold text-brand-800">
+              <div className="text-xl font-bold text-brand-800">
                 {periodLabel(detail)}
-                <span className="text-[14px] font-semibold text-ink-muted ml-2">
+                <span className="text-base font-semibold text-ink-muted ml-2">
                   {fmtRange(detail.start_time, detail.end_time)}
                 </span>
               </div>
@@ -1003,7 +1003,7 @@ export default function ScheduleList() {
                 {LABEL.scheduleStatus[detail.status] || detail.status || '—'}
               </Badge>
             </div>
-            <div className="text-[13px] text-ink-muted mb-3">{fmtDateLong(detail.session_date || detail.date)}</div>
+            <div className="text-sm text-ink-muted mb-3">{fmtDateLong(detail.session_date || detail.date)}</div>
 
             <div className="card p-3.5 mb-4">
               <Row label="Nguồn">

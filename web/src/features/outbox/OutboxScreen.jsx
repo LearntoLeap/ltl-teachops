@@ -19,7 +19,7 @@ function StatusBadge({ status }) {
   if (status === 'pending') return <Badge tone="pending">Chờ gửi</Badge>;
   if (status === 'sending') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-brand-700">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700">
         <Spinner className="h-3.5 w-3.5" /> Đang gửi…
       </span>
     );
@@ -34,25 +34,25 @@ function OutboxItem({ item, onRetry, onAskDelete }) {
   return (
     <div className={`card p-4 ${done ? 'opacity-55' : ''}`}>
       <div className="flex items-start gap-3">
-        <span className="text-[22px] leading-none mt-0.5">{KIND_ICON[item.kind] || '📦'}</span>
+        <span className="text-2xl leading-none mt-0.5">{KIND_ICON[item.kind] || '📦'}</span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-[14px] text-ink">{item.label}</span>
+            <span className="font-semibold text-base text-ink">{item.label}</span>
             <StatusBadge status={item.status} />
           </div>
-          <div className="text-[12px] text-ink-muted mt-1">
+          <div className="text-xs text-ink-muted mt-1">
             Tạo lúc {fmtDateTime(item.createdAt)}
             {item.attempts > 1 && <> · Đã thử {item.attempts} lần</>}
           </div>
           {done && item.sentAt && (
-            <div className="text-[12px] text-emerald-700 mt-0.5">
+            <div className="text-xs text-emerald-700 mt-0.5">
               Đã gửi lúc {fmtDateTime(item.sentAt)}
             </div>
           )}
           {item.status === 'failed' && (
             <>
               {item.lastError && (
-                <div className="text-[12.5px] text-rose-600 mt-1.5">⚠ {item.lastError}</div>
+                <div className="text-sm text-rose-600 mt-1.5">⚠ {item.lastError}</div>
               )}
               <div className="flex gap-2 mt-2.5">
                 <button className="btn-line !px-3 !py-1.5" onClick={() => onRetry(item.id)}>
@@ -156,8 +156,8 @@ export default function OutboxScreen() {
         <div className="flex items-center gap-2.5 min-w-0">
           <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${online ? 'bg-emerald-500' : 'bg-rose-500'}`} />
           <div className="min-w-0">
-            <div className="font-semibold text-[14px]">{online ? 'Đang có mạng' : 'Đang offline'}</div>
-            <div className="text-[12px] text-ink-muted">
+            <div className="font-semibold text-base">{online ? 'Đang có mạng' : 'Đang offline'}</div>
+            <div className="text-xs text-ink-muted">
               {online ? 'Hàng đợi sẽ được gửi tự động' : 'Sẽ tự gửi khi có mạng trở lại'}
             </div>
           </div>
@@ -183,7 +183,7 @@ export default function OutboxScreen() {
         </div>
       )}
 
-      <p className="text-[12.5px] text-ink-muted text-center mt-6 px-4">
+      <p className="text-sm text-ink-muted text-center mt-6 px-4">
         Dữ liệu chấm công/điểm danh khi mất mạng được lưu tại đây và tự gửi khi có mạng trở lại.
       </p>
 

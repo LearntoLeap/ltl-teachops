@@ -284,7 +284,7 @@ export default function MaterialsBulkUpload({
     if (!busy) addFiles(e.dataTransfer?.files);
   };
 
-  const cellInput = 'input !py-1.5 !px-2 text-[13px]';
+  const cellInput = 'input !py-1.5 !px-2 text-sm';
   const commonSolution = solutions.find((s) => s.id === common.solution_id)?.label;
   const commonType = types.find((t) => t.id === common.type_id)?.name;
 
@@ -295,7 +295,7 @@ export default function MaterialsBulkUpload({
         onDragLeave={(e) => { if (e.currentTarget === e.target) setDrag(false); }}
         onDrop={onDrop}
         onPaste={onPaste}>
-        <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-[12.5px] text-brand-900 leading-relaxed">
+        <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900 leading-relaxed">
           💡 <b>Kéo-thả nhiều tệp</b> (giáo án, slide, giáo trình…) vào khung bên dưới — mỗi tệp một dòng,
           tự đoán Tiết / Khối / Loại từ tên tệp (vd <i>UGOT_K6_Tiet05_Giao-an.docx</i>).
           Có phân phối chương trình trong Excel? Copy các cột <b>Tiết · Tên bài · Tiêu đề · Loại · Khối · Chương trình</b> rồi
@@ -304,7 +304,7 @@ export default function MaterialsBulkUpload({
 
         {/* Giá trị chung */}
         <div className="rounded-xl border border-line p-3 mb-3">
-          <div className="text-[12px] font-bold uppercase tracking-wide text-ink-muted mb-2">
+          <div className="text-xs font-bold uppercase tracking-wide text-ink-muted mb-2">
             Giá trị chung — tự áp cho các ô để trống ở từng dòng
           </div>
           {canOfficial && canTeacher && (
@@ -361,9 +361,9 @@ export default function MaterialsBulkUpload({
           onClick={() => fileInput.current?.click()}
           className={`w-full rounded-xl border-2 border-dashed px-4 py-5 mb-3 text-center transition
             ${drag ? 'border-brand-500 bg-brand-50' : 'border-brand-200 hover:border-brand-400 hover:bg-brand-50/50'}`}>
-          <div className="text-[26px] leading-none mb-1">📥</div>
-          <div className="font-semibold text-[14px] text-brand-900">Kéo-thả tệp vào đây, hoặc bấm để chọn nhiều tệp</div>
-          <div className="text-[12px] text-ink-muted mt-0.5">
+          <div className="text-2xl leading-none mb-1">📥</div>
+          <div className="font-semibold text-base text-brand-900">Kéo-thả tệp vào đây, hoặc bấm để chọn nhiều tệp</div>
+          <div className="text-xs text-ink-muted mt-0.5">
             PDF, Word, PowerPoint, Excel, ZIP, video MP4/MOV (tối đa {MAX_MATERIAL_MB} MB) · ảnh (tối đa {MAX_IMAGE_MB} MB) · mỗi lượt tối đa {MAX_ROWS} tệp
           </div>
         </button>
@@ -393,7 +393,7 @@ export default function MaterialsBulkUpload({
         />
 
         {rows.length > 0 && (
-          <div className="overflow-x-auto -mx-1 px-1">
+          <div className="hidden md:block overflow-x-auto -mx-1 px-1">
             <table className="w-full min-w-[1240px] border-collapse">
               <thead>
                 <tr>
@@ -418,18 +418,18 @@ export default function MaterialsBulkUpload({
                       className={r.status === 'done' ? 'bg-emerald-50/60'
                         : r.status === 'error' ? 'bg-rose-50/60'
                           : problem ? 'bg-amber-50/40' : ''}>
-                      <td className="td text-center text-ink-muted text-[12px]">{i + 1}</td>
+                      <td className="td text-center text-ink-muted text-xs">{i + 1}</td>
                       <td className="td !p-1">
                         {r.file ? (
                           <button type="button" disabled={locked} title="Đổi tệp khác"
                             onClick={() => { setPickFor(r.key); rowFileInput.current?.click(); }}
-                            className="w-full text-left rounded-md px-1.5 pb-0.5 text-[11.5px] text-ink-muted truncate hover:text-brand-800 disabled:hover:text-ink-muted">
+                            className="w-full text-left rounded-md px-1.5 pb-0.5 text-xs text-ink-muted truncate hover:text-brand-800 disabled:hover:text-ink-muted">
                             📄 {r.file.name} · {fmtSize(r.file.size)}
                           </button>
                         ) : (
                           <button type="button" disabled={locked}
                             onClick={() => { setPickFor(r.key); rowFileInput.current?.click(); }}
-                            className="rounded-md border border-dashed border-amber-400 text-amber-800 text-[11.5px] px-2 py-0.5 mb-1 hover:bg-amber-50">
+                            className="rounded-md border border-dashed border-amber-400 text-amber-800 text-xs px-2 py-0.5 mb-1 hover:bg-amber-50">
                             📎 Chọn tệp cho dòng này
                           </button>
                         )}
@@ -470,7 +470,7 @@ export default function MaterialsBulkUpload({
                           {solutions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                         </select>
                       </td>
-                      <td className="td !py-1 text-[12px] leading-tight">
+                      <td className="td !py-1 text-xs leading-tight">
                         {r.status === 'done' && <span className="text-emerald-700 font-semibold">✅ Đã đăng</span>}
                         {r.status === 'uploading' && <span className="text-brand-700 inline-flex items-center gap-1"><Spinner className="h-3.5 w-3.5" /> Đang tải…</span>}
                         {r.status === 'error' && <span className="text-rose-700">❌ {r.error}</span>}
@@ -491,6 +491,95 @@ export default function MaterialsBulkUpload({
           </div>
         )}
 
+        {/* Điện thoại: mỗi tài liệu một thẻ — cùng state với bảng ở trên. */}
+        {rows.length > 0 && (
+          <div className="md:hidden grid gap-3">
+            {rows.map((r, i) => {
+              const problem = r.status !== 'done' ? rowProblem(r) : null;
+              const locked = busy || r.status === 'done' || r.status === 'uploading';
+              return (
+                <div key={r.key} data-row={i}
+                  className={`card p-3.5 ${r.status === 'done' ? '!border-emerald-300 bg-emerald-50/50'
+                    : r.status === 'error' ? '!border-rose-300 bg-rose-50/50'
+                      : problem ? '!border-amber-300 bg-amber-50/40' : ''}`}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wide text-ink-muted">Tài liệu {i + 1}</span>
+                    <span className="flex items-center gap-1 text-xs">
+                      {r.status === 'done' && <span className="text-emerald-700 font-semibold">✅ Đã đăng</span>}
+                      {r.status === 'uploading' && <span className="text-brand-700 inline-flex items-center gap-1"><Spinner className="h-3.5 w-3.5" /> Đang tải…</span>}
+                      {r.status === 'error' && <span className="text-rose-700">❌ {r.error}</span>}
+                      {r.status === 'idle' && (problem
+                        ? <span className="text-amber-800">⚠ {problem}</span>
+                        : <span className="text-ink-muted">Sẵn sàng</span>)}
+                      <button type="button" title="Xoá dòng" aria-label="Xoá dòng"
+                        disabled={busy || r.status === 'uploading'}
+                        className="icon-btn text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                        onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}>✕</button>
+                    </span>
+                  </div>
+
+                  {r.file ? (
+                    <button type="button" disabled={locked} title="Đổi tệp khác"
+                      onClick={() => { setPickFor(r.key); rowFileInput.current?.click(); }}
+                      className="w-full text-left rounded-lg border border-line px-3 py-2 mb-2.5 text-xs text-ink-soft truncate hover:border-brand-300 disabled:opacity-60">
+                      📄 {r.file.name} · {fmtSize(r.file.size)}
+                    </button>
+                  ) : (
+                    <button type="button" disabled={locked}
+                      onClick={() => { setPickFor(r.key); rowFileInput.current?.click(); }}
+                      className="w-full rounded-lg border border-dashed border-amber-400 text-amber-800 text-sm px-3 py-2.5 mb-2.5 hover:bg-amber-50 disabled:opacity-60">
+                      📎 Chọn tệp cho dòng này
+                    </button>
+                  )}
+
+                  <Field label="Tiêu đề" required>
+                    <input className="input" value={r.title} disabled={locked} placeholder="Tiêu đề tài liệu"
+                      onChange={(e) => patchRow(r.key, { title: e.target.value })} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Loại">
+                      <select className="input" value={r.type_id} disabled={locked}
+                        onChange={(e) => patchRow(r.key, { type_id: e.target.value })}>
+                        <option value="">{commonType ? `(chung) ${commonType}` : '—'}</option>
+                        {types.map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Khối">
+                      <select className="input" value={r.grade} disabled={locked}
+                        onChange={(e) => patchRow(r.key, { grade: e.target.value ? Number(e.target.value) : '' })}>
+                        <option value="">{common.grade ? `(chung) ${common.grade}` : '—'}</option>
+                        {GRADES.map((g) => <option key={g} value={g}>Khối {g}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="grid grid-cols-[80px_1fr] gap-2">
+                    <Field label="Tiết">
+                      <input className="input" inputMode="numeric" value={r.lesson_no} disabled={locked}
+                        onChange={(e) => { const v = firstInt(e.target.value); patchRow(r.key, { lesson_no: v >= 1 && v <= 500 ? v : '' }); }} />
+                    </Field>
+                    <Field label="Tên bài">
+                      <input className="input" value={r.lesson_title} disabled={locked}
+                        onChange={(e) => patchRow(r.key, { lesson_title: e.target.value })} />
+                    </Field>
+                  </div>
+                  <Field label="Chương trình">
+                    <input className="input" value={r.curriculum} disabled={locked}
+                      placeholder={common.curriculum ? `(chung) ${common.curriculum}` : ''}
+                      onChange={(e) => patchRow(r.key, { curriculum: e.target.value })} />
+                  </Field>
+                  <Field label="Giải pháp">
+                    <select className="input" value={r.solution_id} disabled={locked}
+                      onChange={(e) => patchRow(r.key, { solution_id: e.target.value })}>
+                      <option value="">{commonSolution ? `(chung) ${commonSolution}` : '—'}</option>
+                      {solutions.map((so) => <option key={so.id} value={so.id}>{so.label}</option>)}
+                    </select>
+                  </Field>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 mt-3">
           <button type="button" className="btn-line !py-2" disabled={busy || rows.length >= MAX_ROWS}
             onClick={() => setRows((rs) => [...rs, newRow()])}>
@@ -503,7 +592,7 @@ export default function MaterialsBulkUpload({
             </button>
           )}
           {rows.length > 0 && (
-            <span className="text-[12.5px] text-ink-muted">
+            <span className="text-sm text-ink-muted">
               <b>{ready.length}</b>/{pending.length} dòng sẵn sàng
               {busy && <> · đang tải <b>{progress.done}/{progress.total}</b></>}
             </span>
@@ -516,7 +605,7 @@ export default function MaterialsBulkUpload({
           </div>
         )}
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Đóng</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={busy || !ready.length}>
             {busy

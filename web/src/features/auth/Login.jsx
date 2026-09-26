@@ -43,7 +43,7 @@ export default function Login() {
   return (
     <AuthShell title="Đăng nhập" sub="Dùng tài khoản email do Quản trị viên cấp.">
       {!API_CONFIGURED && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 mb-4 text-[13px] text-amber-900">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 mb-4 text-sm text-amber-900">
           <div className="font-bold mb-1">⚙️ Chưa kết nối máy chủ</div>
           Bản web đã chạy, nhưng chưa biết gọi API ở đâu nên chưa đăng nhập được.
           Người quản trị cần thêm biến <code className="font-semibold">VITE_API_URL</code> ở
@@ -86,7 +86,7 @@ export default function Login() {
         </Field>
 
         {error && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
             ⚠ {error}
           </div>
         )}
@@ -97,12 +97,12 @@ export default function Login() {
       </form>
 
       <div className="text-center mt-4">
-        <Link to="/quen-mat-khau" className="text-[13px] text-brand-700 font-semibold hover:underline">
+        <Link to="/quen-mat-khau" className="text-sm text-brand-700 font-semibold hover:underline">
           Quên mật khẩu?
         </Link>
       </div>
 
-      <div className="mt-4 rounded-xl bg-brand-50 px-3.5 py-3 text-[12px] text-ink-soft">
+      <div className="mt-4 rounded-xl bg-brand-50 px-3.5 py-3 text-xs text-ink-soft">
         💡 Chưa có tài khoản? Hệ thống không cho tự đăng ký — hãy liên hệ Quản trị viên
         hoặc Phòng chuyên môn để được cấp tài khoản.
       </div>

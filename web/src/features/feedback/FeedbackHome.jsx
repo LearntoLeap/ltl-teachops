@@ -40,14 +40,14 @@ function FeedbackCard({ f }) {
   return (
     <Link to={`/gop-y/${f.id}`} className="card block p-4 hover:border-brand-300 transition">
       <div className="flex items-start justify-between gap-2.5">
-        <div className="font-bold text-[14.5px] leading-snug min-w-0">{f.title}</div>
+        <div className="font-bold text-base leading-snug min-w-0">{f.title}</div>
         <Badge tone={f.status} className="shrink-0">{LABEL.issue[f.status] || f.status}</Badge>
       </div>
       <div className="flex flex-wrap gap-1.5 mt-2">
         <Badge tone="neutral">{LABEL.category[f.category] || f.category || 'Khác'}</Badge>
         {f.priority && <Badge tone={f.priority}>{LABEL.priority[f.priority] || f.priority}</Badge>}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-ink-muted mt-2.5">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-ink-muted mt-2.5">
         {school && <span>🏫 {school}{klass ? ` · ${klass}` : ''}</span>}
         {sender && <span>👤 {sender}</span>}
         <span>💬 {f.reply_count ?? 0} trả lời</span>
@@ -271,7 +271,7 @@ export default function FeedbackHome() {
             label="Ảnh / video minh hoạ"
             hint="Tối đa 3 tệp — chụp hoặc quay rõ vấn đề cần phản ánh."
           />
-          <div className="flex justify-end gap-2.5 mt-2">
+          <div className="form-actions flex justify-end gap-2.5 mt-2">
             <button type="button" className="btn-line" onClick={() => setOpen(false)} disabled={sending}>Huỷ</button>
             <button type="submit" className="btn-primary" disabled={sending}>
               {sending ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Gửi góp ý'}

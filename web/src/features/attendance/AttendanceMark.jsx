@@ -29,7 +29,7 @@ function photoIds(rec) {
 /** Một dòng nhãn – giá trị trong thẻ thông tin. */
 function InfoRow({ k, v }) {
   return (
-    <div className="flex gap-2 text-[13.5px]">
+    <div className="flex gap-2 text-sm">
       <span className="w-28 shrink-0 text-ink-muted">{k}</span>
       <span className="text-ink font-medium min-w-0">{v}</span>
     </div>
@@ -42,7 +42,7 @@ function RecordCard({ record, roster }) {
   const markedBy = record.marked_by_name || record.marked_by?.full_name || '—';
   return (
     <div className="card p-4">
-      <div className="font-bold text-[15px] mb-2.5">Bản ghi điểm danh</div>
+      <div className="font-bold text-lg mb-2.5">Bản ghi điểm danh</div>
       <div className="grid gap-1.5">
         <InfoRow k="Có mặt" v={`${record.present_count ?? '—'}/${record.roster_size ?? roster ?? '—'} học sinh`} />
         {record.absent_names && <InfoRow k="HS vắng" v={record.absent_names} />}
@@ -51,7 +51,7 @@ function RecordCard({ record, roster }) {
         <InfoRow k="Thời điểm" v={fmtDateTime(record.created_at || record.marked_at) || '—'} />
       </div>
       {ids.length > 0 && (
-        <div className="grid grid-cols-4 gap-2 mt-3">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mt-3">
           {ids.map((id) => (
             <a
               key={id}
@@ -76,18 +76,18 @@ function CountInput({ label, value, onChange, placeholder, tone = 'brand' }) {
   const step = (d) => onChange(String(Math.max(0, (n ?? 0) + d)));
   return (
     <div className="min-w-0">
-      <div className="text-[12.5px] font-semibold text-ink-soft mb-1">{label} <span className="text-rose-500">*</span></div>
+      <div className="text-sm font-semibold text-ink-soft mb-1">{label} <span className="text-rose-500">*</span></div>
       <div className="flex items-stretch">
         <button type="button" onClick={() => step(-1)} aria-label={`Bớt ${label}`}
-          className="w-10 rounded-l-lg border border-line text-[18px] text-ink-soft hover:bg-zinc-50">−</button>
+          className="w-10 rounded-l-lg border border-line text-xl text-ink-soft hover:bg-zinc-50">−</button>
         <input
-          className={`h-12 min-w-0 w-full flex-1 border-y border-line text-center text-[22px] font-extrabold tabular-nums outline-none
+          className={`h-12 min-w-0 w-full flex-1 border-y border-line text-center text-2xl font-extrabold tabular-nums outline-none
             focus:bg-brand-50 ${tone === 'brand' ? 'text-brand-800' : 'text-ink'}`}
           inputMode="numeric" value={value ?? ''} placeholder={placeholder}
           onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
           aria-label={label} />
         <button type="button" onClick={() => step(1)} aria-label={`Thêm ${label}`}
-          className="w-10 rounded-r-lg border border-line text-[18px] text-ink-soft hover:bg-zinc-50">+</button>
+          className="w-10 rounded-r-lg border border-line text-xl text-ink-soft hover:bg-zinc-50">+</button>
       </div>
     </div>
   );
@@ -248,8 +248,8 @@ export default function AttendanceMark() {
       <div className="card p-4 mb-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="font-bold text-[16px] truncate">{schedule.class_name || schedule.class?.name || 'Lớp học'}</div>
-            <div className="text-[13px] text-ink-muted truncate">{schedule.school_name || schedule.school?.name}</div>
+            <div className="font-bold text-lg truncate">{schedule.class_name || schedule.class?.name || 'Lớp học'}</div>
+            <div className="text-sm text-ink-muted truncate">{schedule.school_name || schedule.school?.name}</div>
           </div>
           {done && <Badge tone="approved">Đã điểm danh</Badge>}
         </div>
@@ -261,7 +261,7 @@ export default function AttendanceMark() {
           <InfoRow k="Người dạy" v={teacherNames || '—'} />
           {roster > 0 && <InfoRow k="Sĩ số gần nhất" v={`${roster} học sinh`} />}
         </div>
-        <div className="text-[12px] text-ink-muted mt-2.5">
+        <div className="text-xs text-ink-muted mt-2.5">
           ℹ️ Tự điền theo lịch phân công — không chỉnh sửa tại đây.
         </div>
       </div>
@@ -273,7 +273,7 @@ export default function AttendanceMark() {
           <div className="card p-5 text-center">
             <div className="text-3xl mb-2">✅</div>
             <div className="font-semibold">Buổi này đã được điểm danh</div>
-            <div className="text-[13px] text-ink-muted mt-1">
+            <div className="text-sm text-ink-muted mt-1">
               Xem chi tiết trong tab Lịch sử của màn hình Điểm danh.
             </div>
             <Link to="/diem-danh" className="btn-primary mt-4">Về màn hình Điểm danh</Link>
@@ -290,24 +290,24 @@ export default function AttendanceMark() {
           <div className="label">Sĩ số thực tế buổi này</div>
           <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2 mb-2">
             <CountInput label="Có mặt" value={present} onChange={setPresent} placeholder="?" />
-            <span className="pb-2 text-[26px] font-extrabold text-ink-muted">/</span>
+            <span className="pb-2 text-2xl font-extrabold text-ink-muted">/</span>
             <CountInput label="Sĩ số" value={total ?? ''} onChange={setTotal} placeholder="?" tone="ink" />
           </div>
-          <div className="text-[12px] text-ink-muted mb-3">
+          <div className="text-xs text-ink-muted mb-3">
             Đếm thực tế tại lớp rồi điền: có mặt bao nhiêu / tổng sĩ số bao nhiêu.
             {roster > 0 && <> Sĩ số đang gợi ý theo lần điểm danh gần nhất ({roster}) — sửa lại nếu khác.</>}
           </div>
 
           <div className={`rounded-xl border px-3.5 py-2.5 mb-3.5 flex items-center justify-between
             ${over ? 'bg-rose-50 border-rose-200' : 'bg-brand-50 border-brand-100'}`}>
-            <span className={`text-[13px] font-semibold ${over ? 'text-rose-700' : 'text-brand-900'}`}>
+            <span className={`text-sm font-semibold ${over ? 'text-rose-700' : 'text-brand-900'}`}>
               {over ? 'Có mặt nhiều hơn sĩ số — kiểm tra lại'
                 : missing > 0 ? `Vắng ${missing} học sinh`
                 : nPresent !== null && nTotal !== null ? 'Đủ sĩ số' : 'Sĩ số buổi này'}
             </span>
-            <span className="text-[22px] font-extrabold text-brand-800" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <span className="text-2xl font-extrabold text-brand-800" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {nPresent ?? '—'}
-              <span className="text-[15px] text-ink-muted font-bold">/{nTotal ?? '—'}</span>
+              <span className="text-lg text-ink-muted font-bold">/{nTotal ?? '—'}</span>
             </span>
           </div>
 
@@ -350,7 +350,7 @@ export default function AttendanceMark() {
           </Field>
 
           {!online && (
-            <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-[13px] px-3.5 py-2.5 mb-3.5">
+            <div className="rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-sm px-3.5 py-2.5 mb-3.5">
               ⚡ Đang offline — bản điểm danh sẽ được lưu và tự gửi khi có mạng.
             </div>
           )}

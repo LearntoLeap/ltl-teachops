@@ -75,13 +75,13 @@ function flattenSolutions(nodes, depth = 0, out = []) {
 function ChipRow({ label, options, value, onChange, trailing }) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto pb-0.5 -mx-1 px-1">
-      <span className="text-[11px] font-bold uppercase tracking-wide text-ink-muted shrink-0">{label}</span>
+      <span className="text-xs font-bold uppercase tracking-wide text-ink-muted shrink-0">{label}</span>
       {options.map((o) => (
         <button
           key={String(o.value)}
           type="button"
           onClick={() => onChange(o.value === value ? '' : o.value)}
-          className={`shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-semibold transition ring-1 ring-inset
+          className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold transition ring-1 ring-inset
             ${String(o.value) === String(value)
               ? 'bg-brand-grad text-white ring-transparent shadow-card-sm'
               : 'bg-white text-ink-soft ring-line hover:ring-brand-300 hover:text-brand-800'}`}>
@@ -120,7 +120,7 @@ function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPrevie
   return (
     <Link
       to={`/hoc-lieu/${m.id}`}
-      className={`card overflow-hidden flex hover:border-brand-300 hover:-translate-y-px transition group relative
+      className={`card card-hover overflow-hidden flex group relative
         ${checked ? '!border-brand-400 ring-1 ring-brand-300' : ''}`}>
       {/* Ô chọn để tải về — nút thay cho checkbox thật vì nằm trong liên kết */}
       <button
@@ -129,7 +129,7 @@ function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPrevie
         aria-checked={checked}
         aria-label={`Chọn ${m.title} để tải về`}
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(m); }}
-        className={`absolute top-2 right-2 h-5 w-5 rounded-md border grid place-items-center text-[12px] font-bold transition
+        className={`absolute top-2 right-2 h-5 w-5 rounded-md border grid place-items-center text-xs font-bold transition
           ${checked ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white/90 border-line text-transparent hover:border-brand-400'}`}>
         ✓
       </button>
@@ -150,17 +150,17 @@ function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPrevie
       <div className="min-w-0 flex-1 p-3 pr-9">
         <div className="flex items-center gap-1.5 flex-wrap">
           {m.type_name && (
-            <span className="rounded-md bg-brand-50 text-brand-800 px-1.5 py-[1px] text-[10.5px] font-bold">
+            <span className="rounded-md bg-brand-50 text-brand-800 px-1.5 py-[1px] text-xs font-bold">
               {m.type_icon} {m.type_name}
             </span>
           )}
           {m.grade && (
-            <span className="rounded-md bg-sky-50 text-sky-700 px-1.5 py-[1px] text-[10.5px] font-bold">
+            <span className="rounded-md bg-sky-50 text-sky-700 px-1.5 py-[1px] text-xs font-bold">
               Khối {m.grade}
             </span>
           )}
           {m.solution_name && (
-            <span className="rounded-md bg-emerald-50 text-emerald-700 px-1.5 py-[1px] text-[10.5px] font-bold truncate max-w-[160px]">
+            <span className="rounded-md bg-emerald-50 text-emerald-700 px-1.5 py-[1px] text-xs font-bold truncate max-w-[160px]">
               🧩 {m.solution_name}
             </span>
           )}
@@ -170,13 +170,13 @@ function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPrevie
           )}
         </div>
 
-        <div className="font-semibold text-[14.5px] text-ink mt-1 truncate group-hover:text-brand-800 transition">
+        <div className="font-semibold text-base text-ink mt-1 truncate group-hover:text-brand-800 transition">
           {m.title}
         </div>
         {lessonLine && (
-          <div className="text-[12px] text-brand-700 font-medium mt-0.5 truncate">📖 {lessonLine}</div>
+          <div className="text-xs text-brand-700 font-medium mt-0.5 truncate">📖 {lessonLine}</div>
         )}
-        <div className="text-[11.5px] text-ink-muted mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
+        <div className="text-xs text-ink-muted mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
           {m.subject && <span>{m.subject}</span>}
           {ownerName && <span>{ownerName}</span>}
           {at && <span>{fmtAgo(at)}</span>}
@@ -188,21 +188,21 @@ function MaterialCard({ m, area, checked, onToggle, canManage, canEdit, onPrevie
         <div className="flex items-center gap-1 mt-1.5"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
           <button type="button" title="Xem trước" onClick={() => onPreview(m)}
-            className="h-7 px-2 rounded-lg text-[12px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100">
+            className="h-7 px-2 rounded-lg text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100">
             👁 Xem trước
           </button>
           {m.latest_version?.file_id && (
             <button type="button" title="Tải về" onClick={() => onDownload(m)}
-              className="h-7 w-7 rounded-lg text-[14px] text-brand-700 hover:bg-brand-50">⬇</button>
+              className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg text-base text-brand-700 hover:bg-brand-50">⬇</button>
           )}
           {canEdit(m) && (
             <button type="button" title="Sửa thông tin" onClick={() => onEdit(m)}
-              className="h-7 w-7 rounded-lg text-[13px] text-ink-muted hover:bg-brand-50 hover:text-brand-800">✏️</button>
+              className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg text-sm text-ink-muted hover:bg-brand-50 hover:text-brand-800">✏️</button>
           )}
           {canManage(m) && (
             <button type="button" title="Xoá tài liệu này"
               onClick={() => onDelete([{ id: m.id, title: m.title }])}
-              className="h-7 w-7 rounded-lg text-[13px] text-ink-muted hover:bg-rose-50 hover:text-rose-700">🗑</button>
+              className="h-10 w-10 sm:h-8 sm:w-8 rounded-lg text-sm text-ink-muted hover:bg-rose-50 hover:text-rose-700">🗑</button>
           )}
         </div>
       </div>
@@ -220,12 +220,12 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
   const allOnPage = items.length > 0 && items.every((m) => selected.has(m.id));
   return (
     <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto table-cards stagger">
         <table className="w-full min-w-[880px]">
           <thead>
             <tr>
               <th className="th !w-[40px] text-center">
-                <input type="checkbox" className="h-4 w-4 accent-[#8A3F97] align-middle"
+                <input type="checkbox" className="h-4 w-4 accent-accent-600 align-middle"
                   aria-label="Chọn tất cả tài liệu trong trang"
                   checked={allOnPage} onChange={(e) => onTogglePage(items, e.target.checked)} />
               </th>
@@ -235,7 +235,7 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
               <th className="th">Tên bài / Chương trình</th>
               <th className="th !w-[130px]">Loại</th>
               <th className="th !w-[150px]">Giải pháp</th>
-              <th className="th !w-[130px]">Người đăng</th>
+              <th className="th !w-[130px] hidden xl:table-cell">Người đăng</th>
               <th className="th !w-[140px]"></th>
             </tr>
           </thead>
@@ -243,13 +243,13 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
             {items.map((m) => (
               <tr key={m.id} className={`transition ${selected.has(m.id) ? 'bg-brand-50/70' : 'hover:bg-brand-50/40'}`}>
                 <td className="td text-center">
-                  <input type="checkbox" className="h-4 w-4 accent-[#8A3F97] align-middle"
+                  <input type="checkbox" className="h-4 w-4 accent-accent-600 align-middle"
                     aria-label={`Chọn ${m.title}`}
                     checked={selected.has(m.id)} onChange={() => onToggle(m)} />
                 </td>
-                <td className="td text-center font-bold text-sky-700">{m.grade || '—'}</td>
-                <td className="td text-center text-ink-soft">{m.lesson_no || '—'}</td>
-                <td className="td">
+                <td data-label="Khối" className="td text-center font-bold text-sky-700">{m.grade || '—'}</td>
+                <td data-label="Tiết" className="td text-center text-ink-soft">{m.lesson_no || '—'}</td>
+                <td data-label="Tên tài liệu" className="td">
                   <Link to={`/hoc-lieu/${m.id}`}
                     className="font-semibold text-ink hover:text-brand-800 hover:underline">
                     {m.title}
@@ -263,39 +263,39 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
                     )}
                   </span>
                 </td>
-                <td className="td text-[13px] text-ink-soft">
+                <td data-label="Tên bài / Chương trình" className="td text-sm text-ink-soft">
                   {m.lesson_title || '—'}
                   {m.curriculum && (
-                    <span className="block text-[11.5px] text-ink-muted">{m.curriculum}</span>
+                    <span className="block text-xs text-ink-muted">{m.curriculum}</span>
                   )}
                 </td>
-                <td className="td text-[12.5px]">
+                <td data-label="Loại" className="td text-sm">
                   {m.type_name ? `${m.type_icon || ''} ${m.type_name}` : '—'}
                 </td>
-                <td className="td text-[12.5px] text-emerald-700 truncate">{m.solution_name || '—'}</td>
-                <td className="td text-[12.5px] text-ink-muted">
+                <td data-label="Giải pháp" className="td text-sm text-emerald-700 truncate">{m.solution_name || '—'}</td>
+                <td data-label="Người đăng" className="hidden xl:table-cell td text-sm text-ink-muted">
                   {m.owner_name || '—'}
                   {(m.updated_at || m.created_at) && (
-                    <span className="block text-[11px]">{fmtAgo(m.updated_at || m.created_at)}</span>
+                    <span className="block text-xs">{fmtAgo(m.updated_at || m.created_at)}</span>
                   )}
                 </td>
                 <td className="td !px-1 text-center whitespace-nowrap">
                   <button type="button" title="Xem trước"
-                    className="h-8 w-8 rounded-lg text-[15px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
+                    className="h-8 w-8 rounded-lg text-lg text-brand-700 hover:bg-brand-50 hover:text-brand-900"
                     onClick={() => onPreview(m)}>👁</button>
                   {canEdit(m) && (
                     <button type="button" title="Sửa thông tin (tiết, tên tài liệu…)"
-                      className="h-8 w-8 rounded-lg text-[14px] text-ink-muted hover:bg-brand-50 hover:text-brand-800"
+                      className="h-8 w-8 rounded-lg text-base text-ink-muted hover:bg-brand-50 hover:text-brand-800"
                       onClick={() => onEdit(m)}>✏️</button>
                   )}
                   {m.latest_version?.file_id && (
                     <button type="button" title={`Tải ${m.latest_version.file_name || 'tệp'} về máy`}
-                      className="h-8 w-8 rounded-lg text-[17px] text-brand-700 hover:bg-brand-50 hover:text-brand-900"
+                      className="h-8 w-8 rounded-lg text-xl text-brand-700 hover:bg-brand-50 hover:text-brand-900"
                       onClick={() => quickDownload(m)}>⬇</button>
                   )}
                   {canManage(m) && (
                     <button type="button" title="Xoá tài liệu này"
-                      className="h-8 w-8 rounded-lg text-[15px] text-ink-muted hover:bg-rose-50 hover:text-rose-700"
+                      className="h-8 w-8 rounded-lg text-lg text-ink-muted hover:bg-rose-50 hover:text-rose-700"
                       onClick={() => onDelete([{ id: m.id, title: m.title }])}>🗑</button>
                   )}
                 </td>
@@ -304,7 +304,7 @@ function MaterialTable({ items, area, selected, onToggle, onTogglePage, canManag
           </tbody>
         </table>
       </div>
-      <div className="px-3 py-2 text-[11.5px] text-ink-muted bg-canvas/60 border-t border-line">
+      <div className="px-3 py-2 text-xs text-ink-muted bg-canvas/60 border-t border-line">
         {items.length} tài liệu — bấm tên để mở chi tiết · 👁 xem trước · ✏️ sửa thông tin · ⬇ tải nhanh
         {canManage() ? ' · 🗑 xoá · tích ô vuông để chọn tải hoặc xoá nhiều bài' : ' · tích ô vuông để chọn tải nhiều bài'}
       </div>
@@ -360,7 +360,7 @@ function AddSolutionSheet({ open, onClose, onCreated }) {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Bộ kit, phạm vi cấp học, ghi chú triển khai…" />
         </Field>
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Thêm giải pháp'}
@@ -513,7 +513,7 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
             {(types || []).map((t) => (
               <button key={t.id} type="button"
                 onClick={() => setTypeId(typeId === t.id ? '' : t.id)}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                   ${typeId === t.id
                     ? 'bg-brand-grad text-white ring-transparent'
                     : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
@@ -521,7 +521,7 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
               </button>
             ))}
             {canAddType && !addingType && (
-              <button type="button" className="rounded-full px-3 py-1.5 text-[12.5px] font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 ring-dashed hover:bg-brand-50"
+              <button type="button" className="rounded-full px-3 py-1.5 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-200 ring-dashed hover:bg-brand-50"
                 onClick={() => setAddingType(true)}>
                 + Thêm loại
               </button>
@@ -632,7 +632,7 @@ function UploadSheet({ open, onClose, area, defaultLevel, initialSolutionId = ''
           </Field>
         </div>
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <><Spinner className="h-4 w-4 border-white/40 border-t-white" /> Đang tải lên…</> : 'Đăng tài liệu'}
@@ -767,7 +767,7 @@ export default function MaterialsHome() {
             <button
               type="button"
               onClick={() => setSolutionFormOpen(true)}
-              className="shrink-0 rounded-full px-3 py-1.5 text-[12.5px] font-semibold text-brand-700
+              className="shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold text-brand-700
                          ring-1 ring-inset ring-brand-300 border border-dashed border-brand-300 hover:bg-brand-50">
               + Thêm giải pháp
             </button>
@@ -828,16 +828,16 @@ export default function MaterialsHome() {
 
       {solutionId && (
         <div className="card px-4 py-3 mb-3 flex items-center gap-3 !bg-brand-50/60 !border-brand-100">
-          <span className="text-[22px]">📦</span>
+          <span className="text-2xl">📦</span>
           <div className="min-w-0 flex-1">
-            <div className="font-bold text-[14.5px] text-brand-900 truncate">
+            <div className="font-bold text-base text-brand-900 truncate">
               {solutions.find((so) => so.id === solutionId)?.label || 'Giải pháp'}
             </div>
-            <div className="text-[12px] text-ink-muted">
+            <div className="text-xs text-ink-muted">
               Toàn bộ học liệu của giải pháp này — chọn khối & loại phía trên để thu hẹp.
             </div>
           </div>
-          <Link to="/giai-phap" className="btn-line !px-3 !py-1.5 shrink-0 text-[12.5px]">Chi tiết giải pháp</Link>
+          <Link to="/giai-phap" className="btn-line !px-3 !py-1.5 shrink-0 text-sm">Chi tiết giải pháp</Link>
         </div>
       )}
 
@@ -888,14 +888,14 @@ export default function MaterialsHome() {
       {selected.size > 0 && (
         <div className="sticky bottom-[calc(76px+var(--safe-bot))] lg:bottom-4 z-30 mt-3 flex justify-center pointer-events-none">
           <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl bg-ink text-white shadow-card-lg px-4 py-2.5">
-            <span className="text-[13.5px]">Đã chọn <b>{selected.size}</b> tài liệu</span>
-            <button className="rounded-xl bg-white text-brand-900 font-semibold text-[13px] px-3 py-1.5 hover:bg-brand-50"
+            <span className="text-sm">Đã chọn <b>{selected.size}</b> tài liệu</span>
+            <button className="rounded-xl bg-white text-brand-900 font-semibold text-sm px-3 py-1.5 hover:bg-brand-50"
               onClick={() => setDlOpen(true)}>⬇ Tải các mục đã chọn</button>
             {canDelete && (
-              <button className="rounded-xl bg-rose-500 text-white font-semibold text-[13px] px-3 py-1.5 hover:bg-rose-600"
+              <button className="rounded-xl bg-rose-500 text-white font-semibold text-sm px-3 py-1.5 hover:bg-rose-600"
                 onClick={() => setDeleting([...selected].map(([id, title]) => ({ id, title })))}>🗑 Xoá</button>
             )}
-            <button className="text-[13px] text-white/80 hover:text-white px-2"
+            <button className="text-sm text-white/80 hover:text-white px-2"
               onClick={() => setSelected(new Map())}>Bỏ chọn</button>
           </div>
         </div>

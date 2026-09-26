@@ -35,11 +35,11 @@ export default function ForgotPassword() {
       {sent ? (
         <div className="text-center py-2">
           <div className="text-4xl mb-3">📬</div>
-          <p className="text-[14px] text-ink-soft mb-4">
+          <p className="text-base text-ink-soft mb-4">
             Nếu email <b>{email.trim()}</b> tồn tại trong hệ thống, liên kết đặt lại mật khẩu
             đã được gửi tới hộp thư. Liên kết có hiệu lực trong <b>60 phút</b>.
           </p>
-          <p className="text-[12.5px] text-ink-muted mb-4">
+          <p className="text-sm text-ink-muted mb-4">
             Không thấy email? Kiểm tra mục Spam/Thư rác, hoặc liên hệ Quản trị viên để được cấp lại mật khẩu.
           </p>
           <Link to="/dang-nhap" className="btn-primary w-full">← Về trang đăng nhập</Link>
@@ -52,7 +52,7 @@ export default function ForgotPassword() {
               onChange={(e) => setEmail(e.target.value)} autoFocus />
           </Field>
           {error && (
-            <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+            <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
               ⚠ {error}
             </div>
           )}
@@ -60,7 +60,7 @@ export default function ForgotPassword() {
             {busy ? <Spinner className="border-white/40 border-t-white" /> : 'Gửi liên kết đặt lại'}
           </button>
           <div className="text-center mt-4">
-            <Link to="/dang-nhap" className="text-[13px] text-brand-700 font-semibold hover:underline">
+            <Link to="/dang-nhap" className="text-sm text-brand-700 font-semibold hover:underline">
               ← Về trang đăng nhập
             </Link>
           </div>

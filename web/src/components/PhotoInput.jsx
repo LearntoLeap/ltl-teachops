@@ -84,7 +84,7 @@ export default function PhotoInput({
     onChange(value.filter((_, i) => i !== idx));
   };
 
-  const btn = 'rounded-xl border-2 border-dashed text-[12px] font-semibold transition disabled:opacity-50';
+  const btn = 'rounded-xl border-2 border-dashed text-xs font-semibold transition disabled:opacity-50';
 
   return (
     <div className="mb-3.5">
@@ -100,7 +100,7 @@ export default function PhotoInput({
               <>
                 <video src={item.url} muted playsInline preload="metadata" className="h-full w-full object-cover bg-black" />
                 <span className="absolute inset-0 grid place-items-center pointer-events-none">
-                  <span className="h-9 w-9 rounded-full bg-white/90 text-brand-700 grid place-items-center text-[15px] pl-0.5">▶</span>
+                  <span className="h-9 w-9 rounded-full bg-white/90 text-brand-700 grid place-items-center text-lg pl-0.5">▶</span>
                 </span>
               </>
             ) : (
@@ -109,9 +109,9 @@ export default function PhotoInput({
             <button
               type="button"
               onClick={() => remove(i)}
-              className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white text-sm grid place-items-center"
+              className="absolute top-1 right-1 h-9 w-9 sm:h-7 sm:w-7 rounded-full bg-night/70 text-white text-sm grid place-items-center transition-colors duration-fast hover:bg-night"
               aria-label={item.kind === 'video' ? 'Xoá video' : 'Xoá ảnh'}>×</button>
-            <div className="absolute bottom-0 inset-x-0 bg-black/45 text-white text-[10px] px-1.5 py-0.5 truncate">
+            <div className="absolute bottom-0 inset-x-0 bg-black/45 text-white text-xs px-1.5 py-0.5 truncate">
               {item.kind === 'video' ? '🎥 ' : ''}{humanSize(item.size)}
             </div>
           </div>
@@ -137,13 +137,13 @@ export default function PhotoInput({
         )}
       </div>
 
-      {hint && <div className="text-[12px] text-ink-muted mt-1.5">{hint}</div>}
+      {hint && <div className="text-xs text-ink-muted mt-1.5">{hint}</div>}
       {allowVideo && (
-        <div className="text-[11.5px] text-ink-muted mt-1">
+        <div className="text-xs text-ink-muted mt-1">
           🎥 Video tối đa {maxVideoMb} MB (khoảng 1–2 phút) — tự lưu về Google Drive của công ty.
         </div>
       )}
-      {busy && <div className="text-[12px] text-brand-600 mt-1.5">Đang xử lý tệp…</div>}
+      {busy && <div className="text-xs text-brand-600 mt-1.5">Đang xử lý tệp…</div>}
     </div>
   );
 }

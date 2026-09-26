@@ -1,3 +1,6 @@
+/* Token thiết kế (màu, bo góc, đổ bóng, chuyển động) — nguồn sự thật duy nhất. */
+@import './theme/tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -14,7 +17,7 @@
   ::-webkit-scrollbar-thumb { @apply bg-zinc-300 rounded-lg; }
   ::-webkit-scrollbar-thumb:hover { @apply bg-zinc-400; }
   /* Viền focus rõ ràng cho thao tác bằng bàn phím. */
-  :focus-visible { outline: 2px solid theme('colors.brand.500'); outline-offset: 2px; }
+  :focus-visible { outline: 2px solid rgb(var(--brand-500)); outline-offset: 2px; }
 
   /* Vùng an toàn cho tai thỏ iPhone */
   :root {
@@ -25,35 +28,61 @@
 
 /* ----------------------------- Thành phần chung ----------------------------- */
 @layer components {
-  /* Nút: màu đặc, chuyển màu nhanh — không mờ đục khi rê chuột. */
+  /* Nút: màu đặc, chuyển màu nhanh — không mờ đục khi rê chuột.
+     min-h 40px (desktop) / 44px (điện thoại) để đủ vùng chạm. */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2
-           text-sm font-semibold transition-colors duration-150 active:translate-y-px
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 min-h-[40px]
+           text-sm font-semibold transition-all duration-fast ease-out active:translate-y-px
            disabled:opacity-45 disabled:cursor-not-allowed select-none whitespace-nowrap;
   }
-  .btn-primary { @apply btn bg-brand-600 text-white shadow-card-sm hover:bg-brand-700 active:bg-brand-800; }
+  .btn-primary { @apply btn bg-brand-600 text-white shadow-card-sm hover:bg-brand-700 hover:shadow-card active:bg-brand-800; }
   .btn-line    { @apply btn border border-line bg-white text-ink-soft hover:bg-zinc-50 hover:border-zinc-300 hover:text-ink; }
-  .btn-danger  { @apply btn bg-rose-600 text-white hover:bg-rose-700; }
+  .btn-danger  { @apply btn bg-rose-600 text-white hover:bg-rose-700 hover:shadow-card; }
   .btn-ghost   { @apply btn text-brand-700 hover:bg-brand-50; }
 
+  /* Nút chỉ có biểu tượng — luôn vuông và đủ vùng chạm. */
+  .icon-btn {
+    @apply inline-grid place-items-center h-10 w-10 shrink-0 rounded-lg
+           transition-colors duration-fast ease-out disabled:opacity-45 disabled:cursor-not-allowed;
+  }
+
   .card { @apply bg-white rounded-xl2 shadow-card-sm border border-line; }
+  /* Thẻ bấm được: nâng nhẹ khi rê chuột. */
+  .card-hover { @apply transition-all duration-fast ease-out hover:shadow-card hover:-translate-y-px hover:border-brand-200; }
 
   .input {
-    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-[14.5px]
-           placeholder:text-ink-muted/70 outline-none transition-colors duration-150
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 min-h-[40px] text-base
+           placeholder:text-ink-muted/70 outline-none transition-colors duration-fast
            hover:border-zinc-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-100;
   }
-  .label { @apply block text-[13px] font-semibold text-ink-soft mb-1.5; }
+  .label { @apply block text-sm font-semibold text-ink-soft mb-1.5; }
 
   .badge {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px]
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs
            font-semibold ring-1 ring-inset;
   }
 
-  /* Bảng kiểu trang quản trị: đầu bảng xám nhạt, chữ đầu bảng nhỏ đậm. */
-  .th { @apply px-3 py-2.5 text-left text-[12px] font-semibold uppercase tracking-wide text-ink-muted bg-zinc-50 border-b border-line whitespace-nowrap; }
-  .td { @apply px-3 py-2.5 text-[13.5px] border-t border-line align-middle; }
-  tbody tr { @apply transition-colors duration-100; }
+  /* Bảng kiểu trang quản trị: sọc hàng nhẹ, rê chuột đổi nền. */
+  .th {
+    @apply px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide
+           text-ink-muted bg-zinc-50 border-b border-line whitespace-nowrap;
+  }
+  /* Đầu bảng DÍNH khi vùng bảng tự cuộn dọc (.table-scroll) — không dính theo cả trang. */
+  .table-scroll { @apply overflow-auto overscroll-contain; }
+  .table-scroll thead .th { @apply sticky top-0 z-10; }
+  .td { @apply px-3 py-2.5 text-sm border-t border-line align-middle; }
+  tbody tr { @apply transition-colors duration-fast; }
+  tbody tr:nth-child(even) { @apply bg-zinc-50/40; }
+  tbody tr:hover { @apply bg-brand-50/50; }
+
+  /* Khung cuộn của bảng — dùng chung để bo góc và viền nhất quán. */
+  .table-wrap { @apply overflow-x-auto overscroll-x-contain; }
+
+  /* Hàng nút của biểu mẫu. Trong hộp thoại, hàng này DÍNH đáy để nút chính
+     luôn nằm trong tầm ngón tay dù biểu mẫu dài; ngoài hộp thoại thì giữ nguyên. */
+  .sheet-body .form-actions {
+    @apply sticky bottom-0 z-10 -mx-5 px-5 pt-3 pb-1 bg-white/95 backdrop-blur border-t border-line/70;
+  }
 
   /* ---------- Ngôn ngữ "bảng điều độ" (dashboard v2) ---------- */
 
@@ -68,9 +97,10 @@
   .eyebrow-watch::before { @apply bg-brand-500; }
   .eyebrow-ref::before   { @apply bg-slate-300; }
 
-  /* Ô số liệu có chip biểu tượng */
+  /* Ô số liệu có chip biểu tượng. Cỡ 16-17px của .tile-chip/.qa-ic là cỡ BIỂU TƯỢNG
+     (emoji), không thuộc thang chữ 6 bậc. */
   .tile { @apply card px-3.5 py-3 flex items-center gap-3 min-w-0; }
-  .tile-num { @apply text-[24px] font-extrabold leading-none tracking-tight; font-variant-numeric: tabular-nums; }
+  .tile-num { @apply text-2xl font-extrabold leading-none tracking-tight; font-variant-numeric: tabular-nums; }
   .tile-chip { @apply h-9 w-9 rounded-xl grid place-items-center text-[16px] shrink-0; }
 
   /* Hàng trong hàng đợi xử lý */
@@ -82,7 +112,7 @@
   /* Ô hành động nhanh */
   .qa {
     @apply card flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 text-center
-           text-[12px] font-semibold text-ink-soft transition
+           text-xs font-semibold text-ink-soft transition
            hover:border-brand-300 hover:text-brand-800 hover:-translate-y-px;
   }
   .qa-ic { @apply h-9 w-9 rounded-xl grid place-items-center text-[17px] bg-brand-50; }
@@ -92,32 +122,118 @@
   .ticket-perf {
     @apply relative shrink-0;
     width: 0;
-    border-left: 2px dashed rgba(138, 63, 151, .25);
+    border-left: 2px dashed rgb(var(--accent-600) / .25);
   }
   .ticket-perf::before, .ticket-perf::after {
     content: '';
     @apply absolute h-3.5 w-3.5 rounded-full bg-canvas;
     left: -8px;
   }
-  .ticket-perf::before { top: -7px; box-shadow: inset 0 -2px 3px rgba(99, 40, 117, .08); }
-  .ticket-perf::after  { bottom: -7px; box-shadow: inset 0 2px 3px rgba(99, 40, 117, .08); }
+  .ticket-perf::before { top: -7px; box-shadow: inset 0 -2px 3px rgb(var(--accent-900) / .10); }
+  .ticket-perf::after  { bottom: -7px; box-shadow: inset 0 2px 3px rgb(var(--accent-900) / .10); }
 
   /* Thanh nhịp vận hành (manager): các đoạn tỉ lệ */
   .pulse { @apply flex h-2.5 w-full overflow-hidden rounded-full bg-line/70; }
   .pulse > span { @apply h-full; min-width: 0; transition: width .5s ease; }
 }
 
-/* Hiệu ứng vào trang: nổi dần theo bậc (tôn trọng reduced-motion) */
+/* ------------------------- Chờ dữ liệu: skeleton ------------------------- */
+@layer components {
+  .skeleton { @apply relative overflow-hidden bg-zinc-100; }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(var(--surface) / .7), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* ---------------- Điện thoại: bảng ĐỔI THÀNH thẻ dọc, không cuộn ngang ---------------- */
+@media (max-width: 767px) {
+  .table-cards { overflow-x: visible !important; }
+  .table-cards table { display: block; min-width: 0 !important; width: 100%; }
+  .table-cards thead { display: none; }
+  .table-cards tbody { display: block; }
+  .table-cards tbody tr {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid rgb(var(--line));
+    border-radius: var(--radius-md);
+    background: rgb(var(--surface)) !important;
+    box-shadow: var(--shadow-1);
+    overflow: hidden;
+  }
+  .table-cards tbody tr:last-child { margin-bottom: 0; }
+  .table-cards tbody .td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: right;
+    padding: 8px 12px;
+    border-top: 1px solid rgb(var(--line) / .7);
+  }
+  .table-cards tbody tr .td:first-child {
+    border-top: 0;
+    font-weight: 700;
+    background: rgb(var(--brand-50) / .7);
+  }
+  .table-cards tbody .td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: rgb(var(--ink-muted));
+  }
+
+  /* Vùng chạm tối thiểu 44px trên điện thoại (WCAG / Apple HIG). */
+  .btn { min-height: 44px; }
+  .icon-btn { height: 44px; width: 44px; }
+  .input { min-height: 44px; }
+}
+
+/* ------------------------- Chuyển trang & xuất hiện so le ------------------------- */
+/* Màn hình mới vào: mờ dần + trượt lên 8px. Con của <main> được thay khi đổi route. */
+.page-enter > * { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+
+/* Danh sách/hàng bảng xuất hiện so le 30ms (tối đa 8 mục đầu cho nhẹ). */
+.stagger > *:nth-child(1), .stagger tbody tr:nth-child(1) { animation-delay: calc(var(--stagger) * 1); }
+.stagger > *:nth-child(2), .stagger tbody tr:nth-child(2) { animation-delay: calc(var(--stagger) * 2); }
+.stagger > *:nth-child(3), .stagger tbody tr:nth-child(3) { animation-delay: calc(var(--stagger) * 3); }
+.stagger > *:nth-child(4), .stagger tbody tr:nth-child(4) { animation-delay: calc(var(--stagger) * 4); }
+.stagger > *:nth-child(5), .stagger tbody tr:nth-child(5) { animation-delay: calc(var(--stagger) * 5); }
+.stagger > *:nth-child(6), .stagger tbody tr:nth-child(6) { animation-delay: calc(var(--stagger) * 6); }
+.stagger > *:nth-child(7), .stagger tbody tr:nth-child(7) { animation-delay: calc(var(--stagger) * 7); }
+.stagger > *:nth-child(8), .stagger tbody tr:nth-child(8) { animation-delay: calc(var(--stagger) * 8); }
+.stagger > *, .stagger tbody tr { animation-name: rise-in; animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); animation-fill-mode: both; }
+
+/* Hiệu ứng vào trang: nổi dần theo bậc, cách nhau --stagger (tôn trọng reduced-motion) */
 @keyframes rise-in {
-  from { opacity: 0; transform: translateY(10px); }
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.rise { animation: rise-in .32s cubic-bezier(.22,.8,.36,1) both; }
-.rise-1 { animation-delay: .04s; } .rise-2 { animation-delay: .09s; }
-.rise-3 { animation-delay: .14s; } .rise-4 { animation-delay: .19s; }
-.rise-5 { animation-delay: .24s; } .rise-6 { animation-delay: .29s; }
+.rise { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+.rise-1 { animation-delay: calc(var(--stagger) * 1); } .rise-2 { animation-delay: calc(var(--stagger) * 2); }
+.rise-3 { animation-delay: calc(var(--stagger) * 3); } .rise-4 { animation-delay: calc(var(--stagger) * 4); }
+.rise-5 { animation-delay: calc(var(--stagger) * 5); } .rise-6 { animation-delay: calc(var(--stagger) * 6); }
+/* Người dùng bật "giảm chuyển động": tắt sạch hiệu ứng, kể cả skeleton và chuyển trang. */
 @media (prefers-reduced-motion: reduce) {
   .rise, .rise-1, .rise-2, .rise-3, .rise-4, .rise-5, .rise-6 { animation: none; }
+  .page-enter > *, .stagger > *, .stagger tbody tr, .skeleton::after { animation: none !important; }
+  *, *::before, *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    animation-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Che nội dung khi in để chỉ in bảng chính (dự phòng) */

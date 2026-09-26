@@ -182,7 +182,7 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
         <div className="grid grid-cols-2 gap-2">
           {SLOT_KEYS.map((slot) => (
             <label key={slot}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-[13.5px] cursor-pointer transition
+              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm cursor-pointer transition
                 ${form.device_slots.includes(slot)
                   ? 'border-brand-400 bg-brand-50 text-brand-800 font-semibold'
                   : 'border-line text-ink-soft'}`}>
@@ -196,7 +196,7 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
       </Field>
 
       {school.is_active === false && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mt-4 text-[13px] text-amber-900">
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mt-4 text-sm text-amber-900">
           Trường này đang <b>ngừng sử dụng</b> — không hiện khi xếp lịch, chấm công hay điểm danh.
           Dữ liệu lịch sử vẫn còn nguyên.
         </div>
@@ -294,7 +294,7 @@ function AddClassSheet({ open, schoolId, onClose, onCreated }) {
       <Field label="Ghi chú">
         <textarea className="input" rows={2} value={form.note} onChange={set('note')} />
       </Field>
-      <div className="flex justify-end gap-2.5 mt-2">
+      <div className="form-actions flex justify-end gap-2.5 mt-2">
         <button className="btn-line" onClick={onClose} disabled={saving}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={saving}>
           {saving ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu lớp'}
@@ -389,9 +389,9 @@ function ClassSheet({ cls, teachers, assistants, canManage, onClose, onSaved }) 
       </Field>
 
       <div className="border-t border-line pt-3.5 mt-1">
-        <div className="font-bold text-[14px] mb-2">Phân công phụ trách</div>
+        <div className="font-bold text-base mb-2">Phân công phụ trách</div>
         {assigns.length === 0 && (
-          <div className="text-[13px] text-ink-muted mb-2">Chưa phân công ai cho lớp này.</div>
+          <div className="text-sm text-ink-muted mb-2">Chưa phân công ai cho lớp này.</div>
         )}
         {assigns.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
@@ -402,7 +402,7 @@ function ClassSheet({ cls, teachers, assistants, canManage, onClose, onSaved }) 
                   : 'bg-brand-50 text-brand-700 ring-brand-200'}`}>
                 {a.full_name} · {LABEL.classRole[a.role] || a.role}
                 {canManage && (
-                  <button type="button" className="ml-0.5 text-[13px] font-bold hover:text-rose-600"
+                  <button type="button" className="ml-0.5 text-sm font-bold hover:text-rose-600"
                     aria-label={`Gỡ ${a.full_name}`}
                     onClick={() => setAssigns((xs) => xs.filter((_, j) => j !== i))}>×</button>
                 )}
@@ -432,7 +432,7 @@ function ClassSheet({ cls, teachers, assistants, canManage, onClose, onSaved }) 
         )}
       </div>
 
-      <div className="flex justify-end gap-2.5 mt-2">
+      <div className="form-actions flex justify-end gap-2.5 mt-2">
         <button className="btn-line" onClick={onClose} disabled={saving}>Đóng</button>
         {canManage && (
           <button className="btn-primary" onClick={save} disabled={saving}>
@@ -487,7 +487,7 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <label className="flex items-center gap-2 text-[13px] text-ink-muted cursor-pointer">
+        <label className="flex items-center gap-2 text-sm text-ink-muted cursor-pointer">
           <span>{fmtNumber(list.length)} lớp</span>
           <span className="text-line">·</span>
           <input type="checkbox" className="accent-brand-600" checked={showOff}
@@ -517,7 +517,7 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
             <thead>
               <tr>
                 <th className="th">Lớp</th>
-                <th className="th">Cấp</th>
+                <th className="th hidden xl:table-cell">Cấp</th>
                 <th className="th">Khối</th>
                 <th className="th">Sĩ số</th>
                 <th className="th">GV / TG phụ trách</th>
@@ -528,16 +528,16 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
               {list.map((c) => (
                 <tr key={c.id} className={`hover:bg-brand-50/40 cursor-pointer${c.is_active === false ? ' opacity-55' : ''}`}
                   onClick={() => setEditing(c)}>
-                  <td className="td font-semibold text-brand-800">
+                  <td data-label="Lớp" className="td font-semibold text-brand-800">
                     {c.name}
                     {c.is_active === false && (
-                      <span className="ml-1.5 text-[11.5px] font-semibold text-amber-700">· đã ngừng</span>
+                      <span className="ml-1.5 text-xs font-semibold text-amber-700">· đã ngừng</span>
                     )}
                   </td>
-                  <td className="td">{LABEL.level[c.level] || c.level || '—'}</td>
-                  <td className="td">{c.grade ?? '—'}</td>
-                  <td className="td">{c.roster_size != null ? fmtNumber(c.roster_size) : '—'}</td>
-                  <td className="td">
+                  <td data-label="Cấp" className="hidden xl:table-cell td">{LABEL.level[c.level] || c.level || '—'}</td>
+                  <td data-label="Khối" className="td">{c.grade ?? '—'}</td>
+                  <td data-label="Sĩ số" className="td">{c.roster_size != null ? fmtNumber(c.roster_size) : '—'}</td>
+                  <td data-label="GV / TG phụ trách" className="td">
                     {(c.teachers || []).length === 0
                       ? <span className="text-ink-muted">Chưa phân công</span>
                       : (
@@ -555,7 +555,7 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
                     <td className="td !px-1 text-center" onClick={(e) => e.stopPropagation()}>
                       {c.is_active === false ? (
                         <button type="button" title="Khôi phục lớp này"
-                          className="h-8 w-8 rounded-lg text-[14px] text-brand-700 hover:bg-brand-50 disabled:opacity-50"
+                          className="h-8 w-8 rounded-lg text-base text-brand-700 hover:bg-brand-50 disabled:opacity-50"
                           disabled={restoring === c.id}
                           onClick={async () => {
                             setRestoring(c.id);
@@ -571,7 +571,7 @@ function ClassesTab({ schoolId, schoolName, canManage }) {
                           }}>↩️</button>
                       ) : (
                         <button type="button" title="Xoá lớp này"
-                          className="h-8 w-8 rounded-lg text-[14px] text-ink-muted hover:bg-rose-50 hover:text-rose-700"
+                          className="h-8 w-8 rounded-lg text-base text-ink-muted hover:bg-rose-50 hover:text-rose-700"
                           onClick={() => setDeleting(c)}>🗑</button>
                       )}
                     </td>
@@ -740,7 +740,7 @@ function RoomsTab({ schoolId, canManage }) {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="text-[13px] text-ink-muted">{fmtNumber(list.length)} phòng</div>
+        <div className="text-sm text-ink-muted">{fmtNumber(list.length)} phòng</div>
         {canManage && (
           <button className="btn-primary !py-2" onClick={() => setAddOpen(true)}>+ Thêm phòng</button>
         )}
@@ -759,9 +759,9 @@ function RoomsTab({ schoolId, canManage }) {
         <div className="grid sm:grid-cols-2 gap-3">
           {list.map((r) => (
             <button key={r.id} type="button" onClick={() => setEditing(r)}
-              className="card w-full text-left p-4 hover:border-brand-300 hover:shadow-card transition">
-              <div className="font-bold text-[14.5px]">🧪 {r.name}</div>
-              {r.note && <div className="text-[13px] text-ink-muted mt-1 truncate">{r.note}</div>}
+              className="card card-hover w-full text-left p-4">
+              <div className="font-bold text-base">🧪 {r.name}</div>
+              {r.note && <div className="text-sm text-ink-muted mt-1 truncate">{r.note}</div>}
             </button>
           ))}
         </div>

@@ -35,7 +35,7 @@ function firstPhotoId(row) {
 function SelfAddedNote({ item }) {
   if (!item?.self_added) return null;
   return (
-    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-[12.5px] text-amber-900">
+    <div className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
       <b>✋ Tiết do giáo viên tự thêm</b>
       {item.added_by_name ? ` — ${item.added_by_name}` : ''}
       {item.self_added_reason ? <div className="mt-0.5">Lý do: {item.self_added_reason}</div> : null}
@@ -92,17 +92,17 @@ function TodayTab() {
 
   return (
     <div className="grid gap-3">
-      <div className="text-[13px] text-ink-muted">{fmtDateLong(today())}</div>
+      <div className="text-sm text-ink-muted">{fmtDateLong(today())}</div>
       {items.map((s) => {
         const done = !!(s.attendance_done ?? s.has_attendance);
         return (
           <div key={s.id} className="card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[12.5px] font-bold text-brand-700">{periodLabel(s)}</div>
-                <div className="font-bold text-[15.5px] truncate">{s.class_name || s.class?.name || 'Lớp học'}</div>
-                <div className="text-[13px] text-ink-muted truncate">{s.school_name || s.school?.name}</div>
-                <div className="text-[13px] text-ink-soft mt-1">
+                <div className="text-sm font-bold text-brand-700">{periodLabel(s)}</div>
+                <div className="font-bold text-lg truncate">{s.class_name || s.class?.name || 'Lớp học'}</div>
+                <div className="text-sm text-ink-muted truncate">{s.school_name || s.school?.name}</div>
+                <div className="text-sm text-ink-soft mt-1">
                   🕒 {fmtRange(s.start_time, s.end_time)}
                   {(s.room_name || s.room?.name) ? <span> · 🚪 {s.room_name || s.room?.name}</span> : null}
                 </div>
@@ -181,17 +181,17 @@ function PendingTab() {
           <div key={sid} className="card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-[12.5px] font-bold text-brand-700">{periodLabel(p)}</div>
-                <div className="font-bold text-[15px] truncate">{p.class_name || p.class?.name || 'Lớp học'}</div>
-                <div className="text-[13px] text-ink-muted truncate">{p.school_name || p.school?.name}</div>
+                <div className="text-sm font-bold text-brand-700">{periodLabel(p)}</div>
+                <div className="font-bold text-lg truncate">{p.class_name || p.class?.name || 'Lớp học'}</div>
+                <div className="text-sm text-ink-muted truncate">{p.school_name || p.school?.name}</div>
               </div>
               <Badge tone="pending">Chưa điểm danh</Badge>
             </div>
-            <div className="text-[13px] text-ink-soft mt-2">
+            <div className="text-sm text-ink-soft mt-2">
               🗓️ {fmtDate(p.session_date || p.date)} · 🕒 {fmtRange(p.start_time, p.end_time)}
             </div>
             {staff && (
-              <div className="text-[13px] text-ink-soft mt-1 truncate">👤 {staff}</div>
+              <div className="text-sm text-ink-soft mt-1 truncate">👤 {staff}</div>
             )}
             <SelfAddedNote item={p} />
             <button
@@ -318,7 +318,7 @@ function HistoryTab({ managerView }) {
       ) : (
         <>
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto table-cards stagger">
               <table className="w-full">
                 <thead>
                   <tr>
@@ -337,18 +337,18 @@ function HistoryTab({ managerView }) {
                     const short = Number.isFinite(present) && Number.isFinite(roster) && present < roster;
                     return (
                       <tr key={r.id}>
-                        <td className="td whitespace-nowrap">{fmtDate(r.date || r.created_at)}</td>
-                        <td className="td">
+                        <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(r.date || r.created_at)}</td>
+                        <td data-label="Lớp" className="td">
                           <div className="font-medium">{r.class_name || r.class?.name || '—'}</div>
-                          <div className="text-[12px] text-ink-muted">{r.school_name || r.school?.name}</div>
+                          <div className="text-xs text-ink-muted">{r.school_name || r.school?.name}</div>
                         </td>
-                        <td className="td whitespace-nowrap">
+                        <td data-label="Sĩ số" className="td whitespace-nowrap">
                           <span className={short ? 'text-amber-700 font-bold' : 'font-semibold'}>
                             {r.present_count ?? '—'}/{r.roster_size ?? '—'}
                           </span>
                         </td>
-                        <td className="td">{r.marked_by_name || r.marked_by?.full_name || '—'}</td>
-                        <td className="td">
+                        <td data-label="Người điểm danh" className="td">{r.marked_by_name || r.marked_by?.full_name || '—'}</td>
+                        <td data-label="Ảnh" className="td">
                           {pid ? (
                             <a href={fileUrl(pid)} target="_blank" rel="noreferrer" title="Mở ảnh đầy đủ">
                               <img

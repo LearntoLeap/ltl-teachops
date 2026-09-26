@@ -16,7 +16,7 @@ import { Field, Sheet, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
 const listOf = (r) => (Array.isArray(r) ? r : r?.items || []);
-const cell = 'input !py-1.5 !px-2 text-[13px]';
+const cell = 'input !py-1.5 !px-2 text-sm';
 let seq = 0;
 const key = () => `k${++seq}`;
 
@@ -41,7 +41,7 @@ function TemplateButton({ path, name }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   return (
-    <button type="button" className="btn-line !py-1.5 !px-3 text-[12.5px] shrink-0" disabled={busy}
+    <button type="button" className="btn-line !py-1.5 !px-3 text-sm shrink-0" disabled={busy}
       onClick={async () => {
         setBusy(true);
         try { await api.download(path, undefined, name); } catch (e) { toast.fromError(e); } finally { setBusy(false); }
@@ -54,7 +54,7 @@ function TemplateButton({ path, name }) {
 function ResultNote({ result }) {
   if (!result?.skipped?.length) return null;
   return (
-    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 mt-3 text-[12.5px] text-amber-900">
+    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2.5 mt-3 text-sm text-amber-900">
       Đã tạo <b>{result.created}</b> · <b>{result.skipped.length}</b> dòng chưa tạo được — lý do ghi ngay
       dưới từng dòng. Sửa rồi bấm gửi lại.
     </div>
@@ -155,7 +155,7 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} wide="xl" title="Nhập danh sách trường dạng bảng">
       <div onPaste={onPaste}>
-        <div className="flex flex-wrap items-start gap-3 rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-[12.5px] text-brand-900">
+        <div className="flex flex-wrap items-start gap-3 rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900">
           <div className="flex-1 min-w-[260px]">
             💡 Điền thẳng vào bảng, hoặc tải tệp mẫu → điền trong Excel → bôi đen các dòng → Copy →
             bấm <b>Ctrl+V</b> vào bảng. Thứ tự cột: <b>Mã · Tên · Địa chỉ · Tỉnh · Toạ độ GPS · Bán kính · Ân hạn · Người liên hệ · SĐT</b>.
@@ -163,8 +163,7 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
           </div>
           <TemplateButton path="/api/schools/batch-template" name="mau-nhap-truong.xlsx" />
         </div>
-
-        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="hidden md:block overflow-x-auto -mx-1 px-1">
           <table className="w-full min-w-[1360px] border-collapse">
             <thead>
               <tr>
@@ -185,7 +184,7 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
               {rows.map((r, i) => (
                 <Fragment key={r.key}>
                   <tr className={r.error ? 'bg-rose-50/60' : ''}>
-                    <td className="td text-center text-ink-muted text-[12px]">{i + 1}</td>
+                    <td className="td text-center text-ink-muted text-xs">{i + 1}</td>
                     <td className="td !p-1"><input className={cell} value={r.code} placeholder="THCS-NT01" onChange={(e) => setCell(r.key, 'code', e.target.value)} /></td>
                     <td className="td !p-1"><input className={cell} value={r.name} placeholder="THCS Nguyễn Trãi" onChange={(e) => setCell(r.key, 'name', e.target.value)} /></td>
                     <td className="td !p-1"><input className={cell} value={r.address} onChange={(e) => setCell(r.key, 'address', e.target.value)} /></td>
@@ -203,7 +202,7 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
                   {r.error && (
                     <tr className="bg-rose-50/60">
                       <td />
-                      <td colSpan={10} className="px-2 pb-1.5 text-[12px] text-rose-700">❌ {r.error}</td>
+                      <td colSpan={10} className="px-2 pb-1.5 text-xs text-rose-700">❌ {r.error}</td>
                     </tr>
                   )}
                 </Fragment>
@@ -212,13 +211,67 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
           </table>
         </div>
 
+        {/* Điện thoại: mỗi trường một thẻ, các ô xếp dọc — cùng state với bảng ở trên. */}
+        <div className="md:hidden grid gap-3">
+          {rows.map((r, i) => (
+            <div key={r.key} className={`card p-3.5 ${r.error ? '!border-rose-300 bg-rose-50/50' : ''}`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold uppercase tracking-wide text-ink-muted">Trường {i + 1}</span>
+                <button type="button" title="Xoá dòng" aria-label="Xoá dòng"
+                  className="icon-btn text-rose-600 hover:bg-rose-50"
+                  onClick={() => setRows((rs) => (rs.length === 1 ? [emptySchool()] : rs.filter((x) => x.key !== r.key)))}>✕</button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Mã trường" required>
+                  <input className="input" value={r.code} placeholder="THCS-NT01"
+                    onChange={(e) => setCell(r.key, 'code', e.target.value)} />
+                </Field>
+                <Field label="Tỉnh / TP">
+                  <input className="input" value={r.province} onChange={(e) => setCell(r.key, 'province', e.target.value)} />
+                </Field>
+              </div>
+              <Field label="Tên trường" required>
+                <input className="input" value={r.name} placeholder="THCS Nguyễn Trãi"
+                  onChange={(e) => setCell(r.key, 'name', e.target.value)} />
+              </Field>
+              <Field label="Địa chỉ">
+                <input className="input" value={r.address} onChange={(e) => setCell(r.key, 'address', e.target.value)} />
+              </Field>
+              <Field label="Toạ độ GPS" hint="Dán nguyên dạng Google Maps: 21.1861, 106.0763">
+                <input className="input" value={r.gps} placeholder="21.1861, 106.0763"
+                  onChange={(e) => setCell(r.key, 'gps', e.target.value)} />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Bán kính (m)">
+                  <input className="input" inputMode="numeric" value={r.gps_radius_m} placeholder="1000"
+                    onChange={(e) => setCell(r.key, 'gps_radius_m', e.target.value)} />
+                </Field>
+                <Field label="Ân hạn (phút)">
+                  <input className="input" inputMode="numeric" value={r.grace_minutes} placeholder="10"
+                    onChange={(e) => setCell(r.key, 'grace_minutes', e.target.value)} />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Người liên hệ">
+                  <input className="input" value={r.contact_name} onChange={(e) => setCell(r.key, 'contact_name', e.target.value)} />
+                </Field>
+                <Field label="SĐT">
+                  <input className="input" value={r.contact_phone} onChange={(e) => setCell(r.key, 'contact_phone', e.target.value)} />
+                </Field>
+              </div>
+              {r.error && <div className="text-xs text-rose-700">❌ {r.error}</div>}
+            </div>
+          ))}
+        </div>
+
         <div className="flex items-center gap-2 mt-3">
           <button type="button" className="btn-line !py-2" onClick={() => setRows((rs) => [...rs, emptySchool()])}>+ Thêm dòng</button>
-          <span className="text-[12.5px] text-ink-muted"><b>{ready.length}</b>/{filled.length} dòng đủ Mã và Tên</span>
+          <span className="text-sm text-ink-muted"><b>{ready.length}</b>/{filled.length} dòng đủ Mã và Tên</span>
         </div>
         <ResultNote result={result} />
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Đóng</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={busy || !filled.length}>
             {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : `Tạo ${filled.length} trường`}
@@ -357,7 +410,7 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
     <Sheet open={open} onClose={busy ? undefined : onClose} wide="xl"
       title={fixedSchool ? `Nhập lớp dạng bảng — ${fixedSchool.name}` : 'Nhập danh sách lớp dạng bảng'}>
       <div onPaste={onPaste}>
-        <div className="flex flex-wrap items-start gap-3 rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-[12.5px] text-brand-900">
+        <div className="flex flex-wrap items-start gap-3 rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900">
           <div className="flex-1 min-w-[260px]">
             💡 Điền thẳng vào bảng, hoặc tải tệp mẫu → điền → Copy → <b>Ctrl+V</b> vào bảng. Thứ tự cột:
             <b> Trường · Tên lớp · Khối · Cấp học · Sĩ số · Giáo viên · Trợ giảng · Ghi chú</b>
@@ -377,11 +430,11 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
         )}
 
         {loadingRes ? (
-          <div className="flex items-center gap-2 text-[13px] text-ink-muted py-3">
+          <div className="flex items-center gap-2 text-sm text-ink-muted py-3">
             <Spinner className="h-4 w-4" /> Đang tải danh sách trường và giáo viên…
           </div>
         ) : (
-          <div className="overflow-x-auto -mx-1 px-1">
+          <div className="hidden md:block overflow-x-auto -mx-1 px-1">
             <table className="w-full min-w-[1150px] border-collapse">
               <thead>
                 <tr>
@@ -404,7 +457,7 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
                   return (
                     <Fragment key={r.key}>
                       <tr className={r.error ? 'bg-rose-50/60' : p ? 'bg-amber-50/40' : ''}>
-                        <td className="td text-center text-ink-muted text-[12px]">{i + 1}</td>
+                        <td className="td text-center text-ink-muted text-xs">{i + 1}</td>
                         {!fixedSchool && (
                           <td className="td !p-1">
                             <select className={`${cell} ${!r.school_id && r.school_text ? unmatched : ''}`}
@@ -454,7 +507,7 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
                       {(r.error || p) && (
                         <tr className={r.error ? 'bg-rose-50/60' : 'bg-amber-50/40'}>
                           <td />
-                          <td colSpan={cols - 1} className={`px-2 pb-1.5 text-[12px] ${r.error ? 'text-rose-700' : 'text-amber-800'}`}>
+                          <td colSpan={cols - 1} className={`px-2 pb-1.5 text-xs ${r.error ? 'text-rose-700' : 'text-amber-800'}`}>
                             {r.error ? `❌ ${r.error}` : `⚠ ${p}`}
                           </td>
                         </tr>
@@ -467,14 +520,89 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
           </div>
         )}
 
+        {/* Điện thoại: mỗi lớp một thẻ — cùng state với bảng ở trên. */}
+        <div className="md:hidden grid gap-3">
+          {rows.map((r, i) => {
+            const p = r.name.trim() ? problem(r) : null;
+            return (
+              <div key={r.key} className={`card p-3.5 ${r.error ? '!border-rose-300 bg-rose-50/50' : p ? '!border-amber-300 bg-amber-50/40' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wide text-ink-muted">Lớp {i + 1}</span>
+                  <button type="button" title="Xoá dòng" aria-label="Xoá dòng"
+                    className="icon-btn text-rose-600 hover:bg-rose-50"
+                    onClick={() => setRows((rs) => (rs.length === 1
+                      ? [emptyClass(fixedSchool?.id || defaultSchool)]
+                      : rs.filter((x) => x.key !== r.key)))}>✕</button>
+                </div>
+
+                {!fixedSchool && (
+                  <Field label="Trường" required>
+                    <select className="input" value={r.school_id}
+                      onChange={(e) => setCell(r.key, 'school_id', e.target.value)}>
+                      <option value="">{r.school_text ? `? ${r.school_text}` : '— Chọn trường —'}</option>
+                      {schools.map((sc) => <option key={sc.id} value={sc.id}>{sc.code} — {sc.name}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Tên lớp" required>
+                    <input className="input" value={r.name} placeholder="6A1"
+                      onChange={(e) => setCell(r.key, 'name', e.target.value)} />
+                  </Field>
+                  <Field label="Sĩ số">
+                    <input className="input" inputMode="numeric" value={r.roster_size} placeholder="0"
+                      onChange={(e) => setCell(r.key, 'roster_size', e.target.value)} />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Khối">
+                    <select className="input" value={r.grade} onChange={(e) => setCell(r.key, 'grade', e.target.value)}>
+                      <option value="">—</option>
+                      {Array.from({ length: 12 }, (_, k) => k + 1).map((g) => <option key={g} value={g}>Khối {g}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Cấp học">
+                    <select className="input" value={r.level} onChange={(e) => setCell(r.key, 'level', e.target.value)}>
+                      <option value="">{r.grade ? `(tự) ${LABEL.level[levelOfGrade(Number(r.grade))]}` : '—'}</option>
+                      {Object.entries(LABEL.level).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <Field label="Giáo viên phụ trách">
+                  <select className="input" value={r.teacher_id}
+                    onChange={(e) => setCell(r.key, 'teacher_id', e.target.value)}>
+                    <option value="">{r.teacher_text && !r.teacher_id ? `? ${r.teacher_text}` : '— Chưa chọn —'}</option>
+                    {teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Trợ giảng phụ trách">
+                  <select className="input" value={r.assistant_id}
+                    onChange={(e) => setCell(r.key, 'assistant_id', e.target.value)}>
+                    <option value="">{r.assistant_text && !r.assistant_id ? `? ${r.assistant_text}` : '— Chưa chọn —'}</option>
+                    {assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Ghi chú">
+                  <input className="input" value={r.note} onChange={(e) => setCell(r.key, 'note', e.target.value)} />
+                </Field>
+                {(r.error || p) && (
+                  <div className={`text-xs ${r.error ? 'text-rose-700' : 'text-amber-800'}`}>
+                    {r.error ? `❌ ${r.error}` : `⚠ ${p}`}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
         <div className="flex items-center gap-2 mt-3">
           <button type="button" className="btn-line !py-2"
             onClick={() => setRows((rs) => [...rs, emptyClass(fixedSchool?.id || defaultSchool)])}>+ Thêm dòng</button>
-          <span className="text-[12.5px] text-ink-muted"><b>{ready.length}</b>/{filled.length} dòng sẵn sàng</span>
+          <span className="text-sm text-ink-muted"><b>{ready.length}</b>/{filled.length} dòng sẵn sàng</span>
         </div>
         <ResultNote result={result} />
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Đóng</button>
           <button type="button" className="btn-primary" onClick={submit} disabled={busy || !ready.length}>
             {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : `Tạo ${ready.length} lớp`}

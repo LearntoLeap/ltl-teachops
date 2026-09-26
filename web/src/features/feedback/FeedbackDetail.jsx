@@ -23,23 +23,23 @@ function ReplyRow({ r }) {
   return (
     <div>
       {r.status_to && (
-        <div className="flex items-center justify-center gap-1.5 text-[12px] text-ink-muted mb-1.5">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-ink-muted mb-1.5">
           <span>⚙️ Chuyển trạng thái →</span>
           <Badge tone={r.status_to}>{LABEL.issue[r.status_to] || r.status_to}</Badge>
         </div>
       )}
       {r.body && (
         <div className="flex gap-2.5">
-          <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-[13px] font-bold">
+          <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-sm font-bold">
             {initials(name)}
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="font-semibold text-[13.5px]">{name}</span>
-              {role && <span className="text-[11.5px] text-brand-700 font-medium">{LABEL.role[role] || role}</span>}
-              <span className="text-[11.5px] text-ink-muted">{fmtAgo(r.created_at)}</span>
+              <span className="font-semibold text-sm">{name}</span>
+              {role && <span className="text-xs text-brand-700 font-medium">{LABEL.role[role] || role}</span>}
+              <span className="text-xs text-ink-muted">{fmtAgo(r.created_at)}</span>
             </div>
-            <div className="text-[14px] text-ink-soft whitespace-pre-wrap mt-0.5">{r.body}</div>
+            <div className="text-base text-ink-soft whitespace-pre-wrap mt-0.5">{r.body}</div>
           </div>
         </div>
       )}
@@ -118,7 +118,7 @@ export default function FeedbackDetail() {
   if (error && !fb) {
     return (
       <div className="max-w-2xl mx-auto">
-        <Link to="/gop-y" className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-700 mb-3">
+        <Link to="/gop-y" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 mb-3">
           ‹ Danh sách góp ý
         </Link>
         <ErrorBox error={error} onRetry={() => { setLoading(true); load(); }} />
@@ -139,7 +139,7 @@ export default function FeedbackDetail() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <Link to="/gop-y" className="inline-flex items-center gap-1 text-[13px] font-semibold text-brand-700 mb-3">
+      <Link to="/gop-y" className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700 mb-3">
         ‹ Danh sách góp ý
       </Link>
 
@@ -148,7 +148,7 @@ export default function FeedbackDetail() {
       {/* ------------------------------ Nội dung góp ý --------------------------- */}
       <div className="card p-4">
         <div className="flex items-start justify-between gap-2.5">
-          <h1 className="font-bold text-[17px] leading-snug">{fb.title}</h1>
+          <h1 className="font-bold text-xl leading-snug">{fb.title}</h1>
           <Badge tone={fb.status} className="shrink-0">{LABEL.issue[fb.status] || fb.status}</Badge>
         </div>
         <div className="flex flex-wrap gap-1.5 mt-2">
@@ -157,7 +157,7 @@ export default function FeedbackDetail() {
         </div>
 
         {content && (
-          <p className="text-[14.5px] text-ink-soft whitespace-pre-wrap mt-3">{content}</p>
+          <p className="text-base text-ink-soft whitespace-pre-wrap mt-3">{content}</p>
         )}
 
         {photos.length > 0 && (
@@ -180,7 +180,7 @@ export default function FeedbackDetail() {
           </div>
         )}
 
-        <div className="mt-3 pt-3 border-t border-line text-[12.5px] text-ink-muted flex flex-col gap-1">
+        <div className="mt-3 pt-3 border-t border-line text-sm text-ink-muted flex flex-col gap-1">
           {school && (
             <span>🏫 {school}{klass ? ` · Lớp ${klass}` : ''}{room ? ` · Phòng ${room}` : ''}</span>
           )}
@@ -197,9 +197,9 @@ export default function FeedbackDetail() {
 
       {/* ------------------------------ Luồng trao đổi --------------------------- */}
       <div className="mt-5">
-        <div className="font-bold text-[14px] text-brand-900 mb-3">Trao đổi ({replies.length})</div>
+        <div className="font-bold text-base text-brand-900 mb-3">Trao đổi ({replies.length})</div>
         {replies.length === 0 && (
-          <div className="text-[13px] text-ink-muted text-center py-4">Chưa có trả lời nào.</div>
+          <div className="text-sm text-ink-muted text-center py-4">Chưa có trả lời nào.</div>
         )}
         <div className="flex flex-col gap-4">
           {replies.map((r, i) => <ReplyRow key={r.id || i} r={r} />)}

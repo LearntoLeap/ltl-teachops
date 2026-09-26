@@ -51,18 +51,18 @@ export default function DeleteMaterialSheet({ open, onClose, items = [], canHard
     <Sheet open={open} onClose={busy ? undefined : onClose}
       title={many ? `Xoá ${items.length} tài liệu?` : 'Xoá tài liệu?'}>
       {!many && items[0] && (
-        <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3 text-[13.5px] font-semibold text-ink">
+        <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3 text-sm font-semibold text-ink">
           {items[0].title}
         </div>
       )}
       {many && (
-        <ul className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3 text-[13px] text-ink-soft max-h-40 overflow-y-auto">
+        <ul className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3 text-sm text-ink-soft max-h-40 overflow-y-auto">
           {items.slice(0, 8).map((it) => <li key={it.id} className="truncate">• {it.title}</li>)}
           {items.length > 8 && <li className="text-ink-muted">… và {items.length - 8} tài liệu khác</li>}
         </ul>
       )}
 
-      <p className="text-[13.5px] text-ink-soft mb-3">
+      <p className="text-sm text-ink-soft mb-3">
         {hard
           ? 'Tài liệu và tệp đính kèm sẽ bị xoá khỏi máy chủ; bản trên Google Drive được đưa vào thùng rác (Drive giữ khoảng 30 ngày).'
           : 'Tài liệu được gỡ khỏi kho — không ai thấy nữa nhưng tệp vẫn còn, nhờ Quản trị viên khôi phục được nếu bấm nhầm.'}
@@ -70,9 +70,9 @@ export default function DeleteMaterialSheet({ open, onClose, items = [], canHard
 
       {canHardDelete && (
         <label className="flex items-start gap-2.5 mb-4 cursor-pointer rounded-xl border border-line px-3.5 py-2.5">
-          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-[#8A3F97]" checked={hard} disabled={busy}
+          <input type="checkbox" className="mt-0.5 h-4 w-4 accent-accent-600" checked={hard} disabled={busy}
             onChange={(e) => setHard(e.target.checked)} />
-          <span className="text-[13px]">
+          <span className="text-sm">
             <b className="text-rose-700">Xoá hẳn cả tệp</b> — dùng khi đăng nhầm và muốn giải phóng
             dung lượng máy chủ ngay.
           </span>

@@ -60,22 +60,22 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} title={`Xoá ${noun} "${item.name}"`}>
       {failed && (
-        <p className="text-[13.5px] text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5 mb-3.5">
+        <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5 mb-3.5">
           Không đọc được dữ liệu liên quan. Vẫn ngừng sử dụng được, nhưng chưa xoá hẳn được lúc này.
         </p>
       )}
       {!impact && !failed && (
-        <div className="flex items-center gap-2 text-[13.5px] text-ink-muted mb-3.5">
+        <div className="flex items-center gap-2 text-sm text-ink-muted mb-3.5">
           <Spinner className="h-4 w-4" /> Đang kiểm tra dữ liệu liên quan…
         </div>
       )}
 
       {impact && impact.blockers.length > 0 && (
         <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mb-3.5">
-          <div className="text-[13.5px] font-semibold text-amber-900 mb-0.5">
+          <div className="text-sm font-semibold text-amber-900 mb-0.5">
             {noun === 'trường' ? 'Trường' : 'Lớp'} này đã đi vào vận hành
           </div>
-          <div className="text-[13px] text-amber-800">
+          <div className="text-sm text-amber-800">
             Đang có {lines(impact.blockers)}. Xoá hẳn sẽ mất sạch phần lịch sử đó, nên chỉ ngừng sử dụng được.
           </div>
         </div>
@@ -83,13 +83,13 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
 
       {impact && canHard && impact.cleanup.length > 0 && (
         <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5">
-          <div className="text-[13px] text-ink-soft">
+          <div className="text-sm text-ink-soft">
             Xoá hẳn sẽ xoá cùng: <b>{lines(impact.cleanup)}</b>.
           </div>
         </div>
       )}
       {impact && canHard && impact.unlinked?.length > 0 && (
-        <div className="text-[12.5px] text-ink-muted mb-3.5">
+        <div className="text-sm text-ink-muted mb-3.5">
           Giữ lại nhưng bỏ liên kết: {lines(impact.unlinked)}.
         </div>
       )}
@@ -98,10 +98,10 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
         <button className="btn-line !justify-start text-left !py-3" disabled={!!busy}
           onClick={() => run(false)}>
           <span className="grid gap-0.5">
-            <span className="font-semibold text-[14px]">
+            <span className="font-semibold text-base">
               {busy === 'soft' ? 'Đang xử lý…' : '🚫 Ngừng sử dụng'}
             </span>
-            <span className="text-[12.5px] text-ink-muted font-normal">
+            <span className="text-sm text-ink-muted font-normal">
               Ẩn khỏi xếp lịch, chấm công, điểm danh. Giữ nguyên lịch sử, bật lại được.
             </span>
           </span>
@@ -111,10 +111,10 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
           disabled={!!busy || !canHard}
           onClick={() => run(true)}>
           <span className="grid gap-0.5">
-            <span className="font-semibold text-[14px]">
+            <span className="font-semibold text-base">
               {busy === 'hard' ? 'Đang xoá…' : '🗑 Xoá hẳn'}
             </span>
-            <span className="text-[12.5px] font-normal opacity-90">
+            <span className="text-sm font-normal opacity-90">
               {canHard
                 ? `Dùng khi nhập sai. Xoá khỏi cơ sở dữ liệu, không lấy lại được.`
                 : 'Không dùng được vì đã có dữ liệu vận hành.'}

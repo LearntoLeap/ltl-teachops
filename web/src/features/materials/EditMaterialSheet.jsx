@@ -100,7 +100,7 @@ export default function EditMaterialSheet({ open, material, types, solutions, on
             {(types || []).map((t) => (
               <button key={t.id} type="button"
                 onClick={() => set('type_id', f.type_id === t.id ? '' : t.id)}
-                className={`rounded-full px-3 py-1.5 text-[12.5px] font-semibold ring-1 ring-inset transition
+                className={`rounded-full px-3 py-1.5 text-sm font-semibold ring-1 ring-inset transition
                   ${f.type_id === t.id
                     ? 'bg-brand-grad text-white ring-transparent'
                     : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
@@ -167,11 +167,11 @@ export default function EditMaterialSheet({ open, material, types, solutions, on
             placeholder="Hướng dẫn, ghi chú chuyên môn, kịch bản dạy…" />
         </Field>
 
-        <p className="text-[12.5px] text-ink-muted mt-1">
+        <p className="text-sm text-ink-muted mt-1">
           Muốn thay <b>tệp đính kèm</b>: mở trang chi tiết → <b>+ Phiên bản mới</b> (giữ lại bản cũ trong lịch sử).
         </p>
 
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <><Spinner className="h-4 w-4 border-white/40 border-t-white" /> Đang lưu…</> : 'Lưu thay đổi'}

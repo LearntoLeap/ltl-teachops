@@ -79,7 +79,7 @@ function VersionSheet({ open, onClose, materialId, onDone }) {
           <textarea className="input" rows={3} value={note} onChange={(e) => setNote(e.target.value)}
             placeholder="Ví dụ: Cập nhật slide 12–15 theo góp ý của Phòng chuyên môn." />
         </Field>
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
           <button type="submit" className="btn-primary" disabled={busy}>
             {busy ? <><Spinner className="h-4 w-4 border-white/40 border-t-white" /> Đang tải lên…</> : 'Đăng phiên bản'}
@@ -200,7 +200,7 @@ export default function MaterialDetail() {
     <div className="grid gap-3.5">
       {/* ------------------------------ Đầu trang ------------------------------ */}
       <div>
-        <Link to="/hoc-lieu" className="text-[13px] text-brand-700 font-semibold">‹ Kho học liệu</Link>
+        <Link to="/hoc-lieu" className="text-sm text-brand-700 font-semibold">‹ Kho học liệu</Link>
         <div className="card p-4 mt-2">
           <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
             {mat.type_name && <Badge tone="neutral">{mat.type_icon} {mat.type_name}</Badge>}
@@ -213,21 +213,21 @@ export default function MaterialDetail() {
             {mat.subject && <Badge tone="low">{mat.subject}</Badge>}
           </div>
           <h1 className="text-lg font-bold text-ink leading-snug">{mat.title}</h1>
-          <div className="text-[13px] text-ink-muted mt-1">
+          <div className="text-sm text-ink-muted mt-1">
             {ownerName && <>Đăng bởi <span className="font-semibold text-ink-soft">{ownerName}</span></>}
             {(mat.updated_at || mat.created_at) && <> · {fmtAgo(mat.updated_at || mat.created_at)}</>}
           </div>
           {(mat.lesson_no || mat.lesson_title || mat.curriculum) && (
-            <div className="mt-2.5 rounded-xl bg-brand-50/70 border border-brand-100 px-3.5 py-2.5 text-[13.5px] font-medium text-brand-900">
+            <div className="mt-2.5 rounded-xl bg-brand-50/70 border border-brand-100 px-3.5 py-2.5 text-sm font-medium text-brand-900">
               📖 {[mat.lesson_no ? `Tiết ${mat.lesson_no}` : null, mat.lesson_title, mat.curriculum]
                 .filter(Boolean).join(' — ')}
             </div>
           )}
           {mat.description && (
-            <p className="text-[14px] text-ink-soft mt-2.5 whitespace-pre-line">{mat.description}</p>
+            <p className="text-base text-ink-soft mt-2.5 whitespace-pre-line">{mat.description}</p>
           )}
           {mat.body && (
-            <div className="mt-3 rounded-xl border border-line bg-canvas/60 px-4 py-3.5 text-[14px] leading-relaxed whitespace-pre-line">
+            <div className="mt-3 rounded-xl border border-line bg-canvas/60 px-4 py-3.5 text-base leading-relaxed whitespace-pre-line">
               {mat.body}
             </div>
           )}
@@ -243,7 +243,7 @@ export default function MaterialDetail() {
                   ? <><Spinner className="h-4 w-4 border-white/40 border-t-white" /> Đang tải…</>
                   : <>⬇️ Tải về bản mới nhất</>}
               </button>
-              <span className="text-[12.5px] text-ink-muted truncate max-w-[240px]">
+              <span className="text-sm text-ink-muted truncate max-w-[240px]">
                 v{verNo(latest, versions.length)} · {latest.file_name} {fmtSize(latest.size_bytes) && `· ${fmtSize(latest.size_bytes)}`}
               </span>
               </>
@@ -265,7 +265,7 @@ export default function MaterialDetail() {
       {/* --------------------------- Thanh duyệt tài liệu ----------------------- */}
       {canApprove && (
         <div className="card border-amber-200 bg-amber-50/70 p-4">
-          <div className="text-[13.5px] font-semibold text-amber-800 mb-2.5">
+          <div className="text-sm font-semibold text-amber-800 mb-2.5">
             Tài liệu giáo viên đang chờ Phòng chuyên môn duyệt.
           </div>
           <div className="flex gap-2.5">
@@ -282,15 +282,15 @@ export default function MaterialDetail() {
       {/* --------------------------- Lịch sử phiên bản ------------------------- */}
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between px-4 pt-3.5 pb-2">
-          <div className="font-bold text-[15px]">Lịch sử phiên bản</div>
+          <div className="font-bold text-lg">Lịch sử phiên bản</div>
           {canAddVersion && (
             <button className="btn-line !py-1.5 !px-3" onClick={() => setVerOpen(true)}>+ Phiên bản mới</button>
           )}
         </div>
         {versions.length === 0 ? (
-          <div className="px-4 pb-4 text-[13px] text-ink-muted">Chưa có phiên bản nào.</div>
+          <div className="px-4 pb-4 text-sm text-ink-muted">Chưa có phiên bản nào.</div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto table-cards stagger">
             <table className="w-full min-w-[640px]">
               <thead>
                 <tr>
@@ -308,15 +308,15 @@ export default function MaterialDetail() {
                   const fileId = v.file_id || v.file?.id;
                   return (
                     <tr key={v.id || fileId || i}>
-                      <td className="td font-bold text-brand-800">v{verNo(v, versions.length - i)}</td>
-                      <td className="td max-w-[220px] truncate">{v.file_name}</td>
-                      <td className="td whitespace-nowrap">{fmtSize(v.size_bytes)}</td>
-                      <td className="td whitespace-nowrap">{v.uploaded_by_name || v.created_by_name || v.uploader?.full_name || ''}</td>
-                      <td className="td whitespace-nowrap">{fmtDateTime(v.created_at || v.uploaded_at)}</td>
-                      <td className="td text-ink-muted max-w-[240px]">{v.change_note || '—'}</td>
+                      <td data-label="Bản" className="td font-bold text-brand-800">v{verNo(v, versions.length - i)}</td>
+                      <td data-label="Tệp" className="td max-w-[220px] truncate">{v.file_name}</td>
+                      <td data-label="Dung lượng" className="td whitespace-nowrap">{fmtSize(v.size_bytes)}</td>
+                      <td data-label="Người đăng" className="td whitespace-nowrap">{v.uploaded_by_name || v.created_by_name || v.uploader?.full_name || ''}</td>
+                      <td data-label="Thời gian" className="td whitespace-nowrap">{fmtDateTime(v.created_at || v.uploaded_at)}</td>
+                      <td data-label="Ghi chú thay đổi" className="td text-ink-muted max-w-[240px]">{v.change_note || '—'}</td>
                       <td className="td">
                         <button
-                          className="btn-line !px-2.5 !py-1 text-[12.5px]"
+                          className="btn-line !px-2.5 !py-1 text-sm"
                           disabled={downloadingId === fileId}
                           onClick={() => downloadVersion(v)}>
                           {downloadingId === fileId ? <Spinner className="h-3.5 w-3.5" /> : '⬇️ Tải'}
@@ -333,12 +333,12 @@ export default function MaterialDetail() {
 
       {/* -------------------------------- Bình luận ----------------------------- */}
       <div className="card p-4">
-        <div className="font-bold text-[15px] mb-3">
+        <div className="font-bold text-lg mb-3">
           Góp ý & trao đổi {comments.length > 0 && <span className="text-ink-muted font-semibold">({comments.length})</span>}
         </div>
 
         {comments.length === 0 ? (
-          <div className="text-[13px] text-ink-muted mb-3">
+          <div className="text-sm text-ink-muted mb-3">
             Chưa có góp ý nào. Hãy là người đầu tiên trao đổi về tài liệu này.
           </div>
         ) : (
@@ -348,16 +348,16 @@ export default function MaterialDetail() {
               const role = c.role || c.user_role || c.author?.role;
               return (
                 <div key={c.id || i} className="flex gap-2.5">
-                  <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-[13px] font-bold">
+                  <span className="h-8 w-8 shrink-0 rounded-full bg-brand-grad-soft text-white grid place-items-center text-sm font-bold">
                     {initials(name)}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap text-[13px]">
+                    <div className="flex items-center gap-1.5 flex-wrap text-sm">
                       <span className="font-semibold text-ink">{name}</span>
-                      {role && <Badge tone="neutral" className="!text-[11px]">{LABEL.role[role] || role}</Badge>}
-                      <span className="text-ink-muted text-[12px]">{fmtAgo(c.created_at)}</span>
+                      {role && <Badge tone="neutral" className="!text-xs">{LABEL.role[role] || role}</Badge>}
+                      <span className="text-ink-muted text-xs">{fmtAgo(c.created_at)}</span>
                     </div>
-                    <div className="text-[14px] text-ink-soft mt-0.5 whitespace-pre-line">{c.body || c.content}</div>
+                    <div className="text-base text-ink-soft mt-0.5 whitespace-pre-line">{c.body || c.content}</div>
                   </div>
                 </div>
               );
@@ -412,7 +412,7 @@ export default function MaterialDetail() {
           <textarea className="input" rows={3} value={rejectNote} onChange={(e) => setRejectNote(e.target.value)}
             placeholder="Ví dụ: Nội dung slide 8 chưa khớp giáo trình, vui lòng cập nhật." />
         </Field>
-        <div className="flex gap-2.5 justify-end mt-4">
+        <div className="form-actions flex gap-2.5 justify-end mt-4">
           <button className="btn-line" onClick={() => setRejectOpen(false)} disabled={!!deciding}>Huỷ</button>
           <button
             className="btn-danger"

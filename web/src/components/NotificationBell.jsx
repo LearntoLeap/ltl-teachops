@@ -83,7 +83,7 @@ export default function NotificationBell() {
         aria-label="Thông báo">
         🔔
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10.5px] font-bold grid place-items-center">
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-xs font-bold grid place-items-center">
             {unread > 99 ? '99+' : unread}
           </span>
         )}
@@ -97,7 +97,7 @@ export default function NotificationBell() {
         ) : (
           <>
             {unread > 0 && (
-              <button className="btn-ghost !py-1.5 mb-2 text-[13px]" onClick={readAll}>
+              <button className="btn-ghost !py-1.5 mb-2 text-sm" onClick={readAll}>
                 Đánh dấu tất cả đã đọc
               </button>
             )}
@@ -110,11 +110,11 @@ export default function NotificationBell() {
                     ${!n.read_at ? 'bg-brand-50/40' : ''}`}>
                   <span className="text-xl shrink-0">{KIND_ICON[n.kind] || '🔔'}</span>
                   <span className="min-w-0 flex-1">
-                    <span className={`block text-[14px] ${!n.read_at ? 'font-semibold' : 'font-medium text-ink-soft'}`}>
+                    <span className={`block text-base ${!n.read_at ? 'font-semibold' : 'font-medium text-ink-soft'}`}>
                       {n.title}
                     </span>
-                    {n.body && <span className="block text-[12.5px] text-ink-muted mt-0.5 line-clamp-2">{n.body}</span>}
-                    <span className="block text-[11.5px] text-ink-muted mt-1">{fmtAgo(n.created_at)}</span>
+                    {n.body && <span className="block text-sm text-ink-muted mt-0.5 line-clamp-2">{n.body}</span>}
+                    <span className="block text-xs text-ink-muted mt-1">{fmtAgo(n.created_at)}</span>
                   </span>
                   {!n.read_at && <span className="h-2 w-2 rounded-full bg-brand-500 mt-2 shrink-0" />}
                 </button>

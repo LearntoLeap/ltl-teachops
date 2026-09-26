@@ -57,7 +57,7 @@ export default function ChangePassword({ forced = false }) {
           value={pw2} onChange={(e) => setPw2(e.target.value)} />
       </Field>
       {error && (
-        <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+        <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
           ⚠ {error}
         </div>
       )}

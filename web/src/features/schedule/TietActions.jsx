@@ -82,14 +82,14 @@ function StatusSheet({ open, tiet, onClose, onDone }) {
             <button key={o.value} type="button" onClick={() => setChoice(o.value)}
               className={`text-left rounded-lg border px-3.5 py-2.5 transition-colors duration-150
                 ${on ? o.tone : 'border-line bg-white hover:bg-zinc-50'}`}>
-              <div className="flex items-center gap-2 font-semibold text-[14px]">
+              <div className="flex items-center gap-2 font-semibold text-base">
                 <span className={`h-4 w-4 rounded-full border-2 grid place-items-center
                   ${on ? 'border-brand-600' : 'border-zinc-300'}`}>
                   {on && <span className="h-2 w-2 rounded-full bg-brand-600" />}
                 </span>
                 <span>{o.icon} {o.label}</span>
               </div>
-              <div className="text-[12.5px] text-ink-muted mt-0.5 pl-6">{o.hint}</div>
+              <div className="text-sm text-ink-muted mt-0.5 pl-6">{o.hint}</div>
             </button>
           );
         })}
@@ -102,7 +102,7 @@ function StatusSheet({ open, tiet, onClose, onDone }) {
             : 'VD: Nhập trùng tiết'} />
       </Field>
 
-      <div className="flex gap-2.5 justify-end mt-4">
+      <div className="form-actions flex gap-2.5 justify-end mt-4">
         <button className="btn-line" onClick={onClose} disabled={busy}>Đóng</button>
         <button className={choice === 'delete' ? 'btn-danger' : 'btn-primary'} onClick={submit} disabled={busy}>
           {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : `${picked.icon} ${picked.label}`}
@@ -146,7 +146,7 @@ function AssistantPicker({ tiet, onDone }) {
 
   return (
     <div className="rounded-lg border border-line bg-zinc-50/60 px-3 py-2.5 mb-3">
-      <div className="text-[12.5px] font-semibold text-ink-soft mb-1.5">
+      <div className="text-sm font-semibold text-ink-soft mb-1.5">
         👥 Trợ giảng check-in &amp; điểm danh tiết này
       </div>
       <div className="flex gap-2">
@@ -168,7 +168,7 @@ function AssistantPicker({ tiet, onDone }) {
           {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Giao'}
         </button>
       </div>
-      <div className="text-[11.5px] text-ink-muted mt-1">
+      <div className="text-xs text-ink-muted mt-1">
         Người được giao sẽ nhận thông báo và thấy tiết này ở mục Điểm danh.
       </div>
     </div>
@@ -200,7 +200,7 @@ export default function TietActions({ tiet, canManage, isOwnTeacher, onChanged, 
   return (
     <>
       {closed && tiet.status_reason && (
-        <div className={`rounded-lg border px-3 py-2 mb-3 text-[13px]
+        <div className={`rounded-lg border px-3 py-2 mb-3 text-sm
           ${tiet.status === 'cancelled' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-orange-200 bg-orange-50 text-orange-900'}`}>
           <b>{tiet.status === 'cancelled' ? '🚫 Huỷ lịch' : '⏭️ Đã bỏ'}</b> — {tiet.status_reason}
         </div>

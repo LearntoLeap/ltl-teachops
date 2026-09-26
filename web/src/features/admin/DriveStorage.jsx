@@ -32,11 +32,11 @@ function Stat({ icon, label, value, sub, tone = 'brand' }) {
   };
   return (
     <div className="card p-3.5 flex gap-3 items-start">
-      <span className={`h-10 w-10 shrink-0 rounded-xl grid place-items-center text-[19px] ${tones[tone]}`}>{icon}</span>
+      <span className={`h-10 w-10 shrink-0 rounded-xl grid place-items-center text-xl ${tones[tone]}`}>{icon}</span>
       <div className="min-w-0">
-        <div className="text-[12px] text-ink-muted">{label}</div>
-        <div className="text-[19px] font-bold text-ink leading-tight">{value}</div>
-        {sub && <div className="text-[11.5px] text-ink-muted mt-0.5">{sub}</div>}
+        <div className="text-xs text-ink-muted">{label}</div>
+        <div className="text-xl font-bold text-ink leading-tight">{value}</div>
+        {sub && <div className="text-xs text-ink-muted mt-0.5">{sub}</div>}
       </div>
     </div>
   );
@@ -45,11 +45,11 @@ function Stat({ icon, label, value, sub, tone = 'brand' }) {
 function Step({ n, title, done, children }) {
   return (
     <div className="flex gap-3">
-      <span className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-[13px] font-bold
+      <span className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-sm font-bold
         ${done ? 'bg-emerald-500 text-white' : 'bg-brand-grad text-white'}`}>{done ? '✓' : n}</span>
       <div className="min-w-0 flex-1 pb-4">
-        <div className="font-semibold text-[14.5px] text-ink mb-1">{title}</div>
-        <div className="text-[13px] text-ink-soft leading-relaxed">{children}</div>
+        <div className="font-semibold text-base text-ink mb-1">{title}</div>
+        <div className="text-sm text-ink-soft leading-relaxed">{children}</div>
       </div>
     </div>
   );
@@ -166,12 +166,12 @@ export default function DriveStorage() {
       {/* Trạng thái kết nối */}
       <div className={`card px-4 py-3.5 mb-4 flex flex-wrap items-center gap-3
         ${st.connected ? '!border-emerald-200 !bg-emerald-50/60' : '!border-amber-200 !bg-amber-50/60'}`}>
-        <span className="text-[26px]">{st.connected ? '☁️' : '⚠️'}</span>
+        <span className="text-2xl">{st.connected ? '☁️' : '⚠️'}</span>
         <div className="min-w-0 flex-1">
-          <div className="font-bold text-[15px] text-ink">
+          <div className="font-bold text-lg text-ink">
             {st.connected ? 'Đang đồng bộ với Google Drive' : 'Chưa kết nối Google Drive'}
           </div>
-          <div className="text-[12.5px] text-ink-soft">
+          <div className="text-sm text-ink-soft">
             {st.connected
               ? <>Tài khoản <b>{st.account?.email || '—'}</b> · thư mục <b>LtL TeachOps — Ảnh &amp; Video</b>
                 {st.last_synced_at && <> · lần đẩy gần nhất {fmtAgo(st.last_synced_at)}</>}</>
@@ -179,12 +179,12 @@ export default function DriveStorage() {
           </div>
         </div>
         {st.root_folder_link && (
-          <a className="btn-line !py-1.5 !px-3 text-[13px]" href={st.root_folder_link} target="_blank" rel="noreferrer">
+          <a className="btn-line !py-1.5 !px-3 text-sm" href={st.root_folder_link} target="_blank" rel="noreferrer">
             Mở thư mục trên Drive ↗
           </a>
         )}
         {st.connected && (
-          <button className="btn-line !py-1.5 !px-3 text-[13px] !text-rose-700" onClick={() => setConfirmOff(true)} disabled={!!busy}>
+          <button className="btn-line !py-1.5 !px-3 text-sm !text-rose-700" onClick={() => setConfirmOff(true)} disabled={!!busy}>
             Ngắt kết nối
           </button>
         )}
@@ -201,7 +201,7 @@ export default function DriveStorage() {
       </div>
 
       {st.failed > 0 || st.last_error ? (
-        <div className="card !border-rose-200 !bg-rose-50/60 px-4 py-3 mb-4 text-[13px] text-rose-800">
+        <div className="card !border-rose-200 !bg-rose-50/60 px-4 py-3 mb-4 text-sm text-rose-800">
           <b>{fmtNumber(st.failed)} tệp lỗi quá 5 lần</b>
           {st.last_error && <> · lỗi gần nhất{st.last_error_file ? ` (${st.last_error_file})` : ''}: {st.last_error}</>}
         </div>
@@ -209,8 +209,8 @@ export default function DriveStorage() {
 
       <div className="grid lg:grid-cols-[1.25fr_1fr] gap-4 items-start">
         {/* Hướng dẫn kết nối */}
-        <div className="card p-4">
-          <div className="font-bold text-[15.5px] mb-3">
+        <div className="card p-4 min-w-0 break-words">
+          <div className="font-bold text-lg mb-3">
             {st.connected ? 'Cấu hình kết nối' : 'Kết nối trong 3 bước'}
           </div>
 
@@ -220,15 +220,15 @@ export default function DriveStorage() {
                 <a className="text-brand-700 underline" href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noreferrer">Google Drive API</a>
                 {' '}→ tạo project (vd "LtL TeachOps") → bấm <b>Enable</b>.</li>
               <li>Mục <b>OAuth consent screen</b>: chọn <b>External</b> (Gmail) hoặc <b>Internal</b> (Google Workspace),
-                điền tên app + email → thêm scope <code className="text-[12px] bg-canvas px-1 rounded">…/auth/drive.file</code>.
+                điền tên app + email → thêm scope <code className="text-xs bg-canvas px-1 rounded">…/auth/drive.file</code>.
                 Với External: bấm <b>Publish app</b> (In production) — nếu để "Testing", Google tự ngắt kết nối sau 7 ngày.</li>
               <li>Mở{' '}
                 <a className="text-brand-700 underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Credentials</a>
                 {' '}→ <b>Create credentials → OAuth client ID</b> → loại <b>Web application</b> → mục
                 <b> Authorized redirect URIs</b> dán đúng địa chỉ sau:
                 <div className="flex gap-2 items-center mt-1.5">
-                  <code className="flex-1 min-w-0 truncate text-[12px] bg-canvas border border-line rounded-lg px-2 py-1.5">{st.redirect_uri}</code>
-                  <button type="button" className="btn-line !py-1 !px-2.5 text-[12px] shrink-0" onClick={() => copy(st.redirect_uri)}>Chép</button>
+                  <code className="flex-1 min-w-0 truncate text-xs bg-canvas border border-line rounded-lg px-2 py-1.5">{st.redirect_uri}</code>
+                  <button type="button" className="btn-line !py-1 !px-2.5 text-xs shrink-0" onClick={() => copy(st.redirect_uri)}>Chép</button>
                 </div>
               </li>
             </ol>
@@ -236,7 +236,7 @@ export default function DriveStorage() {
 
           <Step n={2} title="Dán Client ID và Client secret" done={st.configured}>
             {st.configured && (
-              <div className="text-[12.5px] mb-2">Đang dùng: <code className="bg-canvas px-1 rounded">{st.client_id}</code>
+              <div className="text-sm mb-2">Đang dùng: <code className="bg-canvas px-1 rounded">{st.client_id}</code>
                 {st.source === 'env' && ' (từ tệp cấu hình máy chủ)'}</div>
             )}
             <Field label="Client ID">
@@ -266,17 +266,17 @@ export default function DriveStorage() {
         </div>
 
         {/* Cài đặt dung lượng */}
-        <div className="card p-4">
-          <div className="font-bold text-[15.5px] mb-1">Tiết kiệm dung lượng máy chủ</div>
-          <p className="text-[13px] text-ink-soft mb-3">
+        <div className="card p-4 min-w-0 break-words">
+          <div className="font-bold text-lg mb-1">Tiết kiệm dung lượng máy chủ</div>
+          <p className="text-sm text-ink-soft mb-3">
             Sau khi ảnh/video đã nằm an toàn trên Drive (kiểm tra khớp từng byte), bản gốc trên máy chủ được xoá —
             app vẫn mở xem bình thường (lấy từ Drive), ảnh thu nhỏ vẫn giữ để danh sách hiện nhanh.
             Ảnh bìa và ảnh đại diện luôn giữ trên máy chủ.
           </p>
           <label className="flex items-center gap-2.5 mb-3 cursor-pointer">
-            <input type="checkbox" className="h-4 w-4 accent-[#8A3F97]" checked={!!st.offload}
+            <input type="checkbox" className="h-4 w-4 accent-accent-600" checked={!!st.offload}
               onChange={toggleOffload} disabled={!!busy} />
-            <span className="text-[13.5px] font-semibold">Tự dọn bản gốc trên máy chủ</span>
+            <span className="text-sm font-semibold">Tự dọn bản gốc trên máy chủ</span>
           </label>
           <Field label="Giữ bản gốc trên máy chủ thêm (ngày)"
             hint="Trong khoảng này ảnh mở nhanh nhất (thường là lúc Phòng chuyên môn duyệt chấm công). 0 = dọn ngay khi đã lên Drive.">
@@ -291,11 +291,11 @@ export default function DriveStorage() {
           </Field>
           <div className="border-t border-line pt-3 mb-3">
             <label className="flex items-center gap-2.5 mb-2 cursor-pointer">
-              <input type="checkbox" className="h-4 w-4 accent-[#8A3F97]" checked={!!st.offload_materials}
+              <input type="checkbox" className="h-4 w-4 accent-accent-600" checked={!!st.offload_materials}
                 onChange={toggleMaterials} disabled={!!busy || !st.offload} />
-              <span className="text-[13.5px] font-semibold">Chuyển cả học liệu lớn lên Drive</span>
+              <span className="text-sm font-semibold">Chuyển cả học liệu lớn lên Drive</span>
             </label>
-            <p className="text-[12.5px] text-ink-soft mb-2">
+            <p className="text-sm text-ink-soft mb-2">
               Slide, giáo án, video bài giảng nặng sẽ nằm trên Drive; máy chủ chỉ giữ tệp nhỏ để mở nhanh.
               Khi tải ZIP, hệ thống tự lấy lại tệp từ Drive nên người dùng không thấy khác biệt.
             </p>
@@ -311,7 +311,7 @@ export default function DriveStorage() {
             </Field>
           </div>
 
-          <div className="rounded-xl bg-canvas border border-line px-3 py-2.5 text-[12.5px] text-ink-soft">
+          <div className="rounded-xl bg-canvas border border-line px-3 py-2.5 text-sm text-ink-soft">
             📁 Trên Drive, tệp được xếp: <b>Trường › Tháng › Chấm công / Điểm danh / Kiểm kê thiết bị / Sự cố thiết bị / Góp ý</b>,
             tên tệp gồm ngày giờ, lớp và người gửi — tra cứu trực tiếp trên Drive rất nhanh.
             <br />🎥 Video minh chứng tối đa {st.max_video_mb} MB · 📚 học liệu tối đa {st.max_material_mb} MB mỗi tệp.

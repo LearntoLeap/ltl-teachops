@@ -68,7 +68,7 @@ const EXPORTS = [
 function StatTile({ icon, label, value }) {
   return (
     <div className="card p-4 flex flex-col gap-1">
-      <div className="text-[13px] text-ink-muted flex items-center gap-1.5">
+      <div className="text-sm text-ink-muted flex items-center gap-1.5">
         <span>{icon}</span> {label}
       </div>
       <div className="text-2xl font-extrabold text-brand-800">{value}</div>
@@ -78,7 +78,7 @@ function StatTile({ icon, label, value }) {
 
 function SummaryChip({ label, value, cls = 'bg-brand-50 text-brand-800' }) {
   return (
-    <div className={`rounded-xl px-3 py-1.5 text-[12.5px] font-semibold ${cls}`}>
+    <div className={`rounded-xl px-3 py-1.5 text-sm font-semibold ${cls}`}>
       {label}: <span className="font-bold">{fmtNumber(value)}</span>
     </div>
   );
@@ -101,8 +101,8 @@ function MonthlyTimesheet({ query, month, onDownload, downloading }) {
     <div className="mb-6">
       <div className="flex flex-wrap items-center gap-2 mb-2.5">
         <button type="button" onClick={() => setOpen((v) => !v)}
-          className="font-bold text-[15px] flex items-center gap-1.5 hover:text-brand-800">
-          <span className="text-[13px]">{open ? '▾' : '▸'}</span>
+          className="font-bold text-lg flex items-center gap-1.5 hover:text-brand-800">
+          <span className="text-sm">{open ? '▾' : '▸'}</span>
           📍 Bảng chấm công tháng {mm}/{yyyy}
         </button>
         {open && (
@@ -116,7 +116,7 @@ function MonthlyTimesheet({ query, month, onDownload, downloading }) {
         <>
           {error && <ErrorBox error={error} onRetry={reload} />}
           {!error && !data && (
-            <div className="flex items-center gap-2 text-[13.5px] text-ink-muted py-4">
+            <div className="flex items-center gap-2 text-sm text-ink-muted py-4">
               <Spinner className="h-4 w-4" /> Đang lấy bảng chấm công…
             </div>
           )}
@@ -286,8 +286,8 @@ export default function Reports() {
 
       {/* ---------------------------- Ô số liệu nhanh ---------------------------- */}
       {tiles.length > 0 && (
-        <h2 className="font-bold text-[15px] mb-2.5">
-          ⚡ Hôm nay <span className="font-normal text-[12.5px] text-ink-muted">— không phụ thuộc tháng đang lọc</span>
+        <h2 className="font-bold text-lg mb-2.5">
+          ⚡ Hôm nay <span className="font-normal text-sm text-ink-muted">— không phụ thuộc tháng đang lọc</span>
         </h2>
       )}
       {tiles.length > 0 && (
@@ -299,21 +299,21 @@ export default function Reports() {
       )}
 
       {/* --------------------------- Xuất dữ liệu Excel --------------------------- */}
-      <h2 className="font-bold text-[15px] mb-2.5">📥 Xuất dữ liệu Excel</h2>
+      <h2 className="font-bold text-lg mb-2.5">📥 Xuất dữ liệu Excel</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
         {exportList.map((exp) => (
           <div key={exp.key} className="card p-4 flex items-center gap-3">
             <span className="text-2xl shrink-0">{exp.icon}</span>
             <span className="min-w-0 flex-1">
-              <span className="block font-semibold text-[14px]">{exp.label}</span>
-              <span className="block text-[12px] text-ink-muted truncate">{exp.file}</span>
+              <span className="block font-semibold text-base">{exp.label}</span>
+              <span className="block text-xs text-ink-muted truncate">{exp.file}</span>
             </span>
             <span className="flex items-center gap-1 shrink-0">
               <button
                 type="button"
                 title="Xem trước nội dung sẽ xuất"
                 onClick={() => setPreviewing(exp)}
-                className="h-9 px-2.5 rounded-xl text-[12.5px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100">
+                className="h-9 px-2.5 rounded-xl text-sm font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100">
                 👁 Xem trước
               </button>
               <button
@@ -334,7 +334,7 @@ export default function Reports() {
         downloading={downloading === TIMESHEET_EXPORT.key} />
 
       {/* -------------------------- Đối chiếu chấm công --------------------------- */}
-      <h2 className="font-bold text-[15px] mb-2.5">🧮 Đối chiếu chấm công</h2>
+      <h2 className="font-bold text-lg mb-2.5">🧮 Đối chiếu chấm công</h2>
 
       <div className="flex flex-wrap gap-2 mb-3">
         <SummaryChip label="Tổng buổi" value={s.total} />
@@ -353,7 +353,7 @@ export default function Reports() {
         />
       ) : (
         <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto table-cards stagger">
             <table className="w-full min-w-[780px]">
               <thead>
                 <tr>
@@ -364,30 +364,30 @@ export default function Reports() {
                   <th className="th">Trạng thái</th>
                   <th className="th">Trễ</th>
                   <th className="th">Làm việc</th>
-                  <th className="th">GPS</th>
+                  <th className="th hidden xl:table-cell">GPS</th>
                   <th className="th">Duyệt</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.slice(0, visible).map((r, i) => (
                   <tr key={r.id || `${r.schedule_id || ''}-${r.user_id || ''}-${i}`}>
-                    <td className="td whitespace-nowrap">{fmtDate(r.date || r.session_date || r.day)}</td>
-                    <td className="td">{r.school_name || r.school?.name || '—'}</td>
-                    <td className="td">{r.class_name || r.class?.name || '—'}</td>
-                    <td className="td">{r.user_name || r.full_name || r.user?.full_name || '—'}</td>
-                    <td className="td">
+                    <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(r.date || r.session_date || r.day)}</td>
+                    <td data-label="Trường" className="td">{r.school_name || r.school?.name || '—'}</td>
+                    <td data-label="Lớp" className="td">{r.class_name || r.class?.name || '—'}</td>
+                    <td data-label="Người dạy" className="td">{r.user_name || r.full_name || r.user?.full_name || '—'}</td>
+                    <td data-label="Trạng thái" className="td">
                       {r.label
                         ? <Badge tone={r.label}>{LABEL.attend[r.label] || r.label}</Badge>
                         : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="td whitespace-nowrap">{fmtDuration(r.late_minutes)}</td>
-                    <td className="td whitespace-nowrap">{fmtDuration(r.worked_minutes)}</td>
-                    <td className="td">
+                    <td data-label="Trễ" className="td whitespace-nowrap">{fmtDuration(r.late_minutes)}</td>
+                    <td data-label="Làm việc" className="td whitespace-nowrap">{fmtDuration(r.worked_minutes)}</td>
+                    <td data-label="GPS" className="hidden xl:table-cell td">
                       {r.gps_flagged
                         ? <Badge tone="high">⚑ Lệch GPS</Badge>
                         : <span className="text-ink-muted">—</span>}
                     </td>
-                    <td className="td">
+                    <td data-label="Duyệt" className="td">
                       {r.approval_status
                         ? <Badge tone={r.approval_status}>{LABEL.approval[r.approval_status] || r.approval_status}</Badge>
                         : <span className="text-ink-muted">—</span>}

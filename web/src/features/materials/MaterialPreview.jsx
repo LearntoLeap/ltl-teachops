@@ -58,7 +58,7 @@ export default function MaterialPreview({ open, material, onClose }) {
 
   return (
     <Sheet open={open} onClose={onClose} wide="xl" title={material.title}>
-      <div className="text-[12.5px] text-ink-muted mb-2.5 flex flex-wrap gap-x-3 gap-y-1">
+      <div className="text-sm text-ink-muted mb-2.5 flex flex-wrap gap-x-3 gap-y-1">
         {material.type_name && <span>{material.type_icon} {material.type_name}</span>}
         {material.grade && <span>Khối {material.grade}</span>}
         {material.level && <span>{LABEL.level[material.level]}</span>}
@@ -82,17 +82,17 @@ export default function MaterialPreview({ open, material, onClose }) {
           <iframe title={material.title} src={src} className="w-full h-[60vh] bg-white" />
         )}
         {kind === 'body' && (
-          <div className="p-4 max-h-[68vh] overflow-auto text-[14px] leading-relaxed whitespace-pre-line">
+          <div className="p-4 max-h-[68vh] overflow-auto text-base leading-relaxed whitespace-pre-line">
             {material.body}
           </div>
         )}
         {kind === 'office' && (
           <div className="p-8 text-center">
             <div className="text-[40px] mb-2">📄</div>
-            <div className="font-semibold text-[15px] text-ink mb-1">
+            <div className="font-semibold text-lg text-ink mb-1">
               Tệp {OFFICE_NAME[ext] || ext.toUpperCase()} không xem trước được trên trình duyệt
             </div>
-            <div className="text-[13px] text-ink-muted mb-4">
+            <div className="text-sm text-ink-muted mb-4">
               Tải về để mở bằng {OFFICE_NAME[ext] || 'ứng dụng tương ứng'} trên máy.
             </div>
             <button className="btn-primary" onClick={download} disabled={downloading}>
@@ -101,7 +101,7 @@ export default function MaterialPreview({ open, material, onClose }) {
           </div>
         )}
         {kind === 'none' && (
-          <div className="p-8 text-center text-[13.5px] text-ink-muted">Tài liệu này chưa có tệp đính kèm.</div>
+          <div className="p-8 text-center text-sm text-ink-muted">Tài liệu này chưa có tệp đính kèm.</div>
         )}
       </div>
 
@@ -113,7 +113,7 @@ export default function MaterialPreview({ open, material, onClose }) {
           </button>
         )}
         {v?.file_name && (
-          <span className="text-[12px] text-ink-muted truncate">
+          <span className="text-xs text-ink-muted truncate">
             {v.file_name}{fmtSize(v.size) ? ` · ${fmtSize(v.size)}` : ''}
           </span>
         )}

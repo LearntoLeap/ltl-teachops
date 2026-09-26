@@ -37,16 +37,17 @@ export function ToastProvider({ children }) {
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div className="fixed z-[90] left-1/2 -translate-x-1/2 flex flex-col gap-2 items-center pointer-events-none"
-           style={{ bottom: 'calc(84px + var(--safe-bot))' }}>
+      <div className="fixed z-[90] left-1/2 -translate-x-1/2 flex flex-col gap-2 items-center pointer-events-none
+                      bottom-[calc(84px+var(--safe-bot))] md:bottom-6">
         {items.map((t) => (
           <div key={t.id}
                onClick={() => dismiss(t.id)}
                className={
-                 'pointer-events-auto cursor-pointer animate-slide-up rounded-xl px-4 py-2.5 text-sm font-medium shadow-card-lg max-w-[92vw] text-center ' +
-                 (t.type === 'ok' ? 'bg-emerald-600 text-white'
-                  : t.type === 'err' ? 'bg-rose-600 text-white'
-                  : 'bg-ink text-white')
+                 'pointer-events-auto cursor-pointer animate-slide-up rounded-xl2 px-4 py-2.5 text-sm font-semibold '
+                 + 'shadow-card-lg max-w-[92vw] text-center ring-1 ring-inset ring-white/15 ' +
+                 (t.type === 'ok' ? 'bg-success text-white'
+                  : t.type === 'err' ? 'bg-error text-white'
+                  : 'bg-night text-white')
                }>
             {t.type === 'ok' ? '✓ ' : t.type === 'err' ? '⚠ ' : ''}{t.message}
           </div>

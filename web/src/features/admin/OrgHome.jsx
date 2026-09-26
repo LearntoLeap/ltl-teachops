@@ -38,11 +38,11 @@ function SchoolCard({ school, onOpen }) {
   const off = school.is_active === false;
   return (
     <button type="button" onClick={onOpen}
-      className={`card w-full text-left p-4 hover:border-brand-300 hover:shadow-card transition${off ? ' opacity-60' : ''}`}>
+      className={`card card-hover w-full text-left p-4${off ? ' opacity-60' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="font-bold text-[15px] text-ink truncate">{school.name}</div>
-          <div className="text-[12.5px] text-ink-muted mt-0.5">
+          <div className="font-bold text-lg text-ink truncate">{school.name}</div>
+          <div className="text-sm text-ink-muted mt-0.5">
             Mã: <span className="font-semibold text-brand-700">{school.code}</span>
           </div>
         </div>
@@ -53,11 +53,11 @@ function SchoolCard({ school, onOpen }) {
             : <Badge tone="pending">📍 Chưa có toạ độ GPS</Badge>}
       </div>
       {(school.address || school.province) && (
-        <div className="text-[13px] text-ink-soft mt-2 truncate">
+        <div className="text-sm text-ink-soft mt-2 truncate">
           {[school.address, school.province].filter(Boolean).join(' · ')}
         </div>
       )}
-      <div className="text-[12.5px] text-ink-muted mt-1.5">
+      <div className="text-sm text-ink-muted mt-1.5">
         🏫 {fmtNumber(school.classes_count || 0)} lớp · 🧪 {fmtNumber(school.rooms_count || 0)} phòng STEM
       </div>
     </button>
@@ -174,7 +174,7 @@ function AddSchoolSheet({ open, onClose, onCreated }) {
         </Field>
       </div>
 
-      <div className="flex justify-end gap-2.5 mt-2">
+      <div className="form-actions flex justify-end gap-2.5 mt-2">
         <button className="btn-line" onClick={onClose} disabled={saving}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={saving}>
           {saving ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu trường'}
@@ -238,7 +238,7 @@ export default function OrgHome() {
         placeholder="Tìm theo tên hoặc mã trường…"
         className="mb-2.5"
       />
-      <label className="flex items-center gap-2 text-[13px] text-ink-muted mb-4 cursor-pointer w-fit">
+      <label className="flex items-center gap-2 text-sm text-ink-muted mb-4 cursor-pointer w-fit">
         <input type="checkbox" className="accent-brand-600" checked={showOff}
           onChange={(e) => { setShowOff(e.target.checked); setPage(1); }} />
         Hiện cả trường đã ngừng sử dụng

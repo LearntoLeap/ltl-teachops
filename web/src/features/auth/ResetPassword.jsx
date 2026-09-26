@@ -47,7 +47,7 @@ export default function ResetPassword() {
   if (!token) {
     return (
       <AuthShell title="Liên kết không hợp lệ">
-        <p className="text-[14px] text-ink-soft mb-4">
+        <p className="text-base text-ink-soft mb-4">
           Liên kết đặt lại mật khẩu thiếu hoặc đã hỏng. Hãy yêu cầu gửi lại từ trang Quên mật khẩu.
         </p>
         <Link to="/quen-mat-khau" className="btn-primary w-full">Yêu cầu liên kết mới</Link>
@@ -67,7 +67,7 @@ export default function ResetPassword() {
             value={pw2} onChange={(e) => setPw2(e.target.value)} />
         </Field>
         {error && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
             ⚠ {error}
           </div>
         )}

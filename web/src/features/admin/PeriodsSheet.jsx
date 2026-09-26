@@ -64,13 +64,13 @@ export default function PeriodsSheet({ open, onClose }) {
 
   return (
     <Sheet open={open} onClose={saving ? undefined : onClose} title="Khung tiết dạy" wide>
-      <p className="text-[13px] text-ink-soft mb-3">
+      <p className="text-sm text-ink-soft mb-3">
         Người xếp lịch chỉ chọn số tiết; giờ vào/ra lấy từ bảng này. Sửa khung tiết
         <b> không làm đổi</b> các buổi đã xếp — giờ của chúng đã lưu từ lúc tạo.
       </p>
 
       {items === null ? (
-        <div className="flex items-center gap-2 text-[13.5px] text-ink-muted py-4">
+        <div className="flex items-center gap-2 text-sm text-ink-muted py-4">
           <Spinner className="h-4 w-4" /> Đang tải khung tiết…
         </div>
       ) : (
@@ -78,7 +78,7 @@ export default function PeriodsSheet({ open, onClose }) {
           <div className="grid gap-1.5 max-h-[52vh] overflow-auto pr-0.5">
             {items.map((p, i) => (
               <div key={p.no} className="flex items-center gap-2">
-                <span className="w-[68px] shrink-0 text-[13.5px] font-semibold text-brand-800">
+                <span className="w-[68px] shrink-0 text-sm font-semibold text-brand-800">
                   Tiết {p.no}
                 </span>
                 <input type="time" className="input !py-2" value={p.start}
@@ -86,7 +86,7 @@ export default function PeriodsSheet({ open, onClose }) {
                 <span className="text-ink-muted">→</span>
                 <input type="time" className="input !py-2" value={p.end}
                   onChange={(e) => set(i, 'end', e.target.value)} aria-label={`Giờ kết thúc tiết ${p.no}`} />
-                <span className="text-[12px] text-ink-muted w-[64px] shrink-0">
+                <span className="text-xs text-ink-muted w-[64px] shrink-0">
                   {Number(p.no) <= 5 ? 'sáng' : 'chiều'}
                 </span>
               </div>
@@ -100,14 +100,14 @@ export default function PeriodsSheet({ open, onClose }) {
             <button type="button" className="btn-line !py-2" onClick={removeLast} disabled={items.length <= 1}>
               − Bỏ tiết cuối
             </button>
-            <span className="text-[12.5px] text-ink-muted self-center">
+            <span className="text-sm text-ink-muted self-center">
               {items.length}/{max} tiết
             </span>
           </div>
         </>
       )}
 
-      <div className="flex gap-2.5 justify-end mt-4">
+      <div className="form-actions flex gap-2.5 justify-end mt-4">
         <button className="btn-line" onClick={onClose} disabled={saving}>Huỷ</button>
         <button className="btn-primary" onClick={save} disabled={saving || !items?.length}>
           {saving ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu khung tiết'}

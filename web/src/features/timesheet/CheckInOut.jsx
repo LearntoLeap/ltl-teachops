@@ -64,19 +64,19 @@ function AttendBadge({ label }) {
 function SessionCard({ shift }) {
   if (!shift) {
     return (
-      <div className="card p-4 mb-4 text-[13.5px] text-ink-muted">
+      <div className="card p-4 mb-4 text-sm text-ink-muted">
         Chưa tải được thông tin buổi (có thể do mất mạng).
       </div>
     );
   }
   return (
     <div className="card p-4 mb-4">
-      <div className="text-[12.5px] text-ink-muted">{fmtDateLong(shift.date)}</div>
+      <div className="text-sm text-ink-muted">{fmtDateLong(shift.date)}</div>
       <div className="text-lg font-extrabold text-brand-800">
         {SESSION_VN[shift.session] || 'buổi'}
       </div>
       <div className="font-semibold mt-1">{clsName(shift.school)}</div>
-      <div className="text-[13px] text-ink-muted">
+      <div className="text-sm text-ink-muted">
         {shift.planned?.start_time
           ? `${shift.planned.periods} tiết trong buổi — có mặt trước ${shift.planned.start_time}`
           : 'Buổi này không có tiết nào trong lịch dạy'}
@@ -84,14 +84,14 @@ function SessionCard({ shift }) {
       {shift.planned?.items?.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mt-2">
           {shift.planned.items.map((p) => (
-            <span key={p.id} className="rounded-md bg-brand-50 text-brand-900 px-2 py-1 text-[12px] font-semibold">
+            <span key={p.id} className="rounded-md bg-brand-50 text-brand-900 px-2 py-1 text-xs font-semibold">
               {p.period ? `Tiết ${p.period}` : p.start_time} · {p.class_name}
               <span className="text-ink-muted font-medium"> {p.start_time}</span>
             </span>
           ))}
         </div>
       )}
-      <div className="text-[11.5px] text-ink-muted mt-2">
+      <div className="text-xs text-ink-muted mt-2">
         Tiết 1–5 là buổi sáng, tiết 6 trở đi là buổi chiều. Chấm công một lần vào, một lần ra cho cả buổi.
       </div>
     </div>
@@ -126,8 +126,8 @@ function GpsBlock({ pos, setPos, required, error }) {
       {pos ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-3 flex items-center justify-between gap-2">
           <div className="text-emerald-800">
-            <div className="text-[13.5px] font-semibold">✓ Đã lấy vị trí (±{pos.accuracy} m)</div>
-            <div className="text-[12px] opacity-80">{pos.lat.toFixed(6)}, {pos.lng.toFixed(6)}</div>
+            <div className="text-sm font-semibold">✓ Đã lấy vị trí (±{pos.accuracy} m)</div>
+            <div className="text-xs opacity-80">{pos.lat.toFixed(6)}, {pos.lng.toFixed(6)}</div>
           </div>
           <button type="button" className="btn-line !py-1.5 !px-3 shrink-0" onClick={locate} disabled={busy}>
             {busy ? <Spinner className="h-4 w-4" /> : 'Lấy lại'}
@@ -140,21 +140,21 @@ function GpsBlock({ pos, setPos, required, error }) {
       )}
 
       {gpsErr && (
-        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-[13px] text-rose-700">
+        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-3 text-sm text-rose-700">
           <div className="font-semibold mb-1">⚠ {gpsErr.message}</div>
-          {gpsErr.howTo && <div className="text-[12px] text-rose-600">{gpsErr.howTo}</div>}
+          {gpsErr.howTo && <div className="text-xs text-rose-600">{gpsErr.howTo}</div>}
           <button type="button" className="btn-line !py-1.5 mt-2" onClick={locate} disabled={busy}>
             Thử lại
           </button>
           {!required && (
-            <div className="text-[12px] text-ink-muted mt-2">
+            <div className="text-xs text-ink-muted mt-2">
               Check-out không bắt buộc vị trí — bạn vẫn có thể gửi mà không có GPS.
             </div>
           )}
         </div>
       )}
 
-      {error && !gpsErr && <div className="text-[12px] text-rose-600 mt-1">{error}</div>}
+      {error && !gpsErr && <div className="text-xs text-rose-600 mt-1">{error}</div>}
     </div>
   );
 }
@@ -272,7 +272,7 @@ function CheckInForm({ shift, onDone }) {
           capture="user"
           label="Ảnh selfie tại trường"
           hint="Chụp bằng camera trước, thấy rõ mặt bạn và khung cảnh trường." />
-        {errors.selfie && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.selfie}</div>}
+        {errors.selfie && <div className="text-xs text-rose-600 -mt-2 mb-3">{errors.selfie}</div>}
 
         <PhotoInput
           value={photos}
@@ -281,7 +281,7 @@ function CheckInForm({ shift, onDone }) {
           required
           label="Ảnh thiết bị đầu buổi"
           hint="Chụp rõ khu vực thiết bị. Ảnh đầu tiên sẽ được dùng làm minh chứng." />
-        {errors.photos && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.photos}</div>}
+        {errors.photos && <div className="text-xs text-rose-600 -mt-2 mb-3">{errors.photos}</div>}
 
         <DeviceTally
           mode="in"
@@ -300,7 +300,7 @@ function CheckInForm({ shift, onDone }) {
         </Field>
 
         <button
-          className="btn-primary w-full !py-4 text-[16px] font-extrabold tracking-wide"
+          className="btn-primary w-full !py-4 text-lg font-extrabold tracking-wide"
           disabled={sending}
           onClick={submit}>
           {sending ? <Spinner className="border-white/40 border-t-white" /> : '📍 CHẤM CÔNG VÀO'}
@@ -420,7 +420,7 @@ function CheckOutForm({ shift, ts, onDone }) {
       <SessionCard shift={shift} />
 
       {ts?.check_in_at && (
-        <div className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-[13px] text-brand-800 mb-4">
+        <div className="rounded-xl bg-brand-50 px-3.5 py-2.5 text-sm text-brand-800 mb-4">
           ✓ Đã check-in lúc <b>{fmtTime(ts.check_in_at)}</b>
           {Number(ts.late_minutes) > 0 && <> · trễ {fmtNumber(ts.late_minutes)} phút</>}
         </div>
@@ -453,14 +453,14 @@ function CheckOutForm({ shift, ts, onDone }) {
             <button
               type="button" role="radio" aria-checked={deviceOk}
               onClick={() => { setDeviceOk(true); setErrors({}); }}
-              className={`rounded-xl border-2 px-3 py-3 text-[13.5px] font-semibold transition
+              className={`rounded-xl border-2 px-3 py-3 text-sm font-semibold transition
                 ${deviceOk ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-line text-ink-muted hover:border-emerald-200'}`}>
               ✅ Thiết bị nguyên vẹn
             </button>
             <button
               type="button" role="radio" aria-checked={!deviceOk}
               onClick={() => setDeviceOk(false)}
-              className={`rounded-xl border-2 px-3 py-3 text-[13.5px] font-semibold transition
+              className={`rounded-xl border-2 px-3 py-3 text-sm font-semibold transition
                 ${!deviceOk ? 'border-rose-400 bg-rose-50 text-rose-700' : 'border-line text-ink-muted hover:border-rose-200'}`}>
               ⚠️ Có thiết bị hỏng
             </button>
@@ -483,7 +483,7 @@ function CheckOutForm({ shift, ts, onDone }) {
               required
               label="Ảnh thiết bị hỏng"
               hint="Phòng chuyên môn sẽ nhận được thông báo kèm ảnh này." />
-            {errors.damagePhotos && <div className="text-[12px] text-rose-600 -mt-2 mb-3">{errors.damagePhotos}</div>}
+            {errors.damagePhotos && <div className="text-xs text-rose-600 -mt-2 mb-3">{errors.damagePhotos}</div>}
           </>
         )}
 
@@ -503,7 +503,7 @@ function CheckOutForm({ shift, ts, onDone }) {
         </Field>
 
         <button
-          className="btn-primary w-full !py-4 text-[16px] font-extrabold tracking-wide"
+          className="btn-primary w-full !py-4 text-lg font-extrabold tracking-wide"
           disabled={sending}
           onClick={submit}>
           {sending ? <Spinner className="border-white/40 border-t-white" /> : '🏁 CHẤM CÔNG RA'}
@@ -521,7 +521,7 @@ function DeviceSummary({ ts }) {
   if (!inList.length && !outList.length) {
     if (ts?.check_in_device_count == null) return null;
     return (
-      <div className="text-[13px] text-ink-soft mb-3">
+      <div className="text-sm text-ink-soft mb-3">
         Thiết bị đầu buổi: <b>{fmtNumber(ts.check_in_device_count)}</b>
       </div>
     );
@@ -533,9 +533,9 @@ function DeviceSummary({ ts }) {
   return (
     <div className="mb-3">
       <div className="label">Thiết bị theo loại</div>
-      <div className="rounded-lg border border-line overflow-hidden">
-        <table className="w-full text-[13px]">
-          <thead className="bg-zinc-50 text-ink-muted text-[11.5px]">
+      <div className="rounded-lg border border-line overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-zinc-50 text-ink-muted text-xs">
             <tr>
               <th className="text-left font-semibold px-3 py-1.5">Loại</th>
               <th className="text-right font-semibold px-2 py-1.5">Đầu buổi</th>
@@ -552,7 +552,7 @@ function DeviceSummary({ ts }) {
                   <td className="px-3 py-1.5 font-medium text-ink">{n}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{a ? a.qty : '—'}</td>
                   <td className={`px-3 py-1.5 text-right tabular-nums ${short ? 'text-rose-700 font-semibold' : ''}`}>
-                    {b ? b.qty : '—'}{short && <span className="text-[11.5px]"> (thiếu {a.qty - b.qty})</span>}
+                    {b ? b.qty : '—'}{short && <span className="text-xs"> (thiếu {a.qty - b.qty})</span>}
                   </td>
                 </tr>
               );
@@ -578,7 +578,7 @@ function DoneView({ shift, ts }) {
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <AttendBadge label={ts?.label} />
           {Number(ts?.late_minutes) > 0 && (
-            <span className="text-[13px] text-amber-700 font-semibold">Trễ {fmtNumber(ts.late_minutes)} phút</span>
+            <span className="text-sm text-amber-700 font-semibold">Trễ {fmtNumber(ts.late_minutes)} phút</span>
           )}
           {ts?.approval_status && (
             <Badge tone={ts.approval_status}>{LABEL.approval[ts.approval_status] || ts.approval_status}</Badge>
@@ -587,26 +587,26 @@ function DoneView({ shift, ts }) {
 
         <div className="grid grid-cols-3 gap-2 text-center mb-4">
           <div className="rounded-xl bg-brand-50 py-2.5">
-            <div className="text-[11.5px] text-ink-muted">Check-in</div>
+            <div className="text-xs text-ink-muted">Check-in</div>
             <div className="font-extrabold text-brand-800">{fmtTime(ts?.check_in_at) || '—'}</div>
           </div>
           <div className="rounded-xl bg-brand-50 py-2.5">
-            <div className="text-[11.5px] text-ink-muted">Check-out</div>
+            <div className="text-xs text-ink-muted">Check-out</div>
             <div className="font-extrabold text-brand-800">{fmtTime(ts?.check_out_at) || '—'}</div>
           </div>
           <div className="rounded-xl bg-brand-50 py-2.5">
-            <div className="text-[11.5px] text-ink-muted">Thời lượng</div>
+            <div className="text-xs text-ink-muted">Thời lượng</div>
             <div className="font-extrabold text-brand-800">{fmtDuration(mins)}</div>
           </div>
         </div>
 
         {ts?.approval_status === 'pending' && (
-          <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[13px] px-3.5 py-2.5 mb-3">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3.5 py-2.5 mb-3">
             ⏳ Bản chấm công đang chờ Phòng chuyên môn duyệt.
           </div>
         )}
         {ts?.approval_status === 'rejected' && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
             Bản chấm công bị từ chối{ts?.approval_reason ? ` — lý do: ${ts.approval_reason}` : '.'}
           </div>
         )}
@@ -614,14 +614,14 @@ function DoneView({ shift, ts }) {
         <DeviceSummary ts={ts} />
 
         {(deviceBroken || ts?.device_shortage) && (
-          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[13px] px-3.5 py-2.5 mb-3">
+          <div className="rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3.5 py-2.5 mb-3">
             ⚠️ {ts?.device_shortage ? 'Thiếu thiết bị cuối buổi' + (deviceBroken ? ', có thiết bị hỏng' : '') : 'Có thiết bị hỏng'}
             {ts?.damage_note ? `: ${ts.damage_note}` : ' (đã báo Phòng chuyên môn).'}
           </div>
         )}
 
         {ts?.note && (
-          <div className="rounded-xl bg-canvas px-3.5 py-2.5 text-[13px] text-ink-soft mb-3">
+          <div className="rounded-xl bg-canvas px-3.5 py-2.5 text-sm text-ink-soft mb-3">
             📝 {ts.note}
           </div>
         )}
@@ -637,7 +637,7 @@ function DoneView({ shift, ts }) {
                     src={fileUrl(p.id, { thumb: true })}
                     alt={p.label}
                     className="h-20 w-20 rounded-xl object-cover border border-line" />
-                  <div className="text-[10.5px] text-ink-muted mt-0.5">{p.label}</div>
+                  <div className="text-xs text-ink-muted mt-0.5">{p.label}</div>
                 </a>
               ))}
             </div>
@@ -695,7 +695,7 @@ export default function CheckInOut() {
         <ErrorBox error={loadErr} onRetry={load} />
         {loadErr.isOffline && (
           <div className="card p-4 mt-4">
-            <div className="text-[13.5px] text-ink-soft mb-3">
+            <div className="text-sm text-ink-soft mb-3">
               Bạn đang offline nên chưa tải được trạng thái buổi làm việc. Vẫn có thể chấm công —
               dữ liệu sẽ lưu trên máy và tự gửi khi có mạng.
             </div>

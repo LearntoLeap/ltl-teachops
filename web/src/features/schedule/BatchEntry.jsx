@@ -7,6 +7,8 @@
  *   - Chọn trường một lần ở đầu → mọi dòng dùng chung, chỉ điền phần khác nhau.
  *   - Nút "Nhân đôi dòng" để lặp nhanh buổi tương tự.
  *   - DÁN TỪ EXCEL: copy vùng ô rồi Ctrl+V ngay trên bảng.
+ *   - Điện thoại (<768px): cùng dữ liệu đó hiện dưới dạng THẺ xếp dọc, mỗi dòng
+ *     một thẻ, không phải vuốt ngang. Bảng và thẻ dùng chung state và hàm sửa ô.
  *
  * Gửi lên POST /api/schedules/batch — dòng lỗi bị bỏ qua và báo rõ số dòng,
  * các dòng còn lại vẫn được tạo.
@@ -163,7 +165,7 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
 
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} wide title="Nhập lịch dạy dạng bảng">
-      <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-[12.5px] text-brand-900">
+      <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900">
         💡 Chọn trường một lần, rồi điền từng dòng. Có sẵn lịch trong Excel thì bôi đen vùng ô,
         copy và bấm <b>Ctrl+V</b> ngay trên bảng — thứ tự cột:
         <b> Ngày · Bắt đầu · Kết thúc · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung</b>.
@@ -181,14 +183,14 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
       </Field>
 
       {schoolId && loadingRes && (
-        <div className="flex items-center gap-2 text-[13px] text-ink-muted py-2">
+        <div className="flex items-center gap-2 text-sm text-ink-muted py-2">
           <Spinner className="h-4 w-4" /> Đang tải lớp và nhân sự của trường…
         </div>
       )}
 
       {schoolId && !loadingRes && (
         <>
-          <div className="overflow-x-auto -mx-1 px-1" onPaste={onPaste}>
+          <div className="hidden md:block overflow-x-auto -mx-1 px-1" onPaste={onPaste}>
             <table className="w-full min-w-[900px] border-collapse">
               <thead>
                 <tr>
@@ -209,21 +211,21 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
                   const thieu = !r.session_date || !r.start_time || !r.end_time || !r.class_id;
                   return (
                     <tr key={i} className={thieu ? 'bg-amber-50/40' : ''}>
-                      <td className="td text-center text-ink-muted text-[12px]">{i + 1}</td>
+                      <td className="td text-center text-ink-muted text-xs">{i + 1}</td>
                       <td className="td !p-1">
-                        <input type="date" className="input !py-1.5 !px-2 text-[13px]"
+                        <input type="date" className="input !py-1.5 !px-2 text-sm"
                           value={r.session_date} onChange={(e) => setCell(i, 'session_date', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <input type="time" className="input !py-1.5 !px-2 text-[13px]"
+                        <input type="time" className="input !py-1.5 !px-2 text-sm"
                           value={r.start_time} onChange={(e) => setCell(i, 'start_time', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <input type="time" className="input !py-1.5 !px-2 text-[13px]"
+                        <input type="time" className="input !py-1.5 !px-2 text-sm"
                           value={r.end_time} onChange={(e) => setCell(i, 'end_time', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-[13px]"
+                        <select className="input !py-1.5 !px-2 text-sm"
                           value={r.class_id} onChange={(e) => setCell(i, 'class_id', e.target.value)}>
                           <option value="">—</option>
                           {res.classes.map((c) => (
@@ -234,28 +236,28 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-[13px]"
+                        <select className="input !py-1.5 !px-2 text-sm"
                           value={r.teacher_id} onChange={(e) => setCell(i, 'teacher_id', e.target.value)}>
                           <option value="">—</option>
                           {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-[13px]"
+                        <select className="input !py-1.5 !px-2 text-sm"
                           value={r.assistant_id} onChange={(e) => setCell(i, 'assistant_id', e.target.value)}>
                           <option value="">—</option>
                           {res.assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-[13px]"
+                        <select className="input !py-1.5 !px-2 text-sm"
                           value={r.room_id} onChange={(e) => setCell(i, 'room_id', e.target.value)}>
                           <option value="">—</option>
                           {res.rooms.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <input className="input !py-1.5 !px-2 text-[13px]" placeholder="Robotics — Bài 5"
+                        <input className="input !py-1.5 !px-2 text-sm" placeholder="Robotics — Bài 5"
                           value={r.subject} onChange={(e) => setCell(i, 'subject', e.target.value)} />
                       </td>
                       <td className="td !p-1 whitespace-nowrap text-center">
@@ -271,19 +273,92 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
             </table>
           </div>
 
+          {/* Điện thoại: mỗi dòng một thẻ, các ô xếp dọc — cùng state với bảng ở trên. */}
+          <div className="md:hidden grid gap-3">
+            {rows.map((r, i) => {
+              const thieu = !r.session_date || !r.start_time || !r.end_time || !r.class_id;
+              return (
+                <div key={i} className={`card p-3.5 ${thieu ? '!border-amber-300 bg-amber-50/40' : ''}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold uppercase tracking-wide text-ink-muted">
+                      Dòng {i + 1}{thieu ? ' · còn thiếu' : ''}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <button type="button" title="Nhân đôi dòng" aria-label="Nhân đôi dòng"
+                        className="icon-btn text-brand-700 hover:bg-brand-50" onClick={() => dupRow(i)}>⧉</button>
+                      <button type="button" title="Xoá dòng" aria-label="Xoá dòng"
+                        className="icon-btn text-rose-600 hover:bg-rose-50" onClick={() => delRow(i)}>✕</button>
+                    </span>
+                  </div>
+
+                  <Field label="Ngày" required>
+                    <input type="date" className="input" value={r.session_date}
+                      onChange={(e) => setCell(i, 'session_date', e.target.value)} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Field label="Bắt đầu" required>
+                      <input type="time" className="input" value={r.start_time}
+                        onChange={(e) => setCell(i, 'start_time', e.target.value)} />
+                    </Field>
+                    <Field label="Kết thúc" required>
+                      <input type="time" className="input" value={r.end_time}
+                        onChange={(e) => setCell(i, 'end_time', e.target.value)} />
+                    </Field>
+                  </div>
+                  <Field label="Lớp" required>
+                    <select className="input" value={r.class_id}
+                      onChange={(e) => setCell(i, 'class_id', e.target.value)}>
+                      <option value="">— Chọn lớp —</option>
+                      {res.classes.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}{c.grade ? ` (K${c.grade})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Giáo viên">
+                    <select className="input" value={r.teacher_id}
+                      onChange={(e) => setCell(i, 'teacher_id', e.target.value)}>
+                      <option value="">— Chưa chọn —</option>
+                      {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Trợ giảng">
+                    <select className="input" value={r.assistant_id}
+                      onChange={(e) => setCell(i, 'assistant_id', e.target.value)}>
+                      <option value="">— Chưa chọn —</option>
+                      {res.assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Phòng">
+                    <select className="input" value={r.room_id}
+                      onChange={(e) => setCell(i, 'room_id', e.target.value)}>
+                      <option value="">— Chưa chọn —</option>
+                      {res.rooms.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Nội dung">
+                    <input className="input" placeholder="Robotics — Bài 5" value={r.subject}
+                      onChange={(e) => setCell(i, 'subject', e.target.value)} />
+                  </Field>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="flex items-center gap-2 mt-3">
             <button type="button" className="btn-line !py-2" onClick={addRow}>+ Thêm dòng</button>
-            <span className="text-[12.5px] text-ink-muted">
+            <span className="text-sm text-ink-muted">
               <b>{validCount}</b>/{rows.length} dòng đủ thông tin
             </span>
           </div>
 
           {result?.skipped?.length > 0 && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-3 mt-3">
-              <div className="font-bold text-[13px] text-amber-900 mb-1.5">
+              <div className="font-bold text-sm text-amber-900 mb-1.5">
                 Đã tạo {result.created} buổi · {result.skipped.length} dòng bị bỏ qua:
               </div>
-              <ul className="text-[12.5px] text-amber-900 grid gap-1 max-h-40 overflow-y-auto">
+              <ul className="text-sm text-amber-900 grid gap-1 max-h-40 overflow-y-auto">
                 {result.skipped.map((s, i) => (
                   <li key={i}>• Dòng {s.row}: {s.reason}</li>
                 ))}
@@ -291,7 +366,7 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
             </div>
           )}
 
-          <div className="flex gap-2.5 justify-end mt-4">
+          <div className="form-actions flex gap-2.5 justify-end mt-4">
             <button type="button" className="btn-line" onClick={onClose} disabled={busy}>Đóng</button>
             <button type="button" className="btn-primary" onClick={submit} disabled={busy || !validCount}>
               {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" />

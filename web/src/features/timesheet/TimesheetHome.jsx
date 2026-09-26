@@ -103,7 +103,7 @@ function summarize(items) {
 
 /* ------------------------------ Mảnh giao diện nhỏ ----------------------------- */
 function AttendBadge({ label }) {
-  if (!label) return <span className="text-[12px] text-ink-muted">—</span>;
+  if (!label) return <span className="text-xs text-ink-muted">—</span>;
   return <Badge tone={label}>{LABEL.attend[label] || label}</Badge>;
 }
 
@@ -115,8 +115,8 @@ function ApprovalBadge({ status }) {
 function StatCell({ label, value, className = '' }) {
   return (
     <div className="card px-2 py-2.5 text-center">
-      <div className={`text-[17px] font-extrabold leading-tight ${className}`}>{value}</div>
-      <div className="text-[11px] text-ink-muted mt-0.5">{label}</div>
+      <div className={`text-xl font-extrabold leading-tight ${className}`}>{value}</div>
+      <div className="text-xs text-ink-muted mt-0.5">{label}</div>
     </div>
   );
 }
@@ -125,11 +125,11 @@ function RangeFilter({ value, onChange }) {
   return (
     <div className="flex items-center gap-1.5">
       <input
-        type="date" className="input !w-auto !py-2 !px-2.5 text-[13px]" value={value.from}
+        type="date" className="input !w-auto !py-2 !px-2.5 text-sm" value={value.from}
         onChange={(e) => onChange({ ...value, from: e.target.value })} aria-label="Từ ngày" />
       <span className="text-ink-muted">–</span>
       <input
-        type="date" className="input !w-auto !py-2 !px-2.5 text-[13px]" value={value.to}
+        type="date" className="input !w-auto !py-2 !px-2.5 text-sm" value={value.to}
         onChange={(e) => onChange({ ...value, to: e.target.value })} aria-label="Đến ngày" />
     </div>
   );
@@ -139,7 +139,7 @@ function RangeFilter({ value, onChange }) {
 function TimesheetTable({ items, showUser = false }) {
   return (
     <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto table-cards stagger">
         <table className="w-full min-w-[640px]">
           <thead>
             <tr>
@@ -156,23 +156,23 @@ function TimesheetTable({ items, showUser = false }) {
           <tbody>
             {items.map((t, i) => (
               <tr key={t.id || i}>
-                <td className="td whitespace-nowrap">{fmtDate(rowDate(t))}</td>
-                {showUser && <td className="td whitespace-nowrap">{personName(t) || '—'}</td>}
-                <td className="td">
+                <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(rowDate(t))}</td>
+                {showUser && <td data-label="Người dạy" className="td whitespace-nowrap">{personName(t) || '—'}</td>}
+                <td data-label="Buổi · Trường" className="td">
                   <div className="font-medium">{shiftName(t)}</div>
-                  <div className="text-[12px] text-ink-muted">{schName(t)}</div>
+                  <div className="text-xs text-ink-muted">{schName(t)}</div>
                 </td>
-                <td className="td whitespace-nowrap">
+                <td data-label="Vào – Ra" className="td whitespace-nowrap">
                   {fmtTime(t.check_in_at) || '—'} – {fmtTime(t.check_out_at) || '—'}
                 </td>
-                <td className="td"><AttendBadge label={t.label} /></td>
-                <td className="td text-right whitespace-nowrap">
+                <td data-label="Trạng thái" className="td"><AttendBadge label={t.label} /></td>
+                <td data-label="Trễ" className="td text-right whitespace-nowrap">
                   {Number(t.late_minutes) > 0 ? `${fmtNumber(t.late_minutes)} ph` : ''}
                 </td>
-                <td className="td text-right whitespace-nowrap text-ink-muted">
+                <td data-label="Tiết" className="td text-right whitespace-nowrap text-ink-muted">
                   {t.planned_periods ?? '—'}
                 </td>
-                <td className="td"><ApprovalBadge status={t.approval_status} /></td>
+                <td data-label="Duyệt" className="td"><ApprovalBadge status={t.approval_status} /></td>
               </tr>
             ))}
           </tbody>
@@ -215,8 +215,8 @@ function TodaySection() {
   return (
     <section>
       <div className="flex items-baseline justify-between mb-2.5">
-        <h2 className="text-[15px] font-bold text-ink">Hôm nay</h2>
-        <span className="text-[12px] text-ink-muted">{fmtDateLong(today())}</span>
+        <h2 className="text-lg font-bold text-ink">Hôm nay</h2>
+        <span className="text-xs text-ink-muted">{fmtDateLong(today())}</span>
       </div>
 
       {err && <ErrorBox error={err} onRetry={load} />}
@@ -235,11 +235,11 @@ function TodaySection() {
               <div key={g.key} className="card p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-[17px] font-extrabold text-brand-800">
+                    <div className="text-xl font-extrabold text-brand-800">
                       {SESSION_VN[g.session]}
                     </div>
                     <div className="font-semibold mt-0.5 truncate">{g.school_name}</div>
-                    <div className="text-[12.5px] text-ink-muted">
+                    <div className="text-sm text-ink-muted">
                       {g.periods.length > 0
                         ? <>Gợi ý: {g.periods.length} tiết · có mặt trước <b>{fmtTime(g.periods[0]?.start_time)}</b></>
                         : 'Hôm nay không có tiết nào trong lịch'}
@@ -255,7 +255,7 @@ function TodaySection() {
                 {g.periods.length > 0 && (
                 <div className="mt-2.5 rounded-xl bg-canvas border border-line px-3 py-2 grid gap-1">
                   {g.periods.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 text-[12.5px]">
+                    <div key={p.id} className="flex items-center gap-2 text-sm">
                       <span className="font-semibold text-brand-800 w-[52px] shrink-0">
                         {p.period ? `Tiết ${p.period}` : fmtTime(p.start_time)}
                       </span>
@@ -273,27 +273,27 @@ function TodaySection() {
                 )}
 
                 {(ts?.check_in_at || ts?.check_out_at) && (
-                  <div className="text-[12.5px] text-ink-soft mt-2">
+                  <div className="text-sm text-ink-soft mt-2">
                     Vào <b>{fmtTime(ts?.check_in_at) || '—'}</b> · Ra <b>{fmtTime(ts?.check_out_at) || '—'}</b>
                   </div>
                 )}
 
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <button
-                    className={ts?.check_in_at ? 'btn-line !py-3' : 'btn-primary !py-3 text-[15px]'}
+                    className={ts?.check_in_at ? 'btn-line !py-3' : 'btn-primary !py-3 text-lg'}
                     disabled={!!ts?.check_in_at}
                     onClick={go}>
                     {ts?.check_in_at ? `✅ Vào ${fmtTime(ts.check_in_at)}` : '📍 Chấm công vào'}
                   </button>
                   <button
-                    className={inOnly ? 'btn-primary !py-3 text-[15px]' : 'btn-line !py-3'}
+                    className={inOnly ? 'btn-primary !py-3 text-lg' : 'btn-line !py-3'}
                     disabled={!ts?.check_in_at || done}
                     onClick={go}>
                     {done ? `✅ Ra ${fmtTime(ts.check_out_at)}` : '🏁 Chấm công ra'}
                   </button>
                 </div>
                 {done && (
-                  <button className="btn-line w-full !py-2 mt-2 text-[12.5px]" onClick={go}>
+                  <button className="btn-line w-full !py-2 mt-2 text-sm" onClick={go}>
                     Xem chi tiết chấm công
                   </button>
                 )}
@@ -327,7 +327,7 @@ function MyHistorySection() {
   return (
     <section>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-        <h2 className="text-[15px] font-bold text-ink">Lịch sử của tôi</h2>
+        <h2 className="text-lg font-bold text-ink">Lịch sử của tôi</h2>
         <RangeFilter value={range} onChange={(v) => { setRange(v); setPage(1); }} />
       </div>
 
@@ -336,7 +336,7 @@ function MyHistorySection() {
 
       {!err && data !== null && (
         <>
-          <div className="grid grid-cols-5 gap-2 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
             <StatCell label="Tổng buổi" value={fmtNumber(sum.total)} className="text-brand-800" />
             <StatCell label="Đúng giờ" value={fmtNumber(sum.ontime)} className="text-emerald-600" />
             <StatCell label="Trễ" value={fmtNumber(sum.late)} className="text-amber-600" />
@@ -382,14 +382,14 @@ function PendingCard({ t, busy, canApprove, onApprove, onReject }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="font-semibold truncate">{personName(t) || 'Không rõ người dạy'}</div>
-          <div className="text-[12px] text-ink-muted">
+          <div className="text-xs text-ink-muted">
             {fmtDate(rowDate(t))}{rowRange(t) ? ` · ${rowRange(t)}` : ''}
           </div>
         </div>
         <AttendBadge label={t.label} />
       </div>
 
-      <div className="text-[13.5px] text-ink-soft">
+      <div className="text-sm text-ink-soft">
         <div className="font-medium text-ink">{clsName(t)} <span className="text-ink-muted font-normal">· {schName(t)}</span></div>
         <div className="mt-1">
           Vào <b>{fmtTime(t.check_in_at) || '—'}</b> · Ra <b>{fmtTime(t.check_out_at) || '—'}</b>
@@ -402,7 +402,7 @@ function PendingCard({ t, busy, canApprove, onApprove, onReject }) {
           <span className="font-bold text-rose-600">{fmtDistance(t.check_in_distance_m)}</span>
           {t.gps_flagged && <Badge tone="rejected" className="ml-2">Lệch vị trí</Badge>}
         </div>
-        {t.note && <div className="mt-1.5 rounded-lg bg-canvas px-2.5 py-2 text-[13px]">📝 {t.note}</div>}
+        {t.note && <div className="mt-1.5 rounded-lg bg-canvas px-2.5 py-2 text-sm">📝 {t.note}</div>}
       </div>
 
       {ids.length > 0 && (
@@ -500,7 +500,7 @@ function PendingTab() {
         title="Từ chối chấm công">
         {reject && (
           <>
-            <div className="text-[13.5px] text-ink-soft mb-3">
+            <div className="text-sm text-ink-soft mb-3">
               Từ chối bản chấm công của <b>{personName(reject) || 'người dạy'}</b> — {clsName(reject)} ({fmtDate(rowDate(reject))}).
               Người dạy sẽ nhận được thông báo kèm lý do.
             </div>
@@ -560,17 +560,17 @@ function AllTab() {
     <>
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <RangeFilter value={range} onChange={reset(setRange)} />
-        <select className="input !w-auto !py-2 text-[13px]" value={schoolId}
+        <select className="input !w-auto !py-2 text-sm" value={schoolId}
           onChange={(e) => reset(setSchoolId)(e.target.value)} aria-label="Lọc theo trường">
           <option value="">Tất cả trường</option>
           {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select className="input !w-auto !py-2 text-[13px]" value={userId}
+        <select className="input !w-auto !py-2 text-sm" value={userId}
           onChange={(e) => reset(setUserId)(e.target.value)} aria-label="Lọc theo người dạy">
           <option value="">Tất cả mọi người</option>
           {users.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
         </select>
-        <select className="input !w-auto !py-2 text-[13px]" value={label}
+        <select className="input !w-auto !py-2 text-sm" value={label}
           onChange={(e) => reset(setLabel)(e.target.value)} aria-label="Lọc theo nhãn">
           <option value="">Mọi trạng thái</option>
           {Object.entries(LABEL.attend).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -659,7 +659,7 @@ function ReconcileTab() {
     <>
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <RangeFilter value={range} onChange={setRange} />
-        <select className="input !w-auto !py-2 text-[13px]" value={schoolId}
+        <select className="input !w-auto !py-2 text-sm" value={schoolId}
           onChange={(e) => setSchoolId(e.target.value)} aria-label="Lọc theo trường">
           <option value="">Tất cả trường</option>
           {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -676,7 +676,7 @@ function ReconcileTab() {
 
       {!err && data !== null && (
         <>
-          <div className="grid grid-cols-5 gap-2 mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-3">
             <StatCell label="Tổng buổi" value={fmtNumber(summary.total)} className="text-brand-800" />
             <StatCell label="Đúng giờ" value={fmtNumber(summary.ontime)} className="text-emerald-600" />
             <StatCell label="Trễ" value={fmtNumber(summary.late)} className="text-amber-600" />
@@ -691,7 +691,7 @@ function ReconcileTab() {
               hint="Chọn khoảng ngày khác hoặc bỏ lọc trường để xem toàn bộ." />
           ) : (
             <div className="card overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto table-cards stagger">
                 <table className="w-full min-w-[720px]">
                   <thead>
                     <tr>
@@ -707,24 +707,24 @@ function ReconcileTab() {
                   <tbody>
                     {rows.map((r, i) => (
                       <tr key={r.id || `${r.schedule_id || i}-${r.user_id || ''}`}>
-                        <td className="td whitespace-nowrap">{fmtDate(rowDate(r))}</td>
-                        <td className="td whitespace-nowrap">{shiftName(r)}</td>
-                        <td className="td">
+                        <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(rowDate(r))}</td>
+                        <td data-label="Buổi" className="td whitespace-nowrap">{shiftName(r)}</td>
+                        <td data-label="Trường" className="td">
                           <div className="font-medium">{schName(r)}</div>
-                          <div className="text-[12px] text-ink-muted">
+                          <div className="text-xs text-ink-muted">
                             {r.planned_periods ? `${r.planned_periods} tiết theo lịch` : 'Không có tiết trong lịch'}
                           </div>
                         </td>
-                        <td className="td whitespace-nowrap">{personName(r) || '—'}</td>
-                        <td className="td whitespace-nowrap">
+                        <td data-label="Người phụ trách" className="td whitespace-nowrap">{personName(r) || '—'}</td>
+                        <td data-label="Vào – Ra" className="td whitespace-nowrap">
                           {fmtTime(r.check_in_at) || '—'} – {fmtTime(r.check_out_at) || '—'}
                         </td>
-                        <td className="td">
+                        <td data-label="Trạng thái" className="td">
                           {r.label
                             ? <AttendBadge label={r.label} />
                             : <Badge tone="absent">Chưa chấm công</Badge>}
                         </td>
-                        <td className="td text-right whitespace-nowrap">
+                        <td data-label="Trễ" className="td text-right whitespace-nowrap">
                           {Number(r.late_minutes) > 0 ? `${fmtNumber(r.late_minutes)} ph` : ''}
                         </td>
                       </tr>

@@ -1,51 +1,76 @@
 /**
- * Bảng màu Learn to Leap — TÍM chủ đạo, nền trắng kiểu trang quản trị.
- * Thang brand là tím thuần (trước đây 50–500 ngả hồng nên nền, viền, nút
- * đều ám hồng và cả trang trông đục).
+ * Cấu hình Tailwind — CHỈ ÁNH XẠ token, không tự định nghĩa giá trị màu.
+ * Mọi mã màu nằm ở src/theme/tokens.css; ở đây chỉ đặt tên lớp tiện dùng.
+ * Nhờ ghi màu dạng 3 kênh RGB, các lớp có độ mờ (bg-brand-600/40) vẫn chạy.
  */
+
+/** Sinh thang màu từ biến CSS: brand-50…brand-950 */
+const scale = (name) => Object.fromEntries(
+  [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+    .map((step) => [step, `rgb(var(--${name}-${step}) / <alpha-value>)`])
+);
+const token = (name) => `rgb(var(--${name}) / <alpha-value>)`;
+
 export default {
   content: ['./index.html', './src/**/*.{js,jsx}'],
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
-          950: '#2e1065',
-        },
-        ink: { DEFAULT: '#18181b', soft: '#3f3f46', muted: '#71717a' },
-        night: { DEFAULT: '#1e1537', deep: '#150f29', line: '#2e2350' },
-        line: '#e4e4e7',
-        canvas: '#f7f7f9',
+        brand: scale('brand'),        // tím THAO TÁC — nút, liên kết, focus
+        accent: scale('accent'),      // tím THƯƠNG HIỆU — sidebar, gradient
+        // Xám ngả tím thay cho xám lạnh mặc định: mọi lớp zinc-*/slate-* đã có
+        // trong mã nguồn tự đổi tông, không phải sửa từng file.
+        zinc: scale('neutral'),
+        slate: scale('neutral'),
+        neutral: scale('neutral'),
+        ink: { DEFAULT: token('ink'), soft: token('ink-soft'), muted: token('ink-muted') },
+        night: { DEFAULT: token('night'), deep: token('night-deep'), line: token('night-line') },
+        line: token('line'),
+        canvas: token('canvas'),
+        surface: token('surface'),
+        success: token('success'),
+        warning: token('warning'),
+        error: token('error'),
+        info: token('info'),
       },
       fontFamily: {
         sans: ['"Segoe UI"', 'system-ui', '-apple-system', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],
       },
+      // 6 bậc cỡ chữ; nội dung đọc dài có line-height ≥ 1.5.
+      fontSize: {
+        xs: ['12px', { lineHeight: '1.5' }],
+        sm: ['13px', { lineHeight: '1.55' }],
+        base: ['14.5px', { lineHeight: '1.6' }],
+        lg: ['16px', { lineHeight: '1.55' }],
+        xl: ['20px', { lineHeight: '1.4' }],
+        '2xl': ['26px', { lineHeight: '1.3' }],
+      },
       backgroundImage: {
-        'brand-grad': 'linear-gradient(135deg,#8b5cf6 0%,#6d28d9 100%)',
-        'brand-grad-soft': 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)',
+        // Gradient nhận diện: tím thao tác → tím thương hiệu, đúng tông logo.
+        'brand-grad': 'linear-gradient(135deg, rgb(var(--brand-500)) 0%, rgb(var(--accent-600)) 100%)',
+        'brand-grad-soft': 'linear-gradient(135deg, rgb(var(--brand-400)) 0%, rgb(var(--accent-500)) 100%)',
       },
       boxShadow: {
-        card: '0 4px 12px rgba(24,24,27,.06), 0 1px 2px rgba(24,24,27,.04)',
-        'card-lg': '0 16px 40px rgba(24,24,27,.14)',
-        'card-sm': '0 1px 2px rgba(24,24,27,.05)',
+        'card-sm': 'var(--shadow-1)',
+        card: 'var(--shadow-2)',
+        'card-lg': 'var(--shadow-3)',
       },
-      borderRadius: { xl2: '12px', xl3: '18px' },
+      borderRadius: {
+        lg: 'var(--radius-sm)',    // 8px
+        xl2: 'var(--radius-md)',   // 12px
+        xl3: 'var(--radius-lg)',   // 16px
+      },
+      transitionTimingFunction: { out: 'var(--ease-out)' },
+      transitionDuration: { fast: 'var(--dur-fast)', base: 'var(--dur-base)', slow: 'var(--dur-slow)' },
       keyframes: {
-        'slide-up': { from: { transform: 'translateY(16px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
+        'slide-up': { from: { transform: 'translateY(8px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        'pop-in': { from: { transform: 'scale(.96)', opacity: '0' }, to: { transform: 'scale(1)', opacity: '1' } },
       },
       animation: {
-        'slide-up': 'slide-up .24s ease-out',
-        'fade-in': 'fade-in .18s ease-out',
+        'slide-up': 'slide-up var(--dur-slow) var(--ease-out) both',
+        'fade-in': 'fade-in var(--dur-base) var(--ease-out) both',
+        'pop-in': 'pop-in var(--dur-base) var(--ease-out) both',
       },
     },
   },

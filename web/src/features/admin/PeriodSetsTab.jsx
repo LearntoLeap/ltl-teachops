@@ -86,16 +86,16 @@ function SetSheet({ schoolId, set, onClose, onSaved }) {
       </div>
 
       {isNew && (
-        <div className="flex flex-wrap items-center gap-2 mb-3 text-[12.5px]">
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-sm">
           <span className="text-ink-muted">Điền nhanh theo mẫu:</span>
-          <button type="button" className="btn-line !py-1 !px-2.5 !text-[12.5px]"
+          <button type="button" className="btn-line !py-1 !px-2.5 !text-sm"
             onClick={() => setItems(presetItems('summer'))}>☀️ Mùa hè</button>
-          <button type="button" className="btn-line !py-1 !px-2.5 !text-[12.5px]"
+          <button type="button" className="btn-line !py-1 !px-2.5 !text-sm"
             onClick={() => setItems(presetItems('winter'))}>❄️ Mùa đông</button>
         </div>
       )}
 
-      <div className="rounded-lg border border-line overflow-hidden">
+      <div className="rounded-lg border border-line overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr><th className="th !w-[80px]">Tiết</th><th className="th">Vào</th><th className="th">Ra</th><th className="th">Buổi</th></tr>
@@ -112,7 +112,7 @@ function SetSheet({ schoolId, set, onClose, onSaved }) {
                   <input type="time" className="input !py-1.5" value={p.end}
                     onChange={(e) => setCell(i, 'end', e.target.value)} aria-label={`Giờ ra tiết ${p.no}`} />
                 </td>
-                <td className="td text-ink-muted text-[12.5px]">{Number(p.no) <= 5 ? 'Sáng' : 'Chiều'}</td>
+                <td className="td text-ink-muted text-sm">{Number(p.no) <= 5 ? 'Sáng' : 'Chiều'}</td>
               </tr>
             ))}
           </tbody>
@@ -129,7 +129,7 @@ function SetSheet({ schoolId, set, onClose, onSaved }) {
         </button>
       </div>
 
-      <div className="flex gap-2.5 justify-end mt-4">
+      <div className="form-actions flex gap-2.5 justify-end mt-4">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button className="btn-primary" onClick={save} disabled={busy}>
           {busy ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : 'Lưu bộ giờ'}
@@ -172,7 +172,7 @@ export default function PeriodSetsTab({ schoolId, canManage }) {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <p className="text-[13px] text-ink-muted max-w-[560px]">
+        <p className="text-sm text-ink-muted max-w-[560px]">
           Giờ vào học từng tiết theo mùa. Xếp lịch ngày nào thì tiết lấy giờ theo bộ đang hiệu lực
           ngày đó; không có bộ nào thì dùng khung chung.
         </p>
@@ -189,8 +189,8 @@ export default function PeriodSetsTab({ schoolId, canManage }) {
             <div key={st.id} className={`card p-4 ${st.id === activeId ? 'ring-2 ring-brand-500/40' : ''}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-semibold text-[15px] truncate">{st.name}</div>
-                  <div className="text-[12.5px] text-ink-muted">
+                  <div className="font-semibold text-lg truncate">{st.name}</div>
+                  <div className="text-sm text-ink-muted">
                     {fmtDate(st.valid_from)} → {fmtDate(st.valid_to)} · {st.items.length} tiết
                   </div>
                 </div>
@@ -201,7 +201,7 @@ export default function PeriodSetsTab({ schoolId, canManage }) {
               </div>
               <div className="flex flex-wrap gap-1 mt-2.5">
                 {st.items.map((p) => (
-                  <span key={p.no} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11.5px] text-ink-soft tabular-nums">
+                  <span key={p.no} className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-xs text-ink-soft tabular-nums">
                     <b className="text-brand-700">{p.no}</b> {p.start}
                   </span>
                 ))}
