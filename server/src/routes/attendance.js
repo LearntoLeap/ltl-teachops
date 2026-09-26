@@ -316,6 +316,36 @@ export default async function routes(app) {
   });
 
   /* =========================================================================
+   * DELETE /api/attendance/:id — Quản trị viên xoá hẳn một bản điểm danh.
+   * Tiết tương ứng trả về trạng thái "theo lịch" để điểm danh lại được.
+   * ======================================================================= */
+  app.delete('/api/attendance/:id', { preHandler: requirePerm('record.forceDelete') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const reason = str(req.query.reason, 'reason', { max: 500 });
+    const before = await fetchOne(id);
+    if (!before) throw notFound('Không tìm thấy bản ghi điểm danh.');
+
+    await tx(async (c) => {
+      await c.query('delete from attendance where id = $1', [id]);
+      await c.query(
+        "update schedules set status = 'scheduled' where id = $1 and status = 'done'",
+        [before.schedule_id]
+      );
+    });
+
+    audit(req, {
+      action: 'delete',
+      entity: 'attendance',
+      entityId: id,
+      summary: `Xoá bản điểm danh lớp ${before.class_name || ''} — ${before.school_name || ''} `
+        + `(${before.present_count}/${before.roster_size} học sinh).`
+        + `${reason ? ` Lý do: ${reason}` : ''}`,
+      before,
+    });
+    return { deleted: true, id };
+  });
+
+  /* =========================================================================
    * PATCH /api/attendance/:id — người tạo trong 24h, hoặc admin/manager trong phạm vi
    * Cho sửa present_count / absent_names / note + thêm ảnh (multipart).
    * ======================================================================= */

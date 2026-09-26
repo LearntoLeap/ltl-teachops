@@ -601,6 +601,37 @@ export default async function routes(app) {
   /* =========================================================================
    * PATCH /api/timesheets/:id — Admin sửa tay (bắt buộc audit before/after)
    * ======================================================================= */
+  /* ------------------------------------------------------------------------
+   * DELETE /api/timesheets/:id — Quản trị viên xoá hẳn một bản chấm công
+   * (nhập nhầm, chấm hộ sai người…). Ảnh đính kèm vẫn nằm trong kho tệp và
+   * vết xoá còn trong nhật ký.
+   * ---------------------------------------------------------------------- */
+  app.delete('/api/timesheets/:id', { preHandler: requirePerm('record.forceDelete') }, async (req) => {
+    const id = uuid(req.params.id, 'id', { required: true });
+    const reason = str(req.query.reason, 'reason', { max: 500 });
+    const before = await one(
+      `select t.*, u.full_name as user_name, sc.name as school_name
+         from timesheets t
+         join users u on u.id = t.user_id
+         join schools sc on sc.id = t.school_id
+        where t.id = $1`,
+      [id]
+    );
+    if (!before) throw notFound('Không tìm thấy bản chấm công.');
+
+    await query('delete from timesheets where id = $1', [id]);
+    audit(req, {
+      action: 'delete',
+      entity: 'timesheets',
+      entityId: id,
+      summary: `Xoá bản chấm công của ${before.user_name} — ${before.school_name} `
+        + `ngày ${vnDate(before.work_date)} (${SESSION_VN[before.work_session] || before.work_session}).`
+        + `${reason ? ` Lý do: ${reason}` : ''}`,
+      before,
+    });
+    return { deleted: true, id };
+  });
+
   app.patch('/api/timesheets/:id', { preHandler: requirePerm('timesheet.edit') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
     const b = req.body || {};

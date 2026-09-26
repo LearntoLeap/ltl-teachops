@@ -8,7 +8,7 @@
  *   - "Hôm nay" tính theo múi giờ Việt Nam: (now() at time zone 'Asia/Ho_Chi_Minh')::date.
  */
 import { query, rows, one, scalar, tx } from '../db.js';
-import { requirePerm, assertPerm, isFieldStaff } from '../lib/rbac.js';
+import { requirePerm, assertPerm, can, isFieldStaff } from '../lib/rbac.js';
 import {
   scheduleFilter,
   combine,
@@ -808,8 +808,10 @@ export default async function routes(app) {
   });
 
   /* ------------------------------------------------------------------------
-   * DELETE /api/schedules/:id — đã có chấm công ⇒ chỉ huỷ (giữ dữ liệu);
-   * chưa có gì ⇒ xoá hẳn. Lý do huỷ lấy từ ?reason=.
+   * DELETE /api/schedules/:id — tiết ĐÃ ĐIỂM DANH thì người thường không xoá
+   * được (mất sĩ số và bằng chứng), chỉ Quản trị viên (record.forceDelete)
+   * mới xoá hẳn được; điểm danh và chấm công gắn tiết đó bị xoá theo.
+   * Lý do lấy từ ?reason=.
    * ---------------------------------------------------------------------- */
   app.delete('/api/schedules/:id', { preHandler: requirePerm('schedule.manage') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
@@ -818,15 +820,18 @@ export default async function routes(app) {
 
     // Chấm công nay theo BUỔI, không bám tiết — thứ chặn xoá hẳn là ĐIỂM DANH:
     // tiết đã điểm danh là đã dạy thật, xoá sẽ mất sĩ số và bằng chứng.
-    const hasTimesheet = await scalar(
-      'select exists (select 1 from attendance where schedule_id = $1)',
+    const attended = await one(
+      `select count(*)::int as cnt, coalesce(max(present_count), 0) as present
+         from attendance where schedule_id = $1`,
       [id]
     );
+    const canForce = can(req.user, 'record.forceDelete');
 
-    if (hasTimesheet) {
+    if (attended.cnt > 0 && !canForce) {
       throw conflict(
         'Tiết này đã điểm danh — đã dạy thật nên không xoá hẳn được. '
-        + 'Nếu cần, hãy đổi trạng thái sang "Huỷ lịch" hoặc "Đã bỏ" kèm lý do.'
+        + 'Nếu cần, hãy đổi trạng thái sang "Huỷ lịch" hoặc "Đã bỏ" kèm lý do, '
+        + 'hoặc nhờ Quản trị viên xoá hẳn.'
       );
     }
 
@@ -836,9 +841,10 @@ export default async function routes(app) {
       entity: 'schedules',
       entityId: id,
       summary: `Xoá buổi dạy ${s.session_date} — ${s.school_name} / lớp ${s.class_name}.` +
+        (attended.cnt > 0 ? ` Xoá kèm ${attended.cnt} bản điểm danh (Quản trị viên).` : '') +
         `${reason ? ` Lý do: ${reason}` : ''}`,
-      before: pickAudit(s),
+      before: { ...pickAudit(s), attendance_deleted: attended.cnt },
     });
-    return { deleted: true, id };
+    return { deleted: true, id, attendance_deleted: attended.cnt };
   });
 }

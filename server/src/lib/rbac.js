@@ -38,6 +38,9 @@ const PERMISSIONS = {
   'timesheet.self':          ['admin', 'manager', 'teacher', 'assistant'],
   'timesheet.viewAll':       ['admin', 'manager'],
   'timesheet.edit':          ['admin'],
+  // Xoá hẳn bản ghi vận hành kể cả khi đã có điểm danh / chấm công.
+  // Chỉ Quản trị viên: thao tác này mất dữ liệu thật, không khôi phục được.
+  'record.forceDelete':      ['admin'],
   'timesheet.approve':       ['admin', 'manager'],
 
   // Điểm danh học sinh

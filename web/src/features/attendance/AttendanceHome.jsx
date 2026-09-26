@@ -12,7 +12,7 @@ import { api, fileUrl } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { fmtDate, fmtDateLong, fmtRange, monthRange, today } from '../../lib/format.js';
 import {
-  Badge, EmptyState, ErrorBox, PageHeader, PageLoading, Pager, Segmented, Spinner,
+  Badge, ConfirmSheet, EmptyState, ErrorBox, PageHeader, PageLoading, Pager, Segmented, Spinner,
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
@@ -225,6 +225,24 @@ function HistoryTab({ managerView }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [exporting, setExporting] = useState(false);
+  // Quản trị viên xoá hẳn được một bản điểm danh nhập nhầm.
+  const canDelete = auth.can('record.forceDelete');
+  const [victim, setVictim] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.del(`/api/attendance/${victim.id}`);
+      toast.ok('Đã xoá bản điểm danh. Tiết trở lại trạng thái "theo lịch".');
+      setVictim(null);
+      await load();
+    } catch (e) {
+      toast.fromError(e);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // '2026-09' → ngày đầu & cuối tháng (dùng ngày 02 để tránh lệch múi giờ).
   const { from, to } = useMemo(() => monthRange(`${month}-02T00:00:00`), [month]);
@@ -327,6 +345,7 @@ function HistoryTab({ managerView }) {
                     <th className="th">Sĩ số</th>
                     <th className="th">Người điểm danh</th>
                     <th className="th">Ảnh</th>
+                    {canDelete && <th className="th !w-[56px]"><span className="sr-only">Xoá</span></th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -362,6 +381,13 @@ function HistoryTab({ managerView }) {
                             <span className="text-ink-muted">—</span>
                           )}
                         </td>
+                        {canDelete && (
+                          <td className="td text-center">
+                            <button type="button" title="Xoá bản điểm danh" aria-label="Xoá bản điểm danh"
+                              className="icon-btn text-rose-600 hover:bg-rose-50"
+                              onClick={() => setVictim(r)}>🗑</button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -372,6 +398,22 @@ function HistoryTab({ managerView }) {
           <Pager page={page} limit={LIMIT} total={data.total} onPage={setPage} />
         </>
       )}
+
+      <ConfirmSheet
+        open={!!victim}
+        onClose={() => setVictim(null)}
+        onConfirm={doDelete}
+        busy={deleting}
+        danger
+        confirmLabel="Xoá hẳn"
+        title="Xoá bản điểm danh"
+        message={victim
+          ? `Xoá hẳn bản điểm danh lớp ${victim.class_name || victim.class?.name || ''} `
+            + `ngày ${fmtDate(victim.date || victim.created_at)} `
+            + `(${victim.present_count ?? '—'}/${victim.roster_size ?? '—'} học sinh)? `
+            + 'Tiết sẽ trở lại trạng thái "theo lịch" để điểm danh lại. Vết xoá còn trong Nhật ký.'
+          : ''}
+      />
     </div>
   );
 }

@@ -143,7 +143,11 @@ hoạch thay đổi từ trước) · `skipped` **Đã bỏ** (đến giờ như
 lưu `status_reason`, `status_changed_by`, `status_changed_at` và báo cho người phụ trách;
 `status: scheduled` để khôi phục. Tiết đã điểm danh không huỷ/bỏ được. Tiết huỷ/bỏ vẫn hiện
 trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + Lý do huỷ / bỏ).
-`DELETE /api/schedules/:id` là **Xoá hẳn** — chỉ khi chưa điểm danh; đã điểm danh ⇒ 409.
+`DELETE /api/schedules/:id` là **Xoá hẳn** (`?reason=` để ghi nhật ký):
+- tiết **chưa điểm danh**: ai có `schedule.manage` cũng xoá được;
+- tiết **đã điểm danh**: `409` với mọi người, **trừ** người có `record.forceDelete`
+  (chỉ Quản trị viên) — xoá kéo theo bản điểm danh và chấm công gắn tiết đó,
+  phản hồi trả `attendance_deleted`.
 
 **Giao trợ giảng theo tiết.** Mỗi tiết có thể một trợ giảng khác nhau.
 `GET /api/schedules/:id/assistant-options` và `PUT /api/schedules/:id/assistant
@@ -161,6 +165,7 @@ trong lịch và báo cáo `class-sessions.xlsx` (cột Trạng thái tiết + L
 | POST | `/check-out` | teacher, assistant | *(xem dưới)* |
 | POST | `/:id/approve` | admin, manager | `{decision:'approved'\|'rejected', reason?}` |
 | PATCH | `/:id` | admin | Sửa tay (ghi `audit_log`) |
+| DELETE | `/:id` | `record.forceDelete` (**chỉ admin**) | Xoá hẳn một bản chấm công (`?reason=`) — dùng khi chấm nhầm người/nhầm buổi |
 | GET | `/reconcile` | admin, manager | Bảng đối chiếu kế hoạch ↔ thực tế |
 
 > **Chấm công là của BUỔI, không của tiết.** Giáo viên đến trường chấm công vào
@@ -212,6 +217,7 @@ Bảng chấm công (`/api/reports/timesheets.xlsx`) ghi chi tiết từng loạ
 | GET | `/pending` | admin, manager | Buổi quá giờ mà chưa điểm danh |
 | POST | `/` | teacher, assistant | `multipart`: `schedule_id`, `present_count`, `roster_size` (sĩ số thực tế buổi đó), `photos[]` (≥1), `absent_names?`, `note?` |
 | GET/PATCH | `/:id` | PATCH: người tạo trong 24h, hoặc admin/manager | |
+| DELETE | `/:id` | `record.forceDelete` (**chỉ admin**) | Xoá hẳn bản điểm danh (`?reason=`); tiết trở lại `scheduled` để điểm danh lại |
 | POST | `/:id/remind` | admin, manager | Gửi thông báo nhắc người phụ trách |
 
 Server tự suy `class_id`, `school_id`, `marked_by` từ `schedule_id` — client **không** gửi.

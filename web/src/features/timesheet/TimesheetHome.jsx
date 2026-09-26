@@ -15,7 +15,7 @@ import {
   initials, monthRange, today,
 } from '../../lib/format.js';
 import {
-  Badge, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Pager, Segmented, Sheet, Spinner,
+  Badge, ConfirmSheet, EmptyState, ErrorBox, Field, PageHeader, PageLoading, Pager, Segmented, Sheet, Spinner,
 } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
@@ -135,8 +135,32 @@ function RangeFilter({ value, onChange }) {
   );
 }
 
-/** Bảng chấm công dùng chung cho "Lịch sử của tôi" và tab "Tất cả". */
-function TimesheetTable({ items, showUser = false }) {
+/**
+ * Bảng chấm công dùng chung cho "Lịch sử của tôi" và tab "Tất cả".
+ * Quản trị viên (record.forceDelete) có thêm nút xoá hẳn từng bản ghi —
+ * dùng khi chấm nhầm người hoặc nhầm buổi; vết xoá còn trong nhật ký.
+ */
+function TimesheetTable({ items, showUser = false, onDeleted }) {
+  const auth = useAuth();
+  const toast = useToast();
+  const [victim, setVictim] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const canDelete = auth.can('record.forceDelete') && typeof onDeleted === 'function';
+
+  const doDelete = async () => {
+    setBusy(true);
+    try {
+      await api.del(`/api/timesheets/${victim.id}`);
+      toast.ok('Đã xoá bản chấm công.');
+      setVictim(null);
+      onDeleted();
+    } catch (e) {
+      toast.fromError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto table-cards stagger">
@@ -151,6 +175,7 @@ function TimesheetTable({ items, showUser = false }) {
               <th className="th text-right">Trễ</th>
               <th className="th text-right">Tiết</th>
               <th className="th">Duyệt</th>
+              {canDelete && <th className="th !w-[56px]"><span className="sr-only">Xoá</span></th>}
             </tr>
           </thead>
           <tbody>
@@ -173,11 +198,33 @@ function TimesheetTable({ items, showUser = false }) {
                   {t.planned_periods ?? '—'}
                 </td>
                 <td data-label="Duyệt" className="td"><ApprovalBadge status={t.approval_status} /></td>
+                {canDelete && (
+                  <td className="td text-center">
+                    <button type="button" title="Xoá bản chấm công" aria-label="Xoá bản chấm công"
+                      className="icon-btn text-rose-600 hover:bg-rose-50"
+                      onClick={() => setVictim(t)}>🗑</button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      <ConfirmSheet
+        open={!!victim}
+        onClose={() => setVictim(null)}
+        onConfirm={doDelete}
+        busy={busy}
+        danger
+        confirmLabel="Xoá hẳn"
+        title="Xoá bản chấm công"
+        message={victim
+          ? `Xoá hẳn bản chấm công của ${personName(victim) || 'người dùng'} — ${schName(victim)} `
+            + `ngày ${fmtDate(rowDate(victim))} (${shiftName(victim)})? `
+            + 'Số công và giờ làm của buổi này sẽ mất khỏi báo cáo. Vết xoá vẫn còn trong Nhật ký.'
+          : ''}
+      />
     </div>
   );
 }
@@ -351,7 +398,7 @@ function MyHistorySection() {
               hint="Check-in ở mục Hôm nay phía trên khi bạn đến trường dạy." />
           ) : (
             <>
-              <TimesheetTable items={items} />
+              <TimesheetTable items={items} onDeleted={load} />
               <Pager page={page} limit={limit} total={data?.total} onPage={setPage} />
             </>
           )}
@@ -588,7 +635,7 @@ function AllTab() {
             hint="Thử nới khoảng ngày hoặc bỏ bớt bộ lọc trường / người / trạng thái." />
         ) : (
           <>
-            <TimesheetTable items={items} showUser />
+            <TimesheetTable items={items} showUser onDeleted={load} />
             <Pager page={page} limit={limit} total={data?.total} onPage={setPage} />
           </>
         )

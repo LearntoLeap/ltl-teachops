@@ -12,6 +12,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { Field, Sheet, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
@@ -34,19 +35,23 @@ const OPTIONS = [
     value: 'delete',
     icon: '🗑️',
     label: 'Xoá hẳn',
-    hint: 'Nhập nhầm, xoá khỏi hệ thống. Chỉ được khi tiết CHƯA điểm danh; vết vẫn còn trong nhật ký.',
+    hint: 'Nhập nhầm, xoá khỏi hệ thống. Vết vẫn còn trong nhật ký.',
     tone: 'border-rose-300 bg-rose-50',
   },
 ];
 
 /* --------------------------- Sheet đổi trạng thái -------------------------- */
 function StatusSheet({ open, tiet, onClose, onDone }) {
+  const auth = useAuth();
   const toast = useToast();
   const [choice, setChoice] = useState('cancelled');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (open) { setChoice('cancelled'); setReason(''); } }, [open]);
+  const closedTiet = tiet?.status === 'cancelled' || tiet?.status === 'skipped';
+  useEffect(() => {
+    if (open) { setChoice(closedTiet ? 'delete' : 'cancelled'); setReason(''); }
+  }, [open, closedTiet]);
 
   const submit = async () => {
     if (choice !== 'delete' && reason.trim().length < 5) {
@@ -89,11 +94,23 @@ function StatusSheet({ open, tiet, onClose, onDone }) {
                 </span>
                 <span>{o.icon} {o.label}</span>
               </div>
-              <div className="text-sm text-ink-muted mt-0.5 pl-6">{o.hint}</div>
+              <div className="text-sm text-ink-muted mt-0.5 pl-6">
+                {o.hint}
+                {o.value === 'delete' && !auth.can('record.forceDelete')
+                  && ' Tiết đã điểm danh thì chỉ Quản trị viên xoá được.'}
+              </div>
             </button>
           );
         })}
       </div>
+
+      {/* Tiết đã điểm danh mà Quản trị viên chọn xoá: nói rõ mất những gì. */}
+      {choice === 'delete' && (tiet?.has_attendance ?? tiet?.attendance_done) && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-sm px-3 py-2.5 mb-3">
+          ⚠ Tiết này <b>đã điểm danh</b>. Xoá hẳn sẽ mất luôn sĩ số, ảnh lớp và bản chấm công
+          gắn với tiết — không khôi phục được. Chỉ nên dùng khi nhập nhầm.
+        </div>
+      )}
 
       <Field label={choice === 'delete' ? 'Ghi chú (tuỳ chọn)' : 'Lý do'} required={choice !== 'delete'}>
         <textarea className="input" rows={2} value={reason} onChange={(e) => setReason(e.target.value)}
@@ -215,16 +232,15 @@ export default function TietActions({ tiet, canManage, isOwnTeacher, onChanged, 
           {!closed && (
             <button className="btn-line flex-1" onClick={onEdit}>✏️ Sửa</button>
           )}
-          {closed ? (
+          {closed && (
             <button className="btn-primary flex-1" onClick={restore} disabled={restoring}>
               {restoring ? <Spinner className="h-4 w-4 border-white/40 border-t-white" /> : '↩️ Khôi phục về theo lịch'}
             </button>
-          ) : (
-            <button className="btn-line flex-1 !text-rose-700 hover:!bg-rose-50 hover:!border-rose-200"
-              onClick={() => setStatusOpen(true)}>
-              ⋯ Huỷ / bỏ / xoá tiết
-            </button>
           )}
+          <button className="btn-line flex-1 !text-rose-700 hover:!bg-rose-50 hover:!border-rose-200"
+            onClick={() => setStatusOpen(true)}>
+            {closed ? '🗑 Xoá hẳn tiết' : '⋯ Huỷ / bỏ / xoá tiết'}
+          </button>
         </div>
       )}
 
