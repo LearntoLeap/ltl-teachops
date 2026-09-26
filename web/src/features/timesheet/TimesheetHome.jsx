@@ -647,6 +647,10 @@ function AllTab() {
 function ReconcileTab() {
   const auth = useAuth();
   const toast = useToast();
+  // Quản trị viên xoá hẳn được một bản chấm công ngay trên bảng đối chiếu.
+  const canDelete = auth.can('record.forceDelete');
+  const [victim, setVictim] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [range, setRange] = useState(() => monthRange());
   const [schoolId, setSchoolId] = useState('');
   const [schools, setSchools] = useState([]);
@@ -687,6 +691,20 @@ function ReconcileTab() {
       lateMin: pick(['late_minutes', 'total_late_minutes'], fb.lateMin),
     };
   }, [data, rows]);
+
+  const doDelete = async () => {
+    setDeleting(true);
+    try {
+      await api.del(`/api/timesheets/${victim.timesheet_id || victim.id}`);
+      toast.ok('Đã xoá bản chấm công.');
+      setVictim(null);
+      await load();
+    } catch (e) {
+      toast.fromError(e);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const doExport = async () => {
     if (exporting) return;
@@ -749,6 +767,7 @@ function ReconcileTab() {
                       <th className="th">Vào – Ra</th>
                       <th className="th">Trạng thái</th>
                       <th className="th text-right">Trễ</th>
+                      {canDelete && <th className="th !w-[56px]"><span className="sr-only">Xoá</span></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -774,6 +793,17 @@ function ReconcileTab() {
                         <td data-label="Trễ" className="td text-right whitespace-nowrap">
                           {Number(r.late_minutes) > 0 ? `${fmtNumber(r.late_minutes)} ph` : ''}
                         </td>
+                        {canDelete && (
+                          <td className="td text-center">
+                            {(r.timesheet_id || r.id) ? (
+                              <button type="button" title="Xoá bản chấm công" aria-label="Xoá bản chấm công"
+                                className="icon-btn text-rose-600 hover:bg-rose-50"
+                                onClick={() => setVictim(r)}>🗑</button>
+                            ) : (
+                              <span className="text-ink-muted/60 text-xs">—</span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -783,6 +813,21 @@ function ReconcileTab() {
           )}
         </>
       )}
+
+      <ConfirmSheet
+        open={!!victim}
+        onClose={() => setVictim(null)}
+        onConfirm={doDelete}
+        busy={deleting}
+        danger
+        confirmLabel="Xoá hẳn"
+        title="Xoá bản chấm công"
+        message={victim
+          ? `Xoá hẳn bản chấm công của ${personName(victim) || 'người dùng'} — ${schName(victim)} `
+            + `ngày ${fmtDate(rowDate(victim))} (${shiftName(victim)})? `
+            + 'Số công và giờ làm của buổi này sẽ mất khỏi báo cáo. Vết xoá vẫn còn trong Nhật ký.'
+          : ''}
+      />
     </>
   );
 }
