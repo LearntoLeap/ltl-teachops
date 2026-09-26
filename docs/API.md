@@ -61,7 +61,7 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | GET/POST | `/api/schools` | GET: mọi vai trò (đã lọc phạm vi) · POST: admin, manager | |
 | GET/PATCH | `/api/schools/:id` | PATCH: admin, manager | Gồm `lat/lng/gps_radius_m/grace_minutes/device_slots`; `is_active` **chỉ admin** (ngừng / khôi phục) |
 | GET | `/api/schools/:id/delete-impact` | admin, manager | `{can_hard_delete, blockers[], cleanup[], unlinked[]}` — xoá hẳn được không và mất những gì |
-| DELETE | `/api/schools/:id` | **chỉ admin** | Mặc định ngừng sử dụng (`is_active=false`), khôi phục được; `?hard=1` xoá hẳn — **409** nếu đã có buổi dạy / kiểm tra thiết bị / báo hỏng |
+| DELETE | `/api/schools/:id` | **chỉ admin** | Mặc định ngừng sử dụng (`is_active=false`), khôi phục được; `?hard=1` xoá hẳn (mã trường dùng lại được ngay) — **409** nếu đã có buổi dạy / kiểm tra thiết bị / báo hỏng, **trừ** người có `record.forceDelete` |
 | GET/POST | `/api/classes` | POST: admin, manager | `?school_id=&level=` |
 | GET/PATCH | `/api/classes/:id` | PATCH: admin, manager | `is_active` để ngừng / khôi phục lớp |
 | GET | `/api/classes/:id/delete-impact` | admin, manager | Như trên, cho lớp |
@@ -313,9 +313,9 @@ Xem trước KHÔNG ghi `audit_log` hành động `export` — chỉ lần tải
 
 | Path | Quyền | Nội dung |
 |---|---|---|
-| `GET /admin-overview` | **chỉ admin** | Quy mô tổ chức (`org`), nhân sự theo vai trò (`staff`), hàng đợi (`queues`), nhật ký + tài khoản mới (`recent_audit`, `recent_users`) |
-| `GET /dashboard` | admin, manager | Số buổi hôm nay, tỉ lệ điểm danh, chấm công trễ, thiết bị hỏng mở, góp ý mới |
-| `GET /my-dashboard` | teacher, assistant | `today_sessions` (MỌI tiết hôm nay kể cả huỷ/bỏ, kèm `period`, `work_session`, `school_id`, kết quả điểm danh), `today_shifts` (chấm công hôm nay theo trường × buổi), `pending_tasks`, `my_month` |
+| `GET /admin-overview` | **chỉ admin** | `series` (14 ngày: sessions/attended/ontime/late) + `month_mix` (ontime/late/absent) cho biểu đồ trang chủ · Quy mô tổ chức (`org`), nhân sự theo vai trò (`staff`), hàng đợi (`queues`), nhật ký + tài khoản mới (`recent_audit`, `recent_users`) |
+| `GET /dashboard` | admin, manager | `series` + `month_mix` (theo phạm vi trường) · Số buổi hôm nay, tỉ lệ điểm danh, chấm công trễ, thiết bị hỏng mở, góp ý mới |
+| `GET /my-dashboard` | teacher, assistant | `series` + `month_mix` (chỉ của mình) · `today_sessions` (MỌI tiết hôm nay kể cả huỷ/bỏ, kèm `period`, `work_session`, `school_id`, kết quả điểm danh), `today_shifts` (chấm công hôm nay theo trường × buổi), `pending_tasks`, `my_month` |
 | `GET /timesheets.xlsx` | admin, manager · `teacher/assistant` chỉ dữ liệu của mình | Bảng chấm công theo tháng |
 | `GET /payroll.xlsx` | admin, manager | Tổng hợp tính lương: số buổi, phút trễ, buổi vắng |
 | `GET /class-sessions.xlsx` | admin, manager (`export.scope`) | **Lịch dạy & điểm danh theo TIẾT** — khớp đúng màn Lịch dạy và màn Điểm danh: tiết, giờ, lớp, người phụ trách, đã chấm công chưa, đã điểm danh chưa, giờ check tại lớp, sĩ số, và GV tự thêm / Người thêm / Lý do thêm |

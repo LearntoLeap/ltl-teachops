@@ -24,6 +24,7 @@ import { useAuth } from '../../lib/auth.jsx';
 import { pendingCount } from '../../lib/offline.js';
 import { useToast } from '../../components/Toast.jsx';
 import { Badge, EmptyState, ErrorBox, PageLoading, Spinner } from '../../components/ui.jsx';
+import { BarChart, DonutChart } from '../../components/Charts.jsx';
 import {
   LABEL, fmtAgo, fmtDate, fmtDateLong, fmtDuration, fmtNumber,
   fmtTime, today,
@@ -114,6 +115,37 @@ function QueueRow({ icon, chipCls, label, sub, count, countCls = 'bg-rose-100 te
       )}
       <span className="text-ink-muted/60">›</span>
     </Link>
+  );
+}
+
+/**
+ * Khối "Nhìn một cái là nắm": cột 14 ngày (tiết dạy / đã điểm danh) và vòng tròn
+ * tỉ lệ chấm công tháng này. Dữ liệu do máy chủ tính sẵn theo đúng phạm vi của
+ * người đang xem, nên ba vai trò dùng chung một khối.
+ */
+function OverviewCharts({ series, mix, title = 'Tổng quan 14 ngày' }) {
+  if (!series?.length && !mix) return null;
+  return (
+    <div className="rise rise-2 grid gap-3 lg:grid-cols-[1.6fr_1fr] items-start">
+      {series?.length > 0 && (
+        <div className="card p-4">
+          <div className="flex items-baseline justify-between gap-2 mb-2.5">
+            <span className="font-bold text-ink">{title}</span>
+            <span className="text-xs text-ink-muted">
+              {series.reduce((n, d) => n + (d.sessions || 0), 0)} tiết ·{' '}
+              {series.reduce((n, d) => n + (d.attended || 0), 0)} đã điểm danh
+            </span>
+          </div>
+          <BarChart series={series} />
+        </div>
+      )}
+      {mix && (
+        <div className="card p-4">
+          <div className="font-bold text-ink mb-2.5">Chấm công tháng này</div>
+          <DonutChart mix={mix} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -523,6 +555,14 @@ function FieldDashboard({ data }) {
         </div>
       )}
 
+      {/* Nhìn nhanh bằng biểu đồ */}
+      {(data.series?.length > 0 || data.month_mix) && (
+        <>
+          <Section kind="watch" title="Tổng quan của tôi" />
+          <OverviewCharts series={data.series} mix={data.month_mix} title="14 ngày gần đây" />
+        </>
+      )}
+
       {/* Hành động nhanh */}
       <Section kind="ref" title="Hành động nhanh" />
       <QuickActions className="rise rise-3" items={[
@@ -623,6 +663,14 @@ function ManagerDashboard({ data }) {
           <span>● <b>{attRest}</b> chưa tới giờ</span>
         </div>
       </div>
+
+      {/* Biểu đồ tổng quan */}
+      {(data.series?.length > 0 || data.month_mix) && (
+        <>
+          <Section kind="watch" title="Tổng quan 14 ngày" />
+          <OverviewCharts series={data.series} mix={data.month_mix} />
+        </>
+      )}
 
       {/* Hàng đợi xử lý */}
       <Section kind="act" title="Hàng đợi cần xử lý" />
@@ -805,6 +853,13 @@ function AdminDashboard({ data }) {
         <Tile icon="🗓️" chipCls="bg-amber-50" numCls="text-amber-600" num={org.week_sessions}
           label="Buổi dạy tuần này" sub={`hôm nay ${org.today_sessions ?? 0} buổi`} />
       </div>
+
+      {(data.series?.length > 0 || data.month_mix) && (
+        <>
+          <Section kind="watch" title="Tổng quan toàn hệ thống" />
+          <OverviewCharts series={data.series} mix={data.month_mix} />
+        </>
+      )}
 
       <Section kind="watch" title="Lịch dạy hôm nay" to="/lich" toLabel="Xem lịch đầy đủ ›" />
       <TodayScheduleTable items={data.today_schedule} />

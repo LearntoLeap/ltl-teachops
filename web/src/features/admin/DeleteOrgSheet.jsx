@@ -4,14 +4,16 @@
  * Hai mức, cố ý tách bạch:
  *   • Ngừng sử dụng — ẩn khỏi xếp lịch/chấm công/điểm danh, dữ liệu lịch sử giữ
  *     nguyên, bật lại lúc nào cũng được. Dùng cho trường/lớp thôi hợp tác.
- *   • Xoá hẳn — xoá khỏi cơ sở dữ liệu, không lấy lại được. Chỉ mở khi máy chủ
- *     xác nhận chưa phát sinh dữ liệu vận hành. Dùng cho bản ghi NHẬP SAI.
+ *   • Xoá hẳn — xoá khỏi cơ sở dữ liệu, không lấy lại được; mã trường/lớp được
+ *     dùng lại ngay sau đó. Mở sẵn khi chưa phát sinh dữ liệu vận hành; đã vận
+ *     hành rồi thì chỉ Quản trị viên xoá được, kèm cảnh báo đỏ.
  *
  * Trước khi hỏi, sheet gọi /delete-impact để nói rõ xoá sẽ mất những gì —
  * không bắt người dùng đoán.
  */
 import { useEffect, useState } from 'react';
 import { api } from '../../lib/api.js';
+import { useAuth } from '../../lib/auth.jsx';
 import { Sheet, Spinner } from '../../components/ui.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
@@ -22,6 +24,7 @@ const KIND = {
 };
 
 export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
+  const auth = useAuth();
   const toast = useToast();
   const { noun, base } = KIND[kind] || KIND.school;
   const [impact, setImpact] = useState(null);
@@ -54,7 +57,10 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
     }
   };
 
-  const canHard = impact?.can_hard_delete === true;
+  // Quản trị viên xoá hẳn được kể cả khi đã vận hành (để dùng lại mã đã nhập sai).
+  const force = auth.can('record.forceDelete');
+  const canHard = impact ? (impact.can_hard_delete === true || force) : false;
+  const risky = impact?.blockers?.length > 0;
   const lines = (list) => list.map((b) => `${b.count} ${b.label}`).join(' · ');
 
   return (
@@ -70,25 +76,30 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
         </div>
       )}
 
-      {impact && impact.blockers.length > 0 && (
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mb-3.5">
-          <div className="text-sm font-semibold text-amber-900 mb-0.5">
+      {impact && risky && (
+        <div className={`rounded-xl px-3.5 py-2.5 mb-3.5 border
+          ${force ? 'bg-rose-50 border-rose-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div className={`text-sm font-semibold mb-0.5 ${force ? 'text-rose-900' : 'text-amber-900'}`}>
             {noun === 'trường' ? 'Trường' : 'Lớp'} này đã đi vào vận hành
           </div>
-          <div className="text-sm text-amber-800">
-            Đang có {lines(impact.blockers)}. Xoá hẳn sẽ mất sạch phần lịch sử đó, nên chỉ ngừng sử dụng được.
+          <div className={`text-sm ${force ? 'text-rose-800' : 'text-amber-800'}`}>
+            Đang có {lines(impact.blockers)}.{' '}
+            {force
+              ? 'Là Quản trị viên, bạn vẫn xoá hẳn được — toàn bộ phần lịch sử trên sẽ mất và không lấy lại được. '
+                + `Sau khi xoá, mã ${noun} được dùng lại ngay.`
+              : 'Xoá hẳn sẽ mất sạch phần lịch sử đó, nên chỉ ngừng sử dụng được (hoặc nhờ Quản trị viên xoá hẳn).'}
           </div>
         </div>
       )}
 
-      {impact && canHard && impact.cleanup.length > 0 && (
+      {impact && canHard && !risky && impact.cleanup.length > 0 && (
         <div className="rounded-xl bg-canvas border border-line px-3.5 py-2.5 mb-3.5">
           <div className="text-sm text-ink-soft">
             Xoá hẳn sẽ xoá cùng: <b>{lines(impact.cleanup)}</b>.
           </div>
         </div>
       )}
-      {impact && canHard && impact.unlinked?.length > 0 && (
+      {impact && canHard && !risky && impact.unlinked?.length > 0 && (
         <div className="text-sm text-ink-muted mb-3.5">
           Giữ lại nhưng bỏ liên kết: {lines(impact.unlinked)}.
         </div>
@@ -115,9 +126,11 @@ export default function DeleteOrgSheet({ open, kind, item, onClose, onDone }) {
               {busy === 'hard' ? 'Đang xoá…' : '🗑 Xoá hẳn'}
             </span>
             <span className="text-sm font-normal opacity-90">
-              {canHard
-                ? `Dùng khi nhập sai. Xoá khỏi cơ sở dữ liệu, không lấy lại được.`
-                : 'Không dùng được vì đã có dữ liệu vận hành.'}
+              {!canHard
+                ? 'Không dùng được vì đã có dữ liệu vận hành.'
+                : risky
+                  ? `Xoá cả dữ liệu vận hành kèm theo. Mã ${noun} được dùng lại ngay.`
+                  : `Dùng khi nhập sai. Xoá khỏi cơ sở dữ liệu, mã ${noun} được dùng lại ngay.`}
             </span>
           </span>
         </button>

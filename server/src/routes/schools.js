@@ -6,7 +6,7 @@
  * tới chấm công và kiểm kê thiết bị ⇒ mọi thay đổi đều ghi audit đầy đủ before/after.
  */
 import { rows, one, scalar, tx } from '../db.js';
-import { requirePerm, requireRole } from '../lib/rbac.js';
+import { requirePerm, requireRole, can } from '../lib/rbac.js';
 import { schoolFilter, combine, assertSchoolAccess } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, notFound, forbidden } from '../lib/errors.js';
@@ -309,8 +309,9 @@ export default async function routes(app) {
   /* ------------------------------------------------------------------------
    * DELETE /api/schools/:id — chỉ admin.
    * Mặc định NGỪNG SỬ DỤNG (is_active = false), khôi phục được bất cứ lúc nào.
-   * ?hard=1 — XOÁ HẲN khỏi cơ sở dữ liệu, chỉ khi trường chưa phát sinh dữ liệu
-   * vận hành (buổi dạy, kiểm tra thiết bị, báo hỏng). Dùng cho trường nhập sai.
+   * ?hard=1 — XOÁ HẲN khỏi cơ sở dữ liệu (mã trường được dùng lại ngay).
+   * Trường đã phát sinh dữ liệu vận hành: chỉ Quản trị viên (record.forceDelete)
+   * xoá hẳn được, và buổi dạy / chấm công / điểm danh mất theo.
    * ---------------------------------------------------------------------- */
   app.delete('/api/schools/:id', { preHandler: requireRole('admin') }, async (req) => {
     const id = uuid(req.params.id, 'id', { required: true });
@@ -332,10 +333,13 @@ export default async function routes(app) {
     }
 
     const impact = await schoolDeleteImpact(id);
-    if (impact.blockers.length) {
+    // Quản trị viên được xoá hẳn kể cả khi đã vận hành — để nhập lại mã trường
+    // đã dùng sai. Dữ liệu liên quan mất theo (khoá ngoại on delete cascade).
+    if (impact.blockers.length && !can(req.user, 'record.forceDelete')) {
       throw conflict(
         `Không xoá hẳn được trường "${before.name}" vì đã có ${listOf(impact.blockers)}. `
-        + 'Hãy dùng "Ngừng sử dụng" để ẩn trường mà vẫn giữ nguyên dữ liệu lịch sử.'
+        + 'Hãy dùng "Ngừng sử dụng" để ẩn trường mà vẫn giữ nguyên dữ liệu lịch sử, '
+        + 'hoặc nhờ Quản trị viên xoá hẳn.'
       );
     }
 

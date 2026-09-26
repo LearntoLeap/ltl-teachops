@@ -3,7 +3,7 @@
  * Hợp đồng: docs/API.md mục 3 · Phạm vi dữ liệu: docs/ARCHITECTURE.md §3.
  */
 import { rows, one, scalar, tx } from '../db.js';
-import { requirePerm } from '../lib/rbac.js';
+import { requirePerm, can } from '../lib/rbac.js';
 import { schoolFilter, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, unprocessable } from '../lib/errors.js';
@@ -338,7 +338,7 @@ export default async function routes(app) {
     }
 
     const impact = await classDeleteImpact(id);
-    if (impact.blockers.length) {
+    if (impact.blockers.length && !can(req.user, 'record.forceDelete')) {
       throw conflict(
         `Không xoá hẳn được lớp "${before.name}" vì đã có ${listOf(impact.blockers)}. `
         + 'Hãy dùng "Ngừng sử dụng" để ẩn lớp mà vẫn giữ nguyên dữ liệu lịch sử.'

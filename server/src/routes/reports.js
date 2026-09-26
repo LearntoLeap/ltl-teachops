@@ -48,6 +48,59 @@ async function schoolScope(user, col, next, schoolId) {
   return { sql, params, next };
 }
 
+/* ----------------------- Dữ liệu cho biểu đồ trang chủ ---------------------- */
+
+const SERIES_DAYS = 14;
+
+/**
+ * Chuỗi ngày cho biểu đồ cột: mỗi ngày một cột, luôn đủ SERIES_DAYS ngày kể cả
+ * ngày không có dữ liệu (generate_series) để cột không bị "nhảy" ngày.
+ * scopeCol/scopeParams: lọc theo phạm vi trường; userId: chỉ của một người.
+ */
+async function dailySeries({ user, schoolId, userId = null, days = SERIES_DAYS }) {
+  const sc = await schoolScope(user, 's.school_id', 3, schoolId);      // tiết dạy
+  const tsStart = 3 + sc.params.length;
+  const ts = await schoolScope(user, 'v.school_id', tsStart + 1, schoolId); // chấm công
+  const p = [days - 1, userId, ...sc.params, userId, ...ts.params];
+  const uSched = `($2::uuid is null or s.teacher_id = $2::uuid or s.assistant_id = $2::uuid)`;
+  const uShift = `($${tsStart}::uuid is null or v.user_id = $${tsStart}::uuid)`;
+
+  return rows(
+    `select to_char(d.day, 'YYYY-MM-DD') as day,
+            (select count(*) from schedules s
+              where s.session_date = d.day and s.status not in ('cancelled', 'skipped')
+                and ${uSched} and ${sc.sql})::int as sessions,
+            (select count(*) from schedules s join attendance a on a.schedule_id = s.id
+              where s.session_date = d.day and ${uSched} and ${sc.sql})::int as attended,
+            (select count(*) from v_work_shifts v
+              where v.work_date = d.day and v.label = 'ontime' and ${uShift} and ${ts.sql})::int as ontime,
+            (select count(*) from v_work_shifts v
+              where v.work_date = d.day and v.label = 'late' and ${uShift} and ${ts.sql})::int as late
+       from generate_series(
+              (${VN_NOW})::date - $1::int, (${VN_NOW})::date, interval '1 day'
+            ) as d(day)
+      order by d.day`,
+    p
+  );
+}
+
+/** Tỉ lệ đúng giờ / trễ / vắng trong tháng hiện tại — cho biểu đồ tròn. */
+async function monthMix({ user, schoolId, userId = null }) {
+  const sc = await schoolScope(user, 'v.school_id', 2, schoolId);
+  const r = await one(
+    `select count(*) filter (where v.label = 'ontime')::int as ontime,
+            count(*) filter (where v.label = 'late')::int as late,
+            count(*) filter (where v.check_in_at is null)::int as absent
+       from v_work_shifts v
+      where v.work_date >= date_trunc('month', (${VN_NOW})::date)::date
+        and v.work_date <= (${VN_NOW})::date
+        and ($1::uuid is null or v.user_id = $1::uuid)
+        and ${sc.sql}`,
+    [userId, ...sc.params]
+  );
+  return { ontime: r?.ontime ?? 0, late: r?.late ?? 0, absent: r?.absent ?? 0 };
+}
+
 /* ------------------- Cột & dòng dùng chung cho chấm công ------------------- */
 
 const SESSION_VN = { morning: 'Sáng', afternoon: 'Chiều' };
@@ -133,7 +186,7 @@ export default async function routes(app) {
    * Trả: quy mô tổ chức, nhân sự theo vai trò, hàng đợi cần xử lý,
    * nhật ký & tài khoản mới nhất — dữ liệu cho dashboard Quản trị viên.
    * ======================================================================== */
-  app.get('/api/reports/admin-overview', { preHandler: requireRole('admin') }, async () => {
+  app.get('/api/reports/admin-overview', { preHandler: requireRole('admin') }, async (req) => {
     const today = vnToday();
 
     const [org, staff, flagged, issueCounts, fbNew, matPending, recentAudit, todaySchedule, recentUsers] =
@@ -203,6 +256,8 @@ export default async function routes(app) {
     for (const r of issueCounts) openIssues[r.status] = r.cnt;
 
     return {
+      series: await dailySeries({ user: req.user }),
+      month_mix: await monthMix({ user: req.user }),
       org: {
         schools: org?.schools ?? 0,
         classes: org?.classes ?? 0,
@@ -322,6 +377,8 @@ export default async function routes(app) {
     for (const r of issueCounts) openIssues[r.status] = r.cnt;
 
     return {
+      series: await dailySeries({ user: req.user, schoolId }),
+      month_mix: await monthMix({ user: req.user, schoolId }),
       today: {
         sessions: sess?.sessions ?? 0,
         checked_in: people?.checked_in ?? 0,
@@ -417,6 +474,8 @@ export default async function routes(app) {
     ]);
 
     return {
+      series: await dailySeries({ user: req.user, userId: me }),
+      month_mix: await monthMix({ user: req.user, userId: me }),
       today_sessions: todaySessions,
       today_shifts: todayShifts,
       pending_tasks: {
