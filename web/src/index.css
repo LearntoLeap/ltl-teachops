@@ -201,8 +201,11 @@
 }
 
 /* ------------------------- Chuyển trang & xuất hiện so le ------------------------- */
-/* Màn hình mới vào: mờ dần + trượt lên 8px. Con của <main> được thay khi đổi route. */
-.page-enter > * { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+/* Màn hình mới vào: MỜ DẦN thuần (không transform).
+   Cố ý không trượt: transform trên con của <main> sẽ biến phần tử đó thành gốc
+   toạ độ cho mọi con position:fixed, làm hộp thoại lệch khỏi màn hình. */
+@keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+.page-enter > * { animation: page-in var(--dur-base) var(--ease-out) both; }
 
 /* Danh sách/hàng bảng xuất hiện so le 30ms (tối đa 8 mục đầu cho nhẹ). */
 .stagger > *:nth-child(1), .stagger tbody tr:nth-child(1) { animation-delay: calc(var(--stagger) * 1); }
@@ -218,7 +221,9 @@
 /* Hiệu ứng vào trang: nổi dần theo bậc, cách nhau --stagger (tôn trọng reduced-motion) */
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  /* transform: none (không phải translateY(0)) để sau hiệu ứng phần tử không còn
+     là gốc toạ độ của con position: fixed. */
+  to   { opacity: 1; transform: none; }
 }
 .rise { animation: rise-in var(--dur-slow) var(--ease-out) both; }
 .rise-1 { animation-delay: calc(var(--stagger) * 1); } .rise-2 { animation-delay: calc(var(--stagger) * 2); }

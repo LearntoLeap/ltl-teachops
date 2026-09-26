@@ -63,9 +63,10 @@ export default {
       transitionTimingFunction: { out: 'var(--ease-out)' },
       transitionDuration: { fast: 'var(--dur-fast)', base: 'var(--dur-base)', slow: 'var(--dur-slow)' },
       keyframes: {
-        'slide-up': { from: { transform: 'translateY(8px)', opacity: '0' }, to: { transform: 'translateY(0)', opacity: '1' } },
+        // Kết thúc bằng transform: none — xem ghi chú ở index.css (@keyframes rise-in).
+        'slide-up': { from: { transform: 'translateY(8px)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
-        'pop-in': { from: { transform: 'scale(.96)', opacity: '0' }, to: { transform: 'scale(1)', opacity: '1' } },
+        'pop-in': { from: { transform: 'scale(.96)', opacity: '0' }, to: { transform: 'none', opacity: '1' } },
       },
       animation: {
         'slide-up': 'slide-up var(--dur-slow) var(--ease-out) both',
