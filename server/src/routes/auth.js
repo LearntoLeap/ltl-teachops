@@ -48,7 +48,8 @@ function publicUser(u) {
 const tokenMeta = (req) => ({ userAgent: req.headers['user-agent'], ip: req.ip });
 
 const SCHOOL_COLS =
-  'id, code, name, address, province, lat, lng, gps_radius_m, grace_minutes, device_slots, contact_name, contact_phone, is_active';
+  'id, code, name, address, province, lat, lng, gps_radius_m, grace_minutes, remind_before_minutes, '
+  + 'device_slots, contact_name, contact_phone, is_active';
 
 export default async function routes(app) {
   /* ----------------------------- Đăng nhập ------------------------------- */

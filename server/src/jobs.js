@@ -129,7 +129,9 @@ export async function remindCheckout() {
 }
 
 /* ---------------------------------------------------------------------------
- * 3b. Nhắc buổi dạy KẾ TIẾP: 60 phút trước giờ vào lớp, báo GV + TG một lần.
+ * 3b. Nhắc buổi dạy KẾ TIẾP để kịp chấm công: báo GV + TG đúng MỘT lần, trước
+ *     giờ vào lớp bao nhiêu phút là do cài đặt của trường
+ *     (schools.remind_before_minutes, mặc định 60) — trường ở xa đặt sớm hơn.
  * ------------------------------------------------------------------------- */
 export async function remindUpcoming() {
   const upcoming = await rows(
@@ -143,7 +145,8 @@ export async function remindUpcoming() {
         and s.session_date = ((now() at time zone 'Asia/Ho_Chi_Minh'))::date
         and (s.session_date + s.start_time)
             between (now() at time zone 'Asia/Ho_Chi_Minh')
-                and (now() at time zone 'Asia/Ho_Chi_Minh') + interval '60 minutes'
+                and (now() at time zone 'Asia/Ho_Chi_Minh')
+                    + make_interval(mins => coalesce(sc.remind_before_minutes, 60))
         and not exists (
           select 1 from notifications n
            where n.ref_id = s.id and n.kind = 'schedule_reminder'
@@ -217,8 +220,9 @@ async function safe(name, fn) {
 export function startJobs(logger) {
   log = logger || console;
 
-  // Mỗi 10 phút: nhắc buổi sắp dạy (60 phút trước giờ vào lớp).
-  timers.push(setInterval(() => safe('remindUpcoming', remindUpcoming), 10 * MINUTE));
+  // Mỗi 2 phút: nhắc buổi sắp dạy. Trường có thể đặt nhắc trước 5 phút nên nhịp
+  // quét phải dày hơn khoảng nhắc ngắn nhất, nếu không sẽ có buổi bị bỏ sót.
+  timers.push(setInterval(() => safe('remindUpcoming', remindUpcoming), 2 * MINUTE));
 
   // Mỗi 15 phút: nhắc điểm danh & check-out.
   timers.push(setInterval(() => {

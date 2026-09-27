@@ -1,42 +1,36 @@
 /**
- * devices.js — Thiết bị phòng STEM: danh mục thiết bị, kiểm kê theo mốc trong ngày,
- * báo cáo & xử lý sự cố hỏng/thiếu.
+ * devices.js — Thiết bị phòng STEM: danh mục thiết bị chuẩn của từng phòng,
+ * báo hỏng đột xuất / đề nghị bổ sung, và xử lý các phiếu đó.
+ *
+ * KHÔNG còn thao tác kiểm kê ở đây: đếm thiết bị đầu/cuối buổi là một bước của
+ * CHẤM CÔNG (routes/timesheets.js) — thiếu hoặc hỏng lúc check-out tự mở phiếu
+ * báo hỏng. Dữ liệu kiểm kê cũ vẫn xem và xuất báo cáo được (GET /devices/checks).
  *
  * Hợp đồng API: docs/API.md mục 7 · Nghiệp vụ: docs/ARCHITECTURE.md §5.3.
  */
+import { randomUUID } from 'node:crypto';
 import { rows, one, query, scalar, tx } from '../db.js';
 import { badRequest, notFound, conflict, unprocessable } from '../lib/errors.js';
 import { requirePerm, requireRole, isFieldStaff } from '../lib/rbac.js';
-import {
-  schoolFilter, combine, visibleSchoolIds, assertSchoolAccess, assertRoomAccess,
-} from '../lib/scope.js';
-import { str, uuid, int, bool, enumOf, dateStr, isoTime, json, paging } from '../lib/validate.js';
+import { schoolFilter, combine, visibleSchoolIds, assertSchoolAccess } from '../lib/scope.js';
+import { str, uuid, int, bool, enumOf, dateStr, json, paging } from '../lib/validate.js';
 import { consumeMultipart } from '../lib/storage.js';
 import { audit } from '../lib/audit.js';
 import { notify, notifySchoolManagers } from '../lib/notify.js';
 
 /* ------------------------------ Hằng nghiệp vụ ----------------------------- */
 
-const SLOT_LABEL = {
-  morning_start: 'Đầu buổi sáng',
-  morning_end: 'Cuối buổi sáng',
-  afternoon_start: 'Đầu buổi chiều',
-  afternoon_end: 'Cuối buổi chiều',
-};
-const DEVICE_SLOTS = Object.keys(SLOT_LABEL);
+/** Mốc kiểm kê cũ — chỉ còn dùng để LỌC và hiển thị dữ liệu lịch sử. */
+const DEVICE_SLOTS = ['morning_start', 'morning_end', 'afternoon_start', 'afternoon_end'];
 
 const ISSUE_STATUSES = ['new', 'in_progress', 'resolved'];
+/** Loại phiếu: hỏng cần sửa/thay · cần mua thêm cho đủ dùng. */
+const ISSUE_KINDS = ['broken', 'restock'];
+const KIND_LABEL = { broken: 'Báo hỏng', restock: 'Đề nghị bổ sung' };
+/** Một lần báo tối đa bao nhiêu thiết bị (báo hỏng hàng loạt). */
+const MAX_ISSUE_LINES = 50;
 const ISSUE_LABEL = { new: 'Mới', in_progress: 'Đang xử lý', resolved: 'Đã khắc phục' };
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
-
-/** Hôm nay theo giờ Việt Nam (UTC+7), dạng YYYY-MM-DD. */
-const todayVN = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
-
-/** 2026-09-10 → 10/09/2026 (hiển thị trong thông báo). */
-const fmtDate = (d) => {
-  const [y, m, dd] = String(d).slice(0, 10).split('-');
-  return `${dd}/${m}/${y}`;
-};
 
 /* ----------------------- Kiểm phạm vi trên một bản ghi ---------------------- */
 
@@ -308,7 +302,11 @@ export default async function routes(app) {
   });
 
   /* =========================================================================
-   * KIỂM KÊ THIẾT BỊ — device_checks
+   * LỊCH SỬ KIỂM KÊ — device_checks (CHỈ ĐỌC)
+   *
+   * Việc kiểm đếm thiết bị nay nằm trong CHẤM CÔNG đầu/cuối buổi (timesheets:
+   * check_in_devices / check_out_devices), không còn thao tác riêng ở mục Thiết
+   * bị nữa. Endpoint này giữ lại để xem và xuất báo cáo dữ liệu cũ.
    * ======================================================================= */
 
   // GET /api/devices/checks?room_id=&school_id=&date=&slot=&from=&to=
@@ -355,107 +353,6 @@ export default async function routes(app) {
     return { items, total: Number(total || 0), page, limit };
   });
 
-  // POST /api/devices/checks — multipart: room_id, slot, items (JSON), photos[] ≥1, note?, check_date?, client_time?
-  app.post('/api/devices/checks', { preHandler: requirePerm('device.check') }, async (req, reply) => {
-    if (!req.isMultipart()) throw badRequest('Yêu cầu phải gửi dạng multipart/form-data.');
-
-    // school_id chỉ biết sau khi đọc room_id từ fields ⇒ lưu tệp trước, gắn school_id cho tệp sau.
-    const { fields, files } = await consumeMultipart(req, { userId: req.user.id });
-
-    const roomId = uuid(fields.room_id, 'room_id', { required: true });
-    const slot = enumOf(fields.slot, 'slot', DEVICE_SLOTS, { required: true });
-    const note = str(fields.note, 'note', { max: 2000 });
-    const checkDate = dateStr(fields.check_date, 'check_date') || todayVN();
-    const clientTime = isoTime(fields.client_time, 'client_time');
-
-    const photos = files.photos || [];
-    if (!photos.length) throw unprocessable('Cần ít nhất 1 ảnh chụp thiết bị cho lượt kiểm kê.');
-
-    const room = await assertRoomAccess(req.user, roomId);
-
-    // Mốc kiểm kê phải được bật trong cấu hình schools.device_slots của trường
-    const school = await one('select device_slots from schools where id = $1', [room.school_id]);
-    if (!school || !(school.device_slots || []).includes(slot)) {
-      throw unprocessable(`Trường này không cấu hình mốc kiểm kê "${SLOT_LABEL[slot]}".`);
-    }
-
-    // items: [{catalog_id, qty, condition?, note?}] — ép kiểu từng phần tử.
-    // condition: ok (tốt) | damaged (có hỏng) | missing (thiếu/mất).
-    const rawItems = json(fields.items, 'items', { required: true });
-    if (!Array.isArray(rawItems) || !rawItems.length) {
-      throw badRequest('items phải là mảng có ít nhất một thiết bị.');
-    }
-    const items = rawItems.map((it, i) => ({
-      catalog_id: uuid(it?.catalog_id, `items[${i}].catalog_id`, { required: true }),
-      qty: int(it?.qty, `items[${i}].qty`, { required: true, min: 0, max: 1_000_000 }),
-      condition: enumOf(it?.condition, `items[${i}].condition`, ['ok', 'damaged', 'missing'], { def: 'ok' }),
-      note: str(it?.note, `items[${i}].note`, { max: 500 }),
-    }));
-    if (new Set(items.map((it) => it.catalog_id)).size !== items.length) {
-      throw badRequest('items có thiết bị bị lặp lại.');
-    }
-
-    // Danh mục active của phòng (gồm thiết bị dùng chung toàn trường: room_id null)
-    const catalog = await rows(
-      `select id, name, expected_qty from device_catalog
-        where school_id = $1 and is_active and (room_id is null or room_id = $2)`,
-      [room.school_id, room.id]
-    );
-    const catById = new Map(catalog.map((c) => [c.id, c]));
-    for (const it of items) {
-      if (!catById.has(it.catalog_id)) {
-        throw unprocessable('Danh sách kiểm kê có thiết bị không thuộc phòng/trường này.');
-      }
-    }
-
-    // Mỗi mốc chỉ kiểm kê một lần trong ngày
-    const dup = await one(
-      'select 1 from device_checks where room_id = $1 and check_date = $2 and slot = $3',
-      [room.id, checkDate, slot]
-    );
-    if (dup) throw conflict('Mốc này đã được kiểm kê hôm nay.');
-
-    // Thiếu = đếm ít hơn expected_qty, bỏ sót mục kỳ vọng > 0,
-    // hoặc người kiểm đánh dấu tình trạng khác "tốt".
-    const qtyById = new Map(items.map((it) => [it.catalog_id, it.qty]));
-    const hasShortage = catalog.some((c) => {
-      const qty = qtyById.get(c.id);
-      return qty === undefined ? c.expected_qty > 0 : qty < c.expected_qty;
-    }) || items.some((it) => it.condition !== 'ok');
-
-    const check = await tx(async (c) => {
-      const r = await c.query(
-        `insert into device_checks
-           (school_id, room_id, check_date, slot, user_id, items, note, has_shortage, client_time)
-         values ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
-         returning *`,
-        [room.school_id, room.id, checkDate, slot, req.user.id, JSON.stringify(items), note, hasShortage, clientTime]
-      );
-      const row = r.rows[0];
-      for (let i = 0; i < photos.length; i++) {
-        await c.query(
-          'insert into device_check_photos (check_id, file_id, sort_order) values ($1, $2, $3)',
-          [row.id, photos[i].id, i]
-        );
-      }
-      // Gắn phạm vi trường cho ảnh để soát quyền xem tệp về sau
-      await c.query('update files set school_id = $1 where id = any($2::uuid[])',
-        [room.school_id, photos.map((p) => p.id)]);
-      return row;
-    });
-
-    if (hasShortage) {
-      await notifySchoolManagers(room.school_id, {
-        kind: 'device_issue',
-        title: 'Kiểm kê phát hiện lệch số lượng',
-        body: `${room.school_name} · ${room.name} — mốc ${SLOT_LABEL[slot]} ngày ${fmtDate(checkDate)}.`,
-        link: '/thiet-bi',
-        refId: check.id,
-      }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo kiểm kê lệch số lượng'));
-    }
-
-    return reply.code(201).send({ ...check, photos: photos.map((p) => p.id) });
-  });
 
   /* =========================================================================
    * SỰ CỐ THIẾT BỊ — device_issues
@@ -465,6 +362,7 @@ export default async function routes(app) {
   app.get('/api/devices/issues', async (req) => {
     const q = req.query || {};
     const status = enumOf(q.status, 'status', ISSUE_STATUSES);
+    const kind = enumOf(q.kind, 'kind', ISSUE_KINDS);
     const schoolId = uuid(q.school_id, 'school_id');
     const priority = enumOf(q.priority, 'priority', PRIORITIES);
     const from = dateStr(q.from, 'from');
@@ -476,6 +374,7 @@ export default async function routes(app) {
     const add = (sql, ...ps) => { filters.push({ sql, params: ps }); next += ps.length; };
 
     if (status) add(`di.status = $${next}`, status);
+    if (kind) add(`di.kind = $${next}`, kind);
     if (schoolId) add(`di.school_id = $${next}`, schoolId);
     if (priority) add(`di.priority = $${next}`, priority);
     if (from) add(`di.created_at >= $${next}::date`, from);
@@ -518,7 +417,18 @@ export default async function routes(app) {
     return { items, total: Number(total || 0), page, limit };
   });
 
-  // POST /api/devices/issues — multipart: school_id, room_id?, catalog_id?, device_name, quantity?, description, priority?, photos[]?
+  /* POST /api/devices/issues — multipart. Hai việc của mục Thiết bị:
+   *   - báo hỏng đột xuất (kind=broken, mặc định)
+   *   - đề nghị bổ sung / cần mua thêm (kind=restock)
+   *
+   * Một thiết bị : catalog_id? | device_name (+ quantity?)
+   * Nhiều thiết bị (báo hỏng hàng loạt): items = JSON
+   *   [{catalog_id?, device_name?, quantity?}] — tối đa ${MAX_ISSUE_LINES} dòng.
+   * Mỗi thiết bị vẫn là MỘT phiếu để theo dõi và khắc phục riêng, nhưng cùng
+   * một lần báo thì dùng chung batch_id.
+   *
+   * Trả { created, batch_id, kind, items[] }.
+   */
   app.post('/api/devices/issues', { preHandler: requirePerm('device.reportIssue') }, async (req, reply) => {
     if (!req.isMultipart()) throw badRequest('Yêu cầu phải gửi dạng multipart/form-data.');
 
@@ -527,9 +437,7 @@ export default async function routes(app) {
 
     const schoolId = uuid(fields.school_id, 'school_id', { required: true });
     const roomId = uuid(fields.room_id, 'room_id');
-    const catalogId = uuid(fields.catalog_id, 'catalog_id');
-    const deviceName = str(fields.device_name, 'device_name', { required: true, max: 200 });
-    const quantity = int(fields.quantity, 'quantity', { min: 1, max: 1_000_000, def: 1 });
+    const kind = enumOf(fields.kind, 'kind', ISSUE_KINDS, { def: 'broken' });
     const description = str(fields.description, 'description', { required: true, max: 5000 });
     const priority = enumOf(fields.priority, 'priority', PRIORITIES, { def: 'normal' });
 
@@ -540,49 +448,94 @@ export default async function routes(app) {
       const room = await one('select id from stem_rooms where id = $1 and school_id = $2', [roomId, schoolId]);
       if (!room) throw unprocessable('Phòng STEM không thuộc trường đã chọn.');
     }
-    if (catalogId) {
-      const cat = await one('select id from device_catalog where id = $1 and school_id = $2', [catalogId, schoolId]);
-      if (!cat) throw unprocessable('Thiết bị trong danh mục không thuộc trường đã chọn.');
+
+    // Danh sách thiết bị: nhiều dòng (items) hoặc một dòng như trước.
+    const raw = json(fields.items, 'items');
+    const lines = Array.isArray(raw) && raw.length
+      ? raw
+      : [{ catalog_id: fields.catalog_id, device_name: fields.device_name, quantity: fields.quantity }];
+    if (lines.length > MAX_ISSUE_LINES) {
+      throw badRequest(`Mỗi lần báo tối đa ${MAX_ISSUE_LINES} thiết bị (đang có ${lines.length}).`);
+    }
+
+    const items = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] || {};
+      const label = lines.length > 1 ? `Thiết bị dòng ${i + 1}` : 'Tên thiết bị';
+      const catalogId = uuid(line.catalog_id, 'catalog_id');
+      let name = str(line.device_name, label, { max: 200 });
+      if (catalogId) {
+        const cat = await one(
+          'select id, name from device_catalog where id = $1 and school_id = $2', [catalogId, schoolId]
+        );
+        if (!cat) throw unprocessable('Thiết bị trong danh mục không thuộc trường đã chọn.');
+        name = name || cat.name;
+      }
+      if (!name) throw badRequest(`${label}: hãy chọn thiết bị trong danh mục hoặc nhập tên.`);
+      items.push({
+        catalogId,
+        name,
+        quantity: int(line.quantity, 'Số lượng', { min: 1, max: 1_000_000, def: 1 }),
+      });
     }
 
     const photos = files.photos || [];
+    const batchId = items.length > 1 ? randomUUID() : null;
 
-    const issue = await tx(async (c) => {
-      const r = await c.query(
-        `insert into device_issues
-           (school_id, room_id, catalog_id, device_name, quantity, description, priority, source, reported_by)
-         values ($1, $2, $3, $4, $5, $6, $7, 'manual', $8)
-         returning *`,
-        [schoolId, roomId, catalogId, deviceName, quantity, description, priority, req.user.id]
-      );
-      const row = r.rows[0];
-      for (let i = 0; i < photos.length; i++) {
-        await c.query(
-          'insert into device_issue_photos (issue_id, file_id, sort_order) values ($1, $2, $3)',
-          [row.id, photos[i].id, i]
+    const created = await tx(async (c) => {
+      const out = [];
+      for (const it of items) {
+        const r = await c.query(
+          `insert into device_issues
+             (school_id, room_id, catalog_id, device_name, quantity, description,
+              priority, kind, batch_id, source, reported_by)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'manual', $10)
+           returning *`,
+          [schoolId, roomId, it.catalogId, it.name, it.quantity, description,
+            priority, kind, batchId, req.user.id]
         );
+        const row = r.rows[0];
+        // Ảnh minh chứng gắn cho từng phiếu để mở phiếu nào cũng thấy.
+        for (let i = 0; i < photos.length; i++) {
+          await c.query(
+            'insert into device_issue_photos (issue_id, file_id, sort_order) values ($1, $2, $3)',
+            [row.id, photos[i].id, i]
+          );
+        }
+        out.push(row);
       }
       if (photos.length) {
         await c.query('update files set school_id = $1 where id = any($2::uuid[])',
           [schoolId, photos.map((p) => p.id)]);
       }
-      return row;
+      return out;
     });
 
+    const what = created.map((r) => `${r.device_name} ×${r.quantity}`).join(', ');
     await notifySchoolManagers(schoolId, {
       kind: 'device_issue',
-      title: 'Có báo cáo sự cố thiết bị mới',
-      body: `${school.name}: "${deviceName}" ×${quantity} — ${description.slice(0, 120)}`,
+      title: kind === 'restock' ? 'Có đề nghị bổ sung thiết bị' : 'Có báo hỏng thiết bị mới',
+      body: `${school.name}: ${what.slice(0, 200)} — ${description.slice(0, 120)}`,
       link: '/thiet-bi',
-      refId: issue.id,
+      refId: created[0].id,
     }).catch((e) => req.log.warn({ err: e }, 'Không gửi được thông báo sự cố thiết bị'));
 
     audit(req, {
-      action: 'create', entity: 'device_issues', entityId: issue.id,
-      summary: `Báo sự cố thiết bị "${deviceName}" tại ${school.name}`, after: issue,
+      action: 'create', entity: 'device_issues', entityId: created[0].id,
+      summary: `${KIND_LABEL[kind]} ${created.length} thiết bị tại ${school.name}: ${what}`,
+      after: {
+        kind,
+        batch_id: batchId,
+        items: created.map((r) => ({ id: r.id, device_name: r.device_name, quantity: r.quantity })),
+      },
     });
 
-    return reply.code(201).send({ ...issue, photos: photos.map((p) => p.id) });
+    return reply.code(201).send({
+      created: created.length,
+      batch_id: batchId,
+      kind,
+      items: created.map((r) => ({ ...r, photos: photos.map((p) => p.id) })),
+    });
   });
 
   // PATCH /api/devices/issues/:id — đổi trạng thái / phân công / mức ưu tiên / nội dung khắc phục

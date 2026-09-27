@@ -59,7 +59,7 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | Method | Path | Quyền | Mô tả |
 |---|---|---|---|
 | GET/POST | `/api/schools` | GET: mọi vai trò (đã lọc phạm vi) · POST: admin, manager | |
-| GET/PATCH | `/api/schools/:id` | PATCH: admin, manager | Gồm `lat/lng/gps_radius_m/grace_minutes/device_slots`; `is_active` **chỉ admin** (ngừng / khôi phục) |
+| GET/PATCH | `/api/schools/:id` | PATCH: admin, manager | Gồm `lat/lng/gps_radius_m/grace_minutes/remind_before_minutes`; `checkout_grace_minutes` và `is_active` **chỉ admin** |
 | GET | `/api/schools/:id/delete-impact` | admin, manager | `{can_hard_delete, blockers[], cleanup[], unlinked[]}` — xoá hẳn được không và mất những gì |
 | DELETE | `/api/schools/:id` | **chỉ admin** | Mặc định ngừng sử dụng (`is_active=false`), khôi phục được; `?hard=1` xoá hẳn (mã trường dùng lại được ngay) — **409** nếu đã có buổi dạy / kiểm tra thiết bị / báo hỏng, **trừ** người có `record.forceDelete` |
 | GET/POST | `/api/classes` | POST: admin, manager | `?school_id=&level=` |
@@ -87,6 +87,10 @@ Vì cùng lý do đó, `POST /api/schedules` khi GV/TG **tự thêm tiết bị 
 đang dùng (không xét phạm vi); tiết vẫn bắt buộc có lý do, mang cờ `self_added` và báo ngay cho
 Phòng chuyên môn của trường đó. Dữ liệu NGHIỆP VỤ (lịch dạy, chấm công, điểm danh, báo cáo)
 không đổi — vẫn lọc theo phạm vi từng vai trò.
+
+**Nhắc chấm công trước giờ dạy — `remind_before_minutes`.** Mỗi trường tự đặt 5–240 phút (mặc định 60).
+Job `remindUpcoming` (server/src/jobs.js, quét mỗi 2 phút) gửi thông báo `schedule_reminder` cho giáo viên và
+trợ giảng đúng MỘT lần trước giờ vào lớp bấy nhiêu phút, kèm link thẳng tới màn chấm công của tiết đó.
 
 **Mục đã NGỪNG SỬ DỤNG không lọt vào ô chọn.** `GET /api/schools`, `/api/classes`,
 `/api/rooms` mặc định chỉ trả mục `is_active = true`. Màn hình quản trị muốn xem lại để khôi
@@ -248,11 +252,31 @@ Server tự suy `class_id`, `school_id`, `marked_by` từ `schedule_id` — clie
 |---|---|---|
 | GET/POST | `/catalog` | POST: admin, manager |
 | PATCH/DELETE | `/catalog/:id` | admin, manager |
-| GET | `/checks` | theo phạm vi — `?room_id=&date=&slot=` |
-| POST | `/checks` | teacher, assistant, manager — `multipart`: `room_id`, `slot`, `items` (JSON), `photos[]`, `note?` |
-| GET | `/issues` | theo phạm vi — `?status=&school_id=&priority=` |
-| POST | `/issues` | mọi vai trò |
+| GET | `/checks` | theo phạm vi — `?room_id=&date=&slot=`. **Chỉ đọc**, xem lại dữ liệu kiểm kê cũ |
+| GET | `/issues` | theo phạm vi — `?status=&kind=&school_id=&priority=` |
+| POST | `/issues` | mọi vai trò — xem bên dưới |
 | PATCH | `/issues/:id` | admin, manager — đổi `status`, `assigned_to`, `resolution` |
+
+**Mục Thiết bị KHÔNG còn thao tác kiểm kê.** Đếm thiết bị đầu/cuối buổi là một bước của
+**Chấm công** (`check_in_devices` / `check_out_devices`, mục 6) — thiếu hoặc hỏng lúc check-out
+tự mở phiếu báo hỏng `source='checkout'`. `POST /api/devices/checks` đã bỏ; bảng `device_checks`
+giữ lại để xem và xuất báo cáo dữ liệu cũ. Quyền `device.check` không còn.
+
+**`POST /api/devices/issues`** (multipart) — hai việc của mục Thiết bị:
+
+| Field | Bắt buộc | Ghi chú |
+|---|:---:|---|
+| `school_id` | ✅ | Trong phạm vi người gửi |
+| `room_id` | — | Phải thuộc trường đã chọn |
+| `kind` | — | `broken` (báo hỏng, mặc định) · `restock` (đề nghị bổ sung / cần mua thêm) |
+| `description` | ✅ | Hỏng thế nào, hoặc vì sao cần bổ sung |
+| `priority` | — | `low|normal|high|urgent` (mặc định `normal`) |
+| `items` | — | Chuỗi JSON `[{catalog_id?, device_name?, quantity?}]` — **báo hỏng hàng loạt**, tối đa 50 dòng |
+| `catalog_id` / `device_name` / `quantity` | — | Cách cũ, dùng khi chỉ báo MỘT thiết bị |
+| `photos[]` | — | Ảnh/video minh chứng, gắn cho mọi phiếu trong lần báo đó |
+
+Mỗi thiết bị vẫn là **một phiếu riêng** để theo dõi và khắc phục độc lập; các phiếu tạo trong cùng
+một lần báo dùng chung `batch_id`. Trả `201 {created, batch_id, kind, items[]}`.
 
 ## 8. Học liệu — `/api/materials`
 
@@ -402,8 +426,8 @@ nhưng **quyết định cuối luôn ở server**.
 | `timesheet.approve` | ✅ | ✅ | — | — |
 | `attendance.submit` | ✅ | ✅ | ✅ | ✅ |
 | `attendance.viewAll` | ✅ | ✅ | — | — |
-| `device.check` | ✅ | ✅ | ✅ | ✅ |
 | `device.catalog` | ✅ | ✅ | — | — |
+| `device.reportIssue` | ✅ | ✅ | ✅ | ✅ |
 | `device.resolveIssue` | ✅ | ✅ | — | — |
 | `material.official.write` | ✅ | ✅ | — | — |
 | `material.teacher.write` | ✅ | ✅ | ✅ | ✅ |

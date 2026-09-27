@@ -2,8 +2,11 @@
  * routes/schools.js — Trường học: danh sách, tạo mới, chi tiết, sửa cấu hình, vô hiệu hoá.
  * Hợp đồng: docs/API.md mục 3 · Phạm vi dữ liệu: docs/ARCHITECTURE.md §3.
  *
- * Lưu ý nghiệp vụ: gps_radius_m / grace_minutes / device_slots ảnh hưởng trực tiếp
- * tới chấm công và kiểm kê thiết bị ⇒ mọi thay đổi đều ghi audit đầy đủ before/after.
+ * Lưu ý nghiệp vụ: gps_radius_m / grace_minutes ảnh hưởng trực tiếp tới kết quả
+ * chấm công ⇒ mọi thay đổi đều ghi audit đầy đủ before/after.
+ * remind_before_minutes chỉ đổi thời điểm gửi thông báo "sắp tới giờ dạy".
+ * device_slots là cấu hình CŨ của phần kiểm kê thiết bị (đã bỏ khỏi mục Thiết bị,
+ * việc kiểm đếm nay nằm trong Chấm công) — giữ cột để đọc dữ liệu lịch sử.
  */
 import { rows, one, scalar, tx } from '../db.js';
 import { requirePerm, requireRole, can } from '../lib/rbac.js';
@@ -257,6 +260,12 @@ export default async function routes(app) {
     }
     if ('grace_minutes' in b) {
       set('grace_minutes', int(b.grace_minutes, 'grace_minutes', { required: true, min: 0, max: 120 }));
+    }
+    if ('remind_before_minutes' in b) {
+      // Báo "sắp tới giờ dạy" trước bao nhiêu phút — chỉ ảnh hưởng thông báo nhắc,
+      // không đụng tới kết quả chấm công, nên Phòng chuyên môn cũng chỉnh được.
+      set('remind_before_minutes',
+        int(b.remind_before_minutes, 'Nhắc trước giờ dạy (phút)', { required: true, min: 5, max: 240 }));
     }
     if ('device_slots' in b) {
       const slots = parseDeviceSlots(b.device_slots);

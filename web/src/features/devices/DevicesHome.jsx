@@ -1,13 +1,16 @@
 /**
- * DevicesHome.jsx — Màn hình Thiết bị, 3 tab:
- *   - Kiểm kê : kiểm đếm thiết bị phòng theo 4 mốc trong ngày (theo cấu hình trường).
- *   - Báo hỏng: gửi & xử lý sự cố thiết bị, xuất Excel.
- *   - Danh mục: quản trị danh mục thiết bị chuẩn của từng phòng (admin/manager).
+ * DevicesHome.jsx — Màn hình Thiết bị, 2 tab:
+ *   - Báo hỏng: báo hỏng đột xuất hoặc đề nghị bổ sung (mua thêm), một lần báo
+ *     được nhiều thiết bị; xử lý phiếu và xuất Excel.
+ *   - Danh mục: danh mục thiết bị chuẩn của từng phòng (admin/Phòng chuyên môn).
+ *
+ * KHÔNG có phần kiểm kê ở đây: đếm thiết bị đầu/cuối buổi là một bước của CHẤM
+ * CÔNG — thiếu hoặc hỏng lúc check-out tự mở phiếu báo hỏng ở tab Báo hỏng.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, fileUrl } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
-import { LABEL, fmtAgo, fmtDate, fmtDateLong, fmtTime, today } from '../../lib/format.js';
+import { LABEL, fmtAgo } from '../../lib/format.js';
 import {
   Badge, ConfirmSheet, EmptyState, ErrorBox, Field, PageHeader, PageLoading,
   Pager, Segmented, Sheet, Spinner,
@@ -16,9 +19,6 @@ import { useToast } from '../../components/Toast.jsx';
 import PhotoInput from '../../components/PhotoInput.jsx';
 
 /* ------------------------------ Tiện ích chung ----------------------------- */
-
-/** Thứ tự chuẩn của 4 mốc kiểm kê trong ngày. */
-const SLOT_KEYS = ['morning_start', 'morning_end', 'afternoon_start', 'afternoon_end'];
 
 /** Danh sách từ server có thể là mảng trần hoặc bọc {items, total}. */
 const unwrap = (res) => (Array.isArray(res) ? res : res?.items || []);
@@ -30,21 +30,11 @@ function photoIds(rec) {
   return arr.map((p) => (p && typeof p === 'object' ? p.file_id || p.id : p)).filter(Boolean);
 }
 
-/** Tên người thao tác trên bản ghi (người kiểm / người báo). */
+/** Tên người báo phiếu. */
 function personName(rec) {
   return rec?.checked_by_name || rec?.reported_by_name || rec?.created_by_name
     || rec?.checker?.full_name || rec?.reporter?.full_name || rec?.user?.full_name
     || rec?.created_by?.full_name || '—';
-}
-
-/** Bản ghi kiểm kê có lệch so với chuẩn không: true/false, hoặc null nếu không rõ. */
-function checkMismatch(c) {
-  if (typeof c?.has_mismatch === 'boolean') return c.has_mismatch;
-  if (typeof c?.mismatch === 'boolean') return c.mismatch;
-  if (Array.isArray(c?.items)) {
-    return c.items.some((it) => it?.expected_qty != null && Number(it.qty) !== Number(it.expected_qty));
-  }
-  return null;
 }
 
 /** Dải ảnh thu nhỏ — bấm mở bản đầy đủ ở tab mới. */
@@ -86,299 +76,6 @@ function SchoolRoomPicker({ schools, schoolId, onSchool, rooms, roomId, onRoom, 
   );
 }
 
-/* ================================ TAB KIỂM KÊ =============================== */
-
-function CheckTab({ schoolId, roomId, roomsLoading, hasRooms }) {
-  const auth = useAuth();
-  const [school, setSchool] = useState(null);
-  const [schoolErr, setSchoolErr] = useState(null);
-  const [todayChecks, setTodayChecks] = useState(null);
-  const [history, setHistory] = useState(null);
-  const [checksErr, setChecksErr] = useState(null);
-  const [formSlot, setFormSlot] = useState(null);
-  const [reloadTick, setReloadTick] = useState(0);
-
-  // Cấu hình mốc kiểm kê (device_slots) của trường.
-  useEffect(() => {
-    if (!schoolId) { setSchool(null); return undefined; }
-    let alive = true;
-    setSchool(null);
-    setSchoolErr(null);
-    api.get(`/api/schools/${schoolId}`)
-      .then((res) => { if (alive) setSchool(res); })
-      .catch((e) => { if (alive) setSchoolErr(e); });
-    return () => { alive = false; };
-  }, [schoolId, reloadTick]);
-
-  const loadChecks = useCallback(async () => {
-    if (!roomId) { setTodayChecks([]); setHistory([]); return; }
-    setChecksErr(null);
-    try {
-      const [t, h] = await Promise.all([
-        api.get('/api/devices/checks', { room_id: roomId, date: today() }),
-        api.get('/api/devices/checks', { room_id: roomId, limit: 30 }),
-      ]);
-      setTodayChecks(unwrap(t));
-      setHistory(unwrap(h));
-    } catch (e) { setChecksErr(e); }
-  }, [roomId]);
-
-  useEffect(() => { setTodayChecks(null); setHistory(null); loadChecks(); }, [loadChecks]);
-
-  if (roomsLoading) return <PageLoading label="Đang tải danh sách phòng…" />;
-  if (!hasRooms || !roomId) {
-    return (
-      <EmptyState icon="🚪" title="Trường chưa có phòng thiết bị"
-        hint={auth.can('org.manage')
-          ? 'Vào mục Trường & Lớp để thêm phòng cho trường này.'
-          : 'Liên hệ Phòng chuyên môn để khai báo phòng thiết bị.'} />
-    );
-  }
-  if (schoolErr) return <ErrorBox error={schoolErr} onRetry={() => setReloadTick((n) => n + 1)} />;
-  if (checksErr) return <ErrorBox error={checksErr} onRetry={loadChecks} />;
-  if (!school || todayChecks === null || history === null) return <PageLoading />;
-
-  // Chỉ hiện các mốc trường có cấu hình; thiếu cấu hình → hiện đủ 4 mốc.
-  const slots = Array.isArray(school.device_slots)
-    ? SLOT_KEYS.filter((k) => school.device_slots.includes(k))
-    : SLOT_KEYS;
-
-  return (
-    <div>
-      <div className="text-sm text-ink-muted mb-2.5">Hôm nay — {fmtDateLong(today())}</div>
-
-      {slots.length === 0 ? (
-        <EmptyState icon="⏰" title="Trường chưa cấu hình mốc kiểm kê"
-          hint={auth.can('org.manage')
-            ? 'Vào Trường & Lớp → sửa trường để chọn các mốc kiểm kê trong ngày.'
-            : 'Liên hệ Phòng chuyên môn để cấu hình mốc kiểm kê cho trường.'} />
-      ) : (
-        <div className="grid grid-cols-2 gap-2.5">
-          {slots.map((slot) => {
-            const done = todayChecks.find((c) => c.slot === slot);
-            if (done) {
-              return (
-                <div key={slot} className="card p-3.5 border-emerald-200 bg-emerald-50/50">
-                  <div className="text-sm font-semibold text-ink">{LABEL.slot[slot]}</div>
-                  <div className="text-emerald-700 text-sm font-semibold mt-1">
-                    ✓ Đã kiểm{fmtTime(done.created_at || done.checked_at) ? ` · ${fmtTime(done.created_at || done.checked_at)}` : ''}
-                  </div>
-                  <div className="text-xs text-ink-muted mt-0.5 truncate">{personName(done)}</div>
-                </div>
-              );
-            }
-            return (
-              <button key={slot} type="button"
-                disabled={!auth.can('device.check')}
-                onClick={() => setFormSlot(slot)}
-                className="card p-3.5 text-left hover:border-brand-300 transition disabled:opacity-60">
-                <div className="text-sm font-semibold text-ink">{LABEL.slot[slot]}</div>
-                <div className="text-amber-600 text-sm font-semibold mt-1">○ Chưa kiểm</div>
-                {auth.can('device.check') && (
-                  <div className="text-xs text-brand-600 mt-0.5">Bấm để kiểm kê →</div>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ----------------------- Lịch sử kiểm kê ----------------------- */}
-      <h2 className="text-base font-bold text-ink mt-6 mb-2.5">Lịch sử kiểm kê</h2>
-      {history.length === 0 ? (
-        <EmptyState icon="📋" title="Chưa có lần kiểm kê nào"
-          hint="Bấm vào một mốc chưa kiểm ở trên để bắt đầu kiểm kê phòng này." />
-      ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto table-cards stagger">
-            <table className="w-full min-w-[520px]">
-              <thead>
-                <tr>
-                  <th className="th">Ngày</th>
-                  <th className="th">Mốc</th>
-                  <th className="th">Người kiểm</th>
-                  <th className="th">Lệch?</th>
-                  <th className="th">Ảnh</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((c) => {
-                  const mm = checkMismatch(c);
-                  return (
-                    <tr key={c.id}>
-                      <td data-label="Ngày" className="td whitespace-nowrap">{fmtDate(c.check_date || c.date || c.created_at)}</td>
-                      <td data-label="Mốc" className="td whitespace-nowrap">{LABEL.slot[c.slot] || c.slot}</td>
-                      <td data-label="Người kiểm" className="td">{personName(c)}</td>
-                      <td data-label="Lệch?" className="td">
-                        {mm === true && <Badge tone="urgent">Lệch</Badge>}
-                        {mm === false && <Badge tone="approved">Đủ</Badge>}
-                        {mm === null && <span className="text-ink-muted">—</span>}
-                      </td>
-                      <td data-label="Ảnh" className="td"><PhotoStrip rec={c} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      <CheckFormSheet
-        open={!!formSlot}
-        slot={formSlot}
-        roomId={roomId}
-        onClose={() => setFormSlot(null)}
-        onDone={() => { setFormSlot(null); loadChecks(); }}
-      />
-    </div>
-  );
-}
-
-/* ----------------------------- Form kiểm kê phòng --------------------------- */
-
-function CheckFormSheet({ open, slot, roomId, onClose, onDone }) {
-  const toast = useToast();
-  const [rows, setRows] = useState(null);       // null = đang tải danh mục
-  const [catalogErr, setCatalogErr] = useState(null);
-  const [photos, setPhotos] = useState([]);
-  const [note, setNote] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  const loadCatalog = useCallback(async () => {
-    setRows(null);
-    setCatalogErr(null);
-    try {
-      const list = unwrap(await api.get('/api/devices/catalog', { room_id: roomId, limit: 200 }));
-      setRows(list.map((it) => ({ ...it, qty: String(it.expected_qty ?? 0), noteText: '', cond: 'ok' })));
-    } catch (e) { setCatalogErr(e); }
-  }, [roomId]);
-
-  useEffect(() => {
-    if (!open) return;
-    setPhotos([]);
-    setNote('');
-    loadCatalog();
-  }, [open, loadCatalog]);
-
-  const isDiff = (r) => r.expected_qty != null && r.qty !== '' && Number(r.qty) !== Number(r.expected_qty);
-
-  const setRow = (idx, patch) => setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
-
-  const submit = async () => {
-    if (busy) return;
-    if (!photos.length) {
-      toast.err('Vui lòng chụp ít nhất 1 ảnh thực tế phòng.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const fd = new FormData();
-      fd.append('room_id', String(roomId));
-      fd.append('slot', slot);
-      fd.append('items', JSON.stringify((rows || []).map((r) => ({
-        catalog_id: r.id,
-        qty: Number(r.qty || 0),
-        condition: r.cond || 'ok',
-        note: r.noteText.trim(),
-      }))));
-      if (note.trim()) fd.append('note', note.trim());
-      photos.forEach((p) => fd.append('photos', p.blob, p.name));
-      await api.upload('/api/devices/checks', fd);
-      toast.ok('Đã ghi nhận kiểm kê.');
-      onDone();
-    } catch (e) {
-      toast.fromError(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Sheet open={open} onClose={busy ? undefined : onClose} wide
-      title={slot ? `Kiểm kê · ${LABEL.slot[slot]}` : 'Kiểm kê'}>
-      {catalogErr && <ErrorBox error={catalogErr} onRetry={loadCatalog} />}
-      {!catalogErr && rows === null && <PageLoading label="Đang tải danh mục thiết bị…" />}
-
-      {rows !== null && !catalogErr && (
-        <>
-          {rows.length === 0 ? (
-            <div className="rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-sm px-3.5 py-2.5 mb-3">
-              Phòng chưa có danh mục thiết bị — vẫn có thể ghi nhận ảnh và ghi chú.
-            </div>
-          ) : (
-            <div className="mb-1">
-              {rows.map((r, idx) => {
-                const diff = isDiff(r);
-                const bad = diff || (r.cond && r.cond !== 'ok');
-                return (
-                  <div key={r.id}
-                    className={`rounded-xl border px-3 py-2.5 mb-2 transition ${bad ? 'border-rose-300 bg-rose-50/60' : 'border-line'}`}>
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-sm font-semibold truncate ${diff ? 'text-rose-700' : 'text-ink'}`}>{r.name}</div>
-                        <div className={`text-xs ${diff ? 'text-rose-600 font-semibold' : 'text-ink-muted'}`}>
-                          Chuẩn: {r.expected_qty ?? '—'}{r.unit ? ` ${r.unit}` : ''}
-                        </div>
-                      </div>
-                      <input
-                        type="number" min="0" inputMode="numeric"
-                        className={`input !w-20 text-center ${diff ? '!border-rose-400 text-rose-700 font-bold' : ''}`}
-                        value={r.qty}
-                        onChange={(e) => setRow(idx, { qty: e.target.value })}
-                      />
-                    </div>
-                    {/* Tình trạng thiết bị: tốt / có hỏng / thiếu-mất */}
-                    <div className="flex gap-1.5 mt-2">
-                      {[['ok', '✅ Tốt'], ['damaged', '🛠️ Có hỏng'], ['missing', '❓ Thiếu / mất']].map(([v, l]) => (
-                        <button key={v} type="button" onClick={() => setRow(idx, { cond: v })}
-                          className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset transition
-                            ${(r.cond || 'ok') === v
-                              ? v === 'ok' ? 'bg-emerald-500 text-white ring-transparent'
-                                : v === 'damaged' ? 'bg-amber-500 text-white ring-transparent'
-                                : 'bg-rose-500 text-white ring-transparent'
-                              : 'bg-white text-ink-soft ring-line hover:ring-brand-300'}`}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className="input !py-1.5 mt-2 text-sm"
-                      placeholder="Ghi chú ngắn (nếu lệch/hỏng)…"
-                      value={r.noteText}
-                      onChange={(e) => setRow(idx, { noteText: e.target.value })}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <PhotoInput
-            value={photos}
-            onChange={setPhotos}
-            required
-            label="Ảnh thực tế phòng"
-            hint="Chụp bao quát phòng, thấy rõ khu vực để thiết bị."
-          />
-
-          <Field label="Ghi chú chung">
-            <textarea className="input" rows={2} placeholder="Tình trạng chung của phòng…"
-              value={note} onChange={(e) => setNote(e.target.value)} />
-          </Field>
-
-          <div className="form-actions flex gap-2.5 justify-end mt-1">
-            <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
-            <button className="btn-primary" onClick={submit} disabled={busy}>
-              {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : 'Gửi kiểm kê'}
-            </button>
-          </div>
-        </>
-      )}
-    </Sheet>
-  );
-}
-
 /* ================================ TAB BÁO HỎNG ============================== */
 
 const ISSUE_FILTERS = [
@@ -393,6 +90,7 @@ function IssuesTab({ schools, defaultSchoolId }) {
   const toast = useToast();
   const limit = 20;
   const [status, setStatus] = useState('new');
+  const [kind, setKind] = useState('');        // '' = cả báo hỏng lẫn đề nghị bổ sung
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);       // {items, total}
   const [error, setError] = useState(null);
@@ -403,11 +101,11 @@ function IssuesTab({ schools, defaultSchoolId }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await api.get('/api/devices/issues', { status, page, limit });
+      const res = await api.get('/api/devices/issues', { status, kind, page, limit });
       const items = unwrap(res);
       setData({ items, total: res?.total ?? items.length });
     } catch (e) { setError(e); }
-  }, [status, page]);
+  }, [status, kind, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -427,15 +125,23 @@ function IssuesTab({ schools, defaultSchoolId }) {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2.5 mb-3.5">
-        <Segmented options={ISSUE_FILTERS} value={status}
-          onChange={(v) => { setStatus(v); setPage(1); }} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented options={ISSUE_FILTERS} value={status}
+            onChange={(v) => { setStatus(v); setPage(1); }} />
+          <select className="input !w-auto !py-2" value={kind} aria-label="Lọc theo loại phiếu"
+            onChange={(e) => { setKind(e.target.value); setPage(1); }}>
+            <option value="">Mọi loại phiếu</option>
+            <option value="broken">🛠 Báo hỏng</option>
+            <option value="restock">🛒 Cần mua thêm</option>
+          </select>
+        </div>
         <div className="flex items-center gap-2">
           {auth.can('export.scope') && (
             <button className="btn-line !py-2" onClick={exportXlsx} disabled={exporting}>
               {exporting ? <Spinner className="!h-4 !w-4" /> : '⬇️'} Xuất Excel
             </button>
           )}
-          <button className="btn-primary !py-2" onClick={() => setFormOpen(true)}>+ Báo hỏng</button>
+          <button className="btn-primary !py-2" onClick={() => setFormOpen(true)}>+ Báo hỏng / đề nghị</button>
         </div>
       </div>
 
@@ -444,9 +150,11 @@ function IssuesTab({ schools, defaultSchoolId }) {
 
       {data !== null && !error && (
         data.items.length === 0 ? (
-          <EmptyState icon="🛠️" title="Không có báo hỏng nào"
-            hint={status ? 'Thử chuyển bộ lọc sang "Tất cả" để xem toàn bộ.' : 'Thiết bị gặp sự cố? Hãy báo ngay để được xử lý.'}
-            action={<button className="btn-primary" onClick={() => setFormOpen(true)}>+ Báo hỏng</button>} />
+          <EmptyState icon="🛠️" title="Không có phiếu nào"
+            hint={status || kind
+              ? 'Thử chuyển bộ lọc sang "Tất cả" / "Mọi loại phiếu" để xem toàn bộ.'
+              : 'Thiết bị hỏng hoặc thiếu so với nhu cầu? Hãy báo ngay để được xử lý.'}
+            action={<button className="btn-primary" onClick={() => setFormOpen(true)}>+ Báo hỏng / đề nghị</button>} />
         ) : (
           <>
             <div className="grid gap-2.5">
@@ -477,6 +185,9 @@ function IssuesTab({ schools, defaultSchoolId }) {
   );
 }
 
+/** Số lượng trên phiếu — server trả `quantity`, bản ghi cũ có thể là `qty`. */
+const qtyOf = (issue) => Number(issue?.quantity ?? issue?.qty ?? 1) || 1;
+
 function IssueCard({ issue, canResolve, onChangeStatus }) {
   const name = issue.device_name || issue.catalog_name || issue.catalog?.name || issue.name || 'Thiết bị';
   const place = [issue.school_name || issue.school?.name, issue.room_name || issue.room?.name]
@@ -486,8 +197,9 @@ function IssueCard({ issue, canResolve, onChangeStatus }) {
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0 font-semibold text-base text-ink">
           {name}
-          {issue.qty != null && <span className="text-ink-muted font-normal"> × {issue.qty}</span>}
+          {qtyOf(issue) > 1 && <span className="text-ink-muted font-normal"> × {qtyOf(issue)}</span>}
         </div>
+        {issue.kind === 'restock' && <Badge tone="pending">🛒 Cần mua thêm</Badge>}
         <Badge tone={issue.priority}>{LABEL.priority[issue.priority] || issue.priority}</Badge>
         <Badge tone={issue.status}>{LABEL.issue[issue.status] || issue.status}</Badge>
       </div>
@@ -519,7 +231,17 @@ function IssueCard({ issue, canResolve, onChangeStatus }) {
   );
 }
 
-/* ------------------------------ Form báo hỏng ------------------------------ */
+/* ------------------- Form báo hỏng / đề nghị bổ sung ----------------------- */
+
+/** Hai việc của mục Thiết bị — khớp device_issues.kind ở máy chủ. */
+const KIND_OPTS = [
+  { value: 'broken', label: '🛠 Báo hỏng' },
+  { value: 'restock', label: '🛒 Cần mua thêm' },
+];
+
+/** Một dòng thiết bị trong phiếu. key chỉ để React nhận diện dòng. */
+let lineSeq = 0;
+const emptyLine = () => ({ key: `l${(lineSeq += 1)}`, catalog_id: '', device_name: '', quantity: '1' });
 
 function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
   const toast = useToast();
@@ -527,21 +249,21 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
   const [rooms, setRooms] = useState([]);
   const [roomId, setRoomId] = useState('');
   const [catalog, setCatalog] = useState([]);
-  const [catalogId, setCatalogId] = useState('');
-  const [deviceName, setDeviceName] = useState('');
-  const [qty, setQty] = useState('1');
+  const [kind, setKind] = useState('broken');
+  const [lines, setLines] = useState([emptyLine()]);
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('normal');
   const [photos, setPhotos] = useState([]);
   const [busy, setBusy] = useState(false);
 
+  const restock = kind === 'restock';
+
   // Reset form mỗi lần mở.
   useEffect(() => {
     if (!open) return;
     setSchoolId(String(defaultSchoolId || schools[0]?.id || ''));
-    setCatalogId('');
-    setDeviceName('');
-    setQty('1');
+    setKind('broken');
+    setLines([emptyLine()]);
     setDescription('');
     setPriority('normal');
     setPhotos([]);
@@ -562,9 +284,9 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
     return () => { alive = false; };
   }, [open, schoolId]);
 
-  // Danh mục theo phòng đã chọn.
+  // Danh mục theo phòng đã chọn; đổi phòng thì bỏ thiết bị đã chọn theo danh mục cũ.
   useEffect(() => {
-    setCatalogId('');
+    setLines((ls) => ls.map((l) => (l.catalog_id ? { ...l, catalog_id: '' } : l)));
     if (!open || !roomId) { setCatalog([]); return undefined; }
     let alive = true;
     api.get('/api/devices/catalog', { room_id: roomId, limit: 200 })
@@ -573,31 +295,46 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
     return () => { alive = false; };
   }, [open, roomId]);
 
+  const setLine = (key, patch) =>
+    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const addLine = () => setLines((ls) => [...ls, emptyLine()]);
+  const dropLine = (key) => setLines((ls) => (ls.length === 1 ? ls : ls.filter((l) => l.key !== key)));
+
+  const nameOfCatalog = (id) => catalog.find((c) => String(c.id) === String(id))?.name || '';
+
   const submit = async () => {
     if (busy) return;
     if (!schoolId) { toast.err('Vui lòng chọn trường.'); return; }
-    const typedName = deviceName.trim();
-    if (!catalogId && !typedName) { toast.err('Vui lòng chọn thiết bị hoặc nhập tên thiết bị.'); return; }
-    if (!description.trim()) { toast.err('Vui lòng mô tả tình trạng hỏng.'); return; }
+
+    const items = lines
+      .map((l) => ({
+        catalog_id: l.catalog_id || undefined,
+        device_name: l.catalog_id ? nameOfCatalog(l.catalog_id) : l.device_name.trim(),
+        quantity: Math.max(1, Number(l.quantity) || 1),
+      }))
+      .filter((it) => it.catalog_id || it.device_name);
+
+    if (!items.length) { toast.err('Vui lòng chọn thiết bị trong danh mục hoặc nhập tên thiết bị.'); return; }
+    if (!description.trim()) {
+      toast.err(restock ? 'Vui lòng ghi rõ vì sao cần bổ sung.' : 'Vui lòng mô tả tình trạng hỏng.');
+      return;
+    }
 
     setBusy(true);
     try {
       const fd = new FormData();
       fd.append('school_id', String(schoolId));
       if (roomId) fd.append('room_id', String(roomId));
-      if (catalogId) {
-        fd.append('catalog_id', String(catalogId));
-        const cat = catalog.find((c) => String(c.id) === String(catalogId));
-        if (cat?.name) fd.append('device_name', cat.name);
-      } else {
-        fd.append('device_name', typedName);
-      }
-      fd.append('quantity', String(Math.max(1, Number(qty) || 1))); // server đọc field 'quantity'
+      fd.append('kind', kind);
+      fd.append('items', JSON.stringify(items));   // nhiều thiết bị trong một lần báo
       fd.append('description', description.trim());
       fd.append('priority', priority);
       photos.forEach((p) => fd.append('photos', p.blob, p.name));
-      await api.upload('/api/devices/issues', fd);
-      toast.ok('Đã gửi báo hỏng.');
+      const res = await api.upload('/api/devices/issues', fd);
+      const n = res?.created ?? items.length;
+      toast.ok(restock
+        ? `Đã gửi đề nghị bổ sung ${n} thiết bị.`
+        : `Đã gửi báo hỏng ${n} thiết bị.`);
       onDone();
     } catch (e) {
       toast.fromError(e);
@@ -607,7 +344,17 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
   };
 
   return (
-    <Sheet open={open} onClose={busy ? undefined : onClose} title="Báo hỏng thiết bị" wide>
+    <Sheet open={open} onClose={busy ? undefined : onClose}
+      title={restock ? 'Đề nghị bổ sung thiết bị' : 'Báo hỏng thiết bị'} wide>
+      <Field label="Việc cần báo" required>
+        <Segmented options={KIND_OPTS} value={kind} onChange={setKind} />
+      </Field>
+      <p className="text-xs text-ink-muted -mt-2 mb-3.5">
+        {restock
+          ? 'Dùng khi thiết bị còn tốt nhưng thiếu so với nhu cầu dạy — ghi rõ cần thêm bao nhiêu.'
+          : 'Thiết bị hỏng, vỡ, mất — báo ngay để Phòng chuyên môn xử lý. Báo được nhiều thiết bị một lần.'}
+      </p>
+
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="Trường" required>
           <select className="input" value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>
@@ -622,44 +369,67 @@ function IssueFormSheet({ open, onClose, onDone, schools, defaultSchoolId }) {
         </Field>
       </div>
 
-      <Field label="Thiết bị" required hint={catalog.length ? '' : 'Phòng chưa có danh mục — hãy nhập tên thiết bị bên dưới.'}>
-        <select className="input" value={catalogId} onChange={(e) => setCatalogId(e.target.value)} disabled={!catalog.length}>
-          <option value="">— Nhập tay tên thiết bị —</option>
-          {catalog.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      <Field label="Thiết bị" required
+        hint={catalog.length
+          ? 'Chọn trong danh mục của phòng, hoặc để "Nhập tay" rồi gõ tên.'
+          : 'Phòng chưa có danh mục — gõ thẳng tên thiết bị.'}>
+        <div className="grid gap-2">
+          {lines.map((l, i) => (
+            <div key={l.key} className="rounded-xl border border-line p-2.5 grid gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-ink-muted w-6 shrink-0">{i + 1}.</span>
+                <select className="input !py-2 flex-1" value={l.catalog_id}
+                  disabled={!catalog.length}
+                  onChange={(e) => setLine(l.key, { catalog_id: e.target.value })}>
+                  <option value="">— Nhập tay tên thiết bị —</option>
+                  {catalog.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <input className="input !py-2 !w-20 shrink-0" type="number" min="1" inputMode="numeric"
+                  aria-label={`Số lượng dòng ${i + 1}`}
+                  value={l.quantity} onChange={(e) => setLine(l.key, { quantity: e.target.value })} />
+                {lines.length > 1 && (
+                  <button type="button" className="icon-btn shrink-0" aria-label={`Bỏ dòng ${i + 1}`}
+                    onClick={() => dropLine(l.key)}>✕</button>
+                )}
+              </div>
+              {!l.catalog_id && (
+                <input className="input !py-2" placeholder="VD: Robot UGOT số 3, máy chiếu…"
+                  aria-label={`Tên thiết bị dòng ${i + 1}`}
+                  value={l.device_name} onChange={(e) => setLine(l.key, { device_name: e.target.value })} />
+              )}
+            </div>
+          ))}
+        </div>
+      </Field>
+      <button type="button" className="btn-ghost !py-1.5 text-sm -mt-2 mb-3.5" onClick={addLine}>
+        + Thêm thiết bị
+      </button>
+
+      <Field label="Mức ưu tiên">
+        <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
+          {Object.entries(LABEL.priority).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </Field>
 
-      {!catalogId && (
-        <Field label="Tên thiết bị (nhập tay)" required>
-          <input className="input" placeholder="VD: Robot UGOT số 3, máy chiếu…"
-            value={deviceName} onChange={(e) => setDeviceName(e.target.value)} />
-        </Field>
-      )}
-
-      <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Số lượng" required>
-          <input className="input" type="number" min="1" inputMode="numeric"
-            value={qty} onChange={(e) => setQty(e.target.value)} />
-        </Field>
-        <Field label="Mức ưu tiên">
-          <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
-            {Object.entries(LABEL.priority).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-        </Field>
-      </div>
-
-      <Field label="Mô tả tình trạng" required>
-        <textarea className="input" rows={3} placeholder="Hỏng thế nào, ảnh hưởng gì tới buổi dạy…"
+      <Field label={restock ? 'Vì sao cần bổ sung' : 'Mô tả tình trạng'} required>
+        <textarea className="input" rows={3}
+          placeholder={restock
+            ? 'VD: lớp 32 HS mà chỉ có 12 bộ, mỗi nhóm 3 em phải chờ nhau…'
+            : 'Hỏng thế nào, ảnh hưởng gì tới buổi dạy…'}
           value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
 
-      <PhotoInput value={photos} onChange={setPhotos} label="Ảnh / video thiết bị hỏng" allowVideo
-        hint="Chụp rõ vị trí hỏng; quay video nếu lỗi chỉ thấy khi thiết bị chạy." />
+      <PhotoInput value={photos} onChange={setPhotos}
+        label={restock ? 'Ảnh / video minh hoạ (nếu có)' : 'Ảnh / video thiết bị hỏng'} allowVideo
+        hint={restock
+          ? 'Ảnh khu vực thiết bị giúp Phòng chuyên môn hình dung nhu cầu thực tế.'
+          : 'Chụp rõ vị trí hỏng; quay video nếu lỗi chỉ thấy khi thiết bị chạy.'} />
 
       <div className="form-actions flex gap-2.5 justify-end mt-1">
         <button className="btn-line" onClick={onClose} disabled={busy}>Huỷ</button>
         <button className="btn-primary" onClick={submit} disabled={busy}>
-          {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" /> : 'Gửi báo hỏng'}
+          {busy ? <Spinner className="!h-4 !w-4 border-white/40 border-t-white" />
+            : (restock ? 'Gửi đề nghị' : 'Gửi báo hỏng')}
         </button>
       </div>
     </Sheet>
@@ -1141,7 +911,7 @@ function CatalogFormSheet({ open, item, roomId, onClose, onDone }) {
 export default function DevicesHome() {
   const auth = useAuth();
   const toast = useToast();
-  const [tab, setTab] = useState('check');
+  const [tab, setTab] = useState('issues');
 
   const [schools, setSchools] = useState(null);
   const [schoolsErr, setSchoolsErr] = useState(null);
@@ -1180,14 +950,14 @@ export default function DevicesHome() {
   }, [schoolId, toast]);
 
   const tabs = [
-    { value: 'check', label: 'Kiểm kê' },
     { value: 'issues', label: 'Báo hỏng' },
     ...(auth.can('device.catalog') ? [{ value: 'catalog', label: 'Danh mục' }] : []),
   ];
 
   return (
     <div>
-      <PageHeader title="Thiết bị" sub="Kiểm kê theo mốc trong ngày, báo hỏng và danh mục từng phòng." />
+      <PageHeader title="Thiết bị"
+        sub="Báo hỏng đột xuất, đề nghị bổ sung và danh mục thiết bị của từng phòng. Việc đếm thiết bị đầu/cuối buổi nằm trong mục Chấm công." />
       <Segmented options={tabs} value={tab} onChange={setTab} className="mb-4" />
 
       {schoolsErr && <ErrorBox error={schoolsErr} onRetry={loadSchools} />}
@@ -1205,11 +975,6 @@ export default function DevicesHome() {
                 rooms={rooms} roomId={roomId} onRoom={setRoomId}
                 loading={roomsLoading} />
             )
-          )}
-
-          {tab === 'check' && schools.length > 0 && (
-            <CheckTab schoolId={schoolId} roomId={roomId}
-              roomsLoading={roomsLoading} hasRooms={rooms.length > 0} />
           )}
 
           {tab === 'issues' && (

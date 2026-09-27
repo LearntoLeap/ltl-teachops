@@ -65,7 +65,7 @@ Nguyên tắc bắt buộc:
 | Lịch dạy | `schedules` | `/api/schedules` | `features/schedule` |
 | Chấm công | `timesheets` | `/api/timesheets` | `features/timesheet` |
 | Điểm danh | `attendance` | `/api/attendance` | `features/attendance` |
-| Thiết bị | `device_catalog`, `device_checks`, `device_issues` | `/api/devices` | `features/devices` |
+| Thiết bị | `device_catalog`, `device_issues` (+ `device_checks` chỉ đọc) | `/api/devices` | `features/devices` |
 | Học liệu | `materials`, `material_versions`, `material_comments` | `/api/materials` | `features/materials` |
 | Giải pháp | `solutions`, `solution_items` | `/api/solutions` | `features/solutions` |
 | Góp ý | `feedback`, `feedback_replies` | `/api/feedback` | `features/feedback` |
@@ -93,11 +93,16 @@ Nguyên tắc bắt buộc:
 - `roster_size` snapshot từ `classes.roster_size` tại thời điểm điểm danh.
 - Dashboard Phòng chuyên môn hiển thị buổi `Chưa điểm danh` để nhắc.
 
-### 5.3 Thiết bị (`device_checks`)
-- 4 mốc/ngày: `morning_start`, `morning_end`, `afternoon_start`, `afternoon_end`
-  (bật/tắt từng mốc theo trường qua `schools.device_slots`).
-- Mỗi lượt: ảnh + `items` (jsonb `[{catalog_id, qty, note}]`) + ghi chú.
-- Chênh lệch so với `device_catalog.expected_qty` ⇒ gợi ý tạo `device_issues`.
+### 5.3 Thiết bị (`device_issues`)
+- **Đếm thiết bị nằm trong CHẤM CÔNG**, không phải việc riêng của mục Thiết bị:
+  `timesheets.check_in_devices` / `check_out_devices` ghi số lượng thực tế từng loại,
+  so với `device_catalog.expected_qty`; thiếu hoặc hỏng lúc check-out tự mở phiếu
+  `device_issues` với `source='checkout'`.
+- Mục Thiết bị chỉ còn **báo hỏng đột xuất** (`kind='broken'`) và **đề nghị bổ sung /
+  cần mua thêm** (`kind='restock'`). Báo nhiều thiết bị một lần ⇒ mỗi thiết bị một phiếu
+  (theo dõi, khắc phục riêng), chung `batch_id`.
+- `device_checks` + `schools.device_slots` là dữ liệu CŨ của phần kiểm kê đã bỏ —
+  chỉ còn đọc và xuất báo cáo.
 
 ### 5.4 Học liệu (`materials`)
 - 3 cấp × 2 khu vực: `level ∈ {primary, secondary, highschool}`, `area ∈ {official, teacher}`.

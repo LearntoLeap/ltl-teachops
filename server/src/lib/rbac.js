@@ -47,8 +47,9 @@ const PERMISSIONS = {
   'attendance.submit':       ['admin', 'manager', 'teacher', 'assistant'],
   'attendance.viewAll':      ['admin', 'manager'],
 
-  // Thiết bị phòng STEM
-  'device.check':            ['admin', 'manager', 'teacher', 'assistant'],
+  // Thiết bị phòng STEM.
+  // Không còn 'device.check': kiểm đếm thiết bị là một bước của CHẤM CÔNG
+  // (đầu/cuối buổi), không phải thao tác riêng ở mục Thiết bị nữa.
   'device.catalog':          ['admin', 'manager'],
   'device.reportIssue':      ['admin', 'manager', 'teacher', 'assistant'],
   'device.resolveIssue':     ['admin', 'manager'],

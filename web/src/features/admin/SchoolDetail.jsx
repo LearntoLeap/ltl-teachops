@@ -18,8 +18,6 @@ import {
 } from '../../components/ui.jsx';
 import { ClassBatchSheet } from './OrgBatch.jsx';
 
-const SLOT_KEYS = Object.keys(LABEL.slot);
-
 /** '' → null; số hợp lệ → Number; sai định dạng → NaN (để báo lỗi). */
 function numOrNull(v) {
   if (v === '' || v === null || v === undefined) return null;
@@ -39,9 +37,9 @@ function fromSchool(s) {
     lng: s.lng != null ? String(s.lng) : '',
     gps_radius_m: s.gps_radius_m != null ? String(s.gps_radius_m) : '1000',
     grace_minutes: s.grace_minutes != null ? String(s.grace_minutes) : '10',
+    remind_before_minutes: s.remind_before_minutes != null ? String(s.remind_before_minutes) : '60',
     contact_name: s.contact_name || '',
     contact_phone: s.contact_phone || '',
-    device_slots: Array.isArray(s.device_slots) ? s.device_slots : [],
   };
 }
 
@@ -57,13 +55,6 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
   useEffect(() => { setForm(fromSchool(school)); }, [school]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  const toggleSlot = (slot) => setForm((f) => ({
-    ...f,
-    device_slots: f.device_slots.includes(slot)
-      ? f.device_slots.filter((s) => s !== slot)
-      : [...f.device_slots, slot],
-  }));
 
   const useCurrent = async () => {
     setLocating(true);
@@ -86,10 +77,14 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
     const lng = numOrNull(form.lng);
     const radius = numOrNull(form.gps_radius_m);
     const grace = numOrNull(form.grace_minutes);
+    const remind = numOrNull(form.remind_before_minutes);
     if (Number.isNaN(lat)) errs.lat = 'Toạ độ không hợp lệ.';
     if (Number.isNaN(lng)) errs.lng = 'Toạ độ không hợp lệ.';
     if (Number.isNaN(radius)) errs.gps_radius_m = 'Số không hợp lệ.';
     if (Number.isNaN(grace)) errs.grace_minutes = 'Số không hợp lệ.';
+    if (Number.isNaN(remind) || (remind != null && (remind < 5 || remind > 240))) {
+      errs.remind_before_minutes = 'Nhập từ 5 đến 240 phút.';
+    }
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
@@ -104,9 +99,9 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
         lng,
         gps_radius_m: radius == null ? 1000 : radius,
         grace_minutes: grace == null ? 10 : grace,
+        remind_before_minutes: remind == null ? 60 : remind,
         contact_name: form.contact_name.trim() || null,
         contact_phone: form.contact_phone.trim() || null,
-        device_slots: form.device_slots,
       });
       toast.ok('Đã lưu cấu hình trường.');
       onSaved();
@@ -169,6 +164,12 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
           <input className="input" type="number" value={form.grace_minutes} onChange={set('grace_minutes')} />
         </Field>
       </div>
+
+      <Field label="Nhắc chấm công trước giờ dạy (phút)" error={errors.remind_before_minutes}
+        hint="Giáo viên và trợ giảng nhận thông báo trước giờ vào lớp đúng bấy nhiêu phút. 5–240 phút, mặc định 60 — trường ở xa nên đặt sớm hơn.">
+        <input className="input" type="number" min="5" max="240"
+          value={form.remind_before_minutes} onChange={set('remind_before_minutes')} />
+      </Field>
       <div className="grid sm:grid-cols-2 gap-x-3">
         <Field label="Người liên hệ">
           <input className="input" value={form.contact_name} onChange={set('contact_name')} />
@@ -177,23 +178,6 @@ function InfoTab({ school, canManage, isAdmin, onSaved, onDisabled }) {
           <input className="input" type="tel" value={form.contact_phone} onChange={set('contact_phone')} />
         </Field>
       </div>
-
-      <Field label="Ca kiểm tra thiết bị" hint="Các khung giờ phòng STEM cần chụp ảnh kiểm tra thiết bị.">
-        <div className="grid grid-cols-2 gap-2">
-          {SLOT_KEYS.map((slot) => (
-            <label key={slot}
-              className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm cursor-pointer transition
-                ${form.device_slots.includes(slot)
-                  ? 'border-brand-400 bg-brand-50 text-brand-800 font-semibold'
-                  : 'border-line text-ink-soft'}`}>
-              <input type="checkbox" className="accent-brand-600"
-                checked={form.device_slots.includes(slot)}
-                onChange={() => toggleSlot(slot)} />
-              {LABEL.slot[slot]}
-            </label>
-          ))}
-        </div>
-      </Field>
 
       {school.is_active === false && (
         <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-2.5 mt-4 text-sm text-amber-900">
