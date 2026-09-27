@@ -11,14 +11,14 @@ import { Spinner } from './ui.jsx';
 import { useToast } from './Toast.jsx';
 
 /** Tải tệp Excel mẫu đúng thứ tự cột của bảng đang nhập. */
-export function TemplateButton({ path, name, label = 'Tải tệp mẫu Excel' }) {
+export function TemplateButton({ path, name, query, label = 'Tải tệp mẫu Excel' }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   return (
     <button type="button" className="btn-line !py-1.5 !px-3 text-sm shrink-0" disabled={busy}
       onClick={async () => {
         setBusy(true);
-        try { await api.download(path, undefined, name); } catch (e) { toast.fromError(e); } finally { setBusy(false); }
+        try { await api.download(path, query, name); } catch (e) { toast.fromError(e); } finally { setBusy(false); }
       }}>
       {busy ? <Spinner className="h-3.5 w-3.5" /> : '📄'} {label}
     </button>

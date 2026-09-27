@@ -21,6 +21,8 @@ import { notify, notifySchoolManagers } from '../lib/notify.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
 import { periodTimes, MIN_PERIOD, MAX_PERIOD } from '../lib/periods.js';
 import { sendXlsx } from '../lib/xlsx.js';
+import { attachPickers } from '../lib/xlsxTemplate.js';
+import { listPeriods } from '../lib/periods.js';
 
 const SCHEDULE_STATUSES = ['scheduled', 'done', 'cancelled', 'skipped'];
 const MAX_BULK_SESSIONS = 120;
@@ -371,10 +373,35 @@ export default async function routes(app) {
    * Dòng lỗi KHÔNG làm hỏng cả lượt: bỏ qua và trả về trong `skipped` kèm số
    * dòng + lý do, để người nhập biết sửa đúng chỗ nào.
    * ---------------------------------------------------------------------- */
-  /* GET /api/schedules/batch-template — tệp Excel mẫu, đúng thứ tự cột của bảng
-   * nhập lịch. Xếp theo TIẾT: giờ vào/ra lấy từ khung tiết của trường. */
-  app.get('/api/schedules/batch-template', { preHandler: requirePerm('schedule.manage') }, async (req, reply) =>
-    sendXlsx(reply, {
+  /* GET /api/schedules/batch-template?school_id= — tệp Excel mẫu, đúng thứ tự cột
+   * của bảng nhập lịch. Xếp theo TIẾT: giờ vào/ra lấy từ khung tiết của trường.
+   *
+   * Có school_id thì mẫu kèm DANH SÁCH THẢ XUỐNG lấy từ CSDL: lớp, tiết, giáo
+   * viên, trợ giảng, phòng của đúng trường đó — đỡ gõ sai tên. Vẫn gõ tay được
+   * cho người chưa có tài khoản. */
+  app.get('/api/schedules/batch-template', { preHandler: requirePerm('schedule.manage') }, async (req, reply) => {
+    const schoolId = uuid(req.query.school_id, 'school_id');
+    if (schoolId) await assertSchoolAccess(req.user, schoolId);
+
+    // Danh mục để thả xuống. Không chọn trường thì chỉ có danh sách người.
+    const [classes, teachers, assistants, roomsList, periodSet] = await Promise.all([
+      schoolId ? rows('select name, grade from classes where school_id = $1 and is_active order by name', [schoolId]) : [],
+      rows("select full_name from users where role = 'teacher' and is_active order by full_name"),
+      rows("select full_name from users where role = 'assistant' and is_active order by full_name"),
+      schoolId ? rows('select name from stem_rooms where school_id = $1 and is_active order by name', [schoolId]) : [],
+      listPeriods({ schoolId }),
+    ]);
+    const periodValues = (periodSet.items || []).map((p) => String(p.no));
+
+    return sendXlsx(reply, {
+      onWorkbook: (wb) => attachPickers(wb, 'Nhập lịch dạy', [
+        { col: 1, date: true, title: 'Ngày' },
+        { col: 2, values: periodValues, title: 'Tiết' },
+        { col: 3, values: classes.map((c) => c.name), title: 'Lớp' },
+        { col: 4, values: teachers.map((u) => u.full_name), title: 'Giáo viên' },
+        { col: 5, values: assistants.map((u) => u.full_name), title: 'Trợ giảng' },
+        { col: 6, values: roomsList.map((r) => r.name), title: 'Phòng' },
+      ]),
       fileName: 'mau-nhap-lich-day',
       sheetName: 'Nhập lịch dạy',
       title: 'MẪU NHẬP LỊCH DẠY — LtL TeachOps',
@@ -391,10 +418,11 @@ export default async function routes(app) {
         { header: 'Nội dung', key: 'subject', width: 28 },
       ],
       rows: [
-        { date: '2026-09-28', period: 1, cls: '6A1', teacher: 'Nguyễn Văn An', assistant: 'Lê Minh Châu', room: 'Phòng STEM 1', subject: 'Robotics — Bài 5 (ví dụ)' },
-        { date: '2026-09-28', period: 2, cls: '6A2', teacher: '', assistant: '', room: '', subject: '(ví dụ) để trống cũng được' },
+        { date: '2026-09-28', period: 1, cls: classes[0]?.name || '6A1', teacher: teachers[0]?.full_name || 'Nguyễn Văn An', assistant: assistants[0]?.full_name || '', room: roomsList[0]?.name || '', subject: 'Robotics — Bài 5 (ví dụ)' },
+        { date: '2026-09-28', period: 2, cls: classes[1]?.name || '6A2', teacher: '', assistant: '', room: '', subject: '(ví dụ) để trống cũng được' },
       ],
-    }));
+    });
+  });
 
   app.post('/api/schedules/batch', { preHandler: requirePerm('schedule.manage') }, async (req) => {
     const rowsIn = req.body?.rows;

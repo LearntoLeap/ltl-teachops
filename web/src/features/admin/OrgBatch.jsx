@@ -350,8 +350,10 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
     const withSchool = Math.max(...data.map((c) => c.length)) >= 8;
     const parsed = data.map((raw) => {
       const c = withSchool ? raw : ['', ...raw];
+      // Mẫu Excel ghi "MÃ — Tên trường"; tách phần trước dấu — để dò cho chắc.
+      const schoolCell = String(c[0] || '').split(/\s+[—–-]\s+/)[0].trim() || c[0];
       const schoolId = fixedSchool?.id
-        || (c[0] ? findByName(schools, c[0], ['code', 'name']) : defaultSchool);
+        || (c[0] ? (findByName(schools, schoolCell, ['code', 'name']) || findByName(schools, c[0], ['code', 'name'])) : defaultSchool);
       const g = firstInt(c[2]);
       return {
         ...emptyClass(),

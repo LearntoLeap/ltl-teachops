@@ -4,11 +4,12 @@
  */
 import { rows, one, scalar, tx } from '../db.js';
 import { requirePerm, can } from '../lib/rbac.js';
-import { schoolFilter, combine, assertSchoolAccess, assertClassAccess } from '../lib/scope.js';
+import { schoolFilter, combine, assertSchoolAccess, assertClassAccess, visibleSchoolIds } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, unprocessable } from '../lib/errors.js';
 import { str, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
 import { sendXlsx } from '../lib/xlsx.js';
+import { attachPickers } from '../lib/xlsxTemplate.js';
 import { classDeleteImpact, listOf } from '../lib/orgDelete.js';
 
 // Khớp enum edu_level trong 001_init.sql
@@ -220,15 +221,34 @@ export default async function routes(app) {
     return { created: created.length, items: created, skipped };
   });
 
-  /* GET /api/classes/batch-template — tệp Excel mẫu đúng thứ tự cột của bảng nhập lớp. */
-  app.get('/api/classes/batch-template', { preHandler: requirePerm('org.manage') }, async (req, reply) =>
-    sendXlsx(reply, {
+  /* GET /api/classes/batch-template — tệp Excel mẫu đúng thứ tự cột của bảng nhập lớp.
+   * Kèm danh sách thả xuống lấy từ CSDL: trường trong phạm vi, giáo viên, trợ giảng. */
+  app.get('/api/classes/batch-template', { preHandler: requirePerm('org.manage') }, async (req, reply) => {
+    const ids = await visibleSchoolIds(req.user);
+    const schoolList = ids === null
+      ? await rows('select code, name from schools where is_active order by name')
+      : (ids.length
+        ? await rows('select code, name from schools where is_active and id = any($1) order by name', [ids])
+        : []);
+    const [teacherList, assistantList] = await Promise.all([
+      rows("select full_name from users where role = 'teacher' and is_active order by full_name"),
+      rows("select full_name from users where role = 'assistant' and is_active order by full_name"),
+    ]);
+
+    return sendXlsx(reply, {
+      onWorkbook: (wb) => attachPickers(wb, 'Nhập lớp', [
+        { col: 1, values: schoolList.map((x) => `${x.code} — ${x.name}`), title: 'Trường' },
+        { col: 3, values: Array.from({ length: 12 }, (_, i) => String(i + 1)), title: 'Khối' },
+        { col: 4, values: ['TH', 'THCS', 'THPT'], title: 'Cấp học' },
+        { col: 6, values: teacherList.map((u) => u.full_name), title: 'Giáo viên' },
+        { col: 7, values: assistantList.map((u) => u.full_name), title: 'Trợ giảng' },
+      ]),
       fileName: 'mau-nhap-lop',
       sheetName: 'Nhập lớp',
       title: 'MẪU NHẬP DANH SÁCH LỚP — LtL TeachOps',
       subtitle: 'Điền từ dòng 5 (xoá 2 dòng ví dụ) → bôi đen các dòng dữ liệu → Copy → bấm Ctrl+V trên bảng "Nhập bảng lớp". Cột Trường ghi MÃ hoặc TÊN trường; để trống = trường đang chọn.',
       columns: [
-        { header: 'Mã / Tên trường', key: 'school', width: 22 },
+        { header: 'Mã / Tên trường', key: 'school', width: 26 },
         { header: 'Tên lớp *', key: 'name', width: 12 },
         { header: 'Khối (1-12)', key: 'grade', width: 10, align: 'center' },
         { header: 'Cấp học (TH / THCS / THPT)', key: 'level', width: 16 },
@@ -238,10 +258,11 @@ export default async function routes(app) {
         { header: 'Ghi chú', key: 'note', width: 28 },
       ],
       rows: [
-        { school: 'VD-THCS01', name: '6A1', grade: 6, level: 'THCS', roster: 38, teacher: 'Nguyễn Văn A', assistant: 'Trần Thị B', note: 'Ví dụ — xoá dòng này' },
-        { school: 'VD-THCS01', name: '6A2', grade: 6, level: '', roster: 40, teacher: '', assistant: '', note: '' },
+        { school: schoolList[0] ? `${schoolList[0].code} — ${schoolList[0].name}` : 'VD-THCS01', name: '6A1', grade: 6, level: 'THCS', roster: 38, teacher: teacherList[0]?.full_name || 'Nguyễn Văn A', assistant: assistantList[0]?.full_name || '', note: 'Ví dụ — xoá dòng này' },
+        { school: '', name: '6A2', grade: 6, level: '', roster: 40, teacher: '', assistant: '', note: '(ví dụ) để trống = trường đang chọn' },
       ],
-    }));
+    });
+  });
 
   /* ------------------------------------------------------------------------
    * GET /api/classes/:id — chi tiết lớp + school_name + teachers[].

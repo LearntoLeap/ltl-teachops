@@ -221,7 +221,9 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
           Giáo viên / trợ giảng chưa có tài khoản thì cứ gõ tên.
         </div>
         <div className="flex flex-wrap gap-2">
-          <TemplateButton path="/api/schedules/batch-template" name="mau-nhap-lich-day.xlsx" />
+          <TemplateButton path="/api/schedules/batch-template" name="mau-nhap-lich-day.xlsx"
+            query={schoolId ? { school_id: schoolId } : undefined}
+            label={schoolId ? 'Tải mẫu (có sẵn lớp, tiết, giáo viên)' : 'Tải tệp mẫu Excel'} />
           <ImportButton kind="schedules" onRows={onImport} disabled={!schoolId} />
         </div>
       </div>

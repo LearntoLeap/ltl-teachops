@@ -94,6 +94,8 @@ export async function xlsxBuffer(spec) {
     : [{ name: spec.sheetName || 'Dữ liệu', title: spec.title, subtitle: spec.subtitle, columns: spec.columns, rows: spec.rows }];
 
   for (const s of sheets) buildSheet(wb, s);
+  // Móc để tệp MẪU nhập liệu gắn thêm danh sách chọn / định dạng cột.
+  if (typeof spec.onWorkbook === 'function') await spec.onWorkbook(wb);
   return Buffer.from(await wb.xlsx.writeBuffer());
 }
 
