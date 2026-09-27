@@ -7,7 +7,7 @@
  */
 import { rows, one, scalar } from '../db.js';
 import { requirePerm } from '../lib/rbac.js';
-import { schoolFilter, combine, assertSchoolAccess, assertRoomAccess } from '../lib/scope.js';
+import { schoolFilter, combine, assertSchoolAccess, assertRoomAccess, isPicker } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest } from '../lib/errors.js';
 import { str, bool, uuid, paging } from '../lib/validate.js';
@@ -20,12 +20,18 @@ export default async function routes(app) {
     const schoolId = uuid(req.query.school_id, 'school_id');
     // Mặc định chỉ trả phòng ĐANG DÙNG — xem chú thích ở routes/schools.js.
     const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
-    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
+    // ?for=picker — danh mục để chọn (xem lib/scope.js).
+    const picker = isPicker(req.query);
+    const isActive = picker
+      ? true
+      : (bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true));
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;
     const filters = [];
-    const scope = await schoolFilter(req.user, 'r.school_id', next);
+    const scope = picker
+      ? { sql: 'true', params: [], next }
+      : await schoolFilter(req.user, 'r.school_id', next);
     next = scope.next;
     filters.push(scope);
     if (schoolId) {
@@ -40,7 +46,7 @@ export default async function routes(app) {
 
     const total = await scalar(`select count(*) from stem_rooms r where ${where}`, params);
     const items = await rows(
-      `select r.*, s.name as school_name
+      `select ${picker ? 'r.id, r.school_id, r.name, r.is_active' : 'r.*'}, s.name as school_name
          from stem_rooms r
          join schools s on s.id = r.school_id
         where ${where}

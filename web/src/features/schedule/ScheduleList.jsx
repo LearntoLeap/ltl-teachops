@@ -70,9 +70,13 @@ function useSchoolResources(schoolId, { light = false } = {}) {
     if (!schoolId) { setRes(EMPTY_RES); return undefined; }
     let alive = true;
     setRes((s) => ({ ...s, loading: true }));
+    // GV/TG tự thêm tiết bị thiếu (light) xin DANH MỤC đầy đủ của trường
+    // (?for=picker): mọi lớp, mọi phòng đang dùng — kể cả nơi họ chưa được phân
+    // công. Không có nó thì đúng cái tiết bị sót lại không có lớp nào để chọn.
+    const pick = light ? { for: 'picker' } : null;
     Promise.all([
-      api.get('/api/classes', { school_id: schoolId, limit: 200 }),
-      api.get('/api/rooms', { school_id: schoolId, limit: 200 }),
+      api.get('/api/classes', { school_id: schoolId, limit: 200, ...pick }),
+      api.get('/api/rooms', { school_id: schoolId, limit: 200, ...pick }),
       // GV/TG không có quyền xem danh bạ — buổi tự gắn chính họ.
       // link=any: lấy mọi người trong phạm vi, kèm cờ at_school để biết ai đang
       // dạy ở trường này. Không lọc cứng, nếu không trường mới sẽ không có ai để chọn.
@@ -462,7 +466,11 @@ function ScheduleForm({ bulk = false, schedule = null, initialDate = null, initi
   useEffect(() => {
     if (!f.school_id) { loadPeriods().then(setPeriods); setPeriodSrc(null); return undefined; }
     let live = true;
-    api.get('/api/periods', { school_id: f.school_id, date: periodDate || undefined })
+    api.get('/api/periods', {
+      school_id: f.school_id,
+      date: periodDate || undefined,
+      ...(selfOnly ? { for: 'picker' } : null),
+    })
       .then((r) => {
         if (!live) return;
         if (r?.items?.length) setPeriods(r.items);
@@ -783,11 +791,13 @@ export default function ScheduleList() {
     return mode === 'month' ? monthRange() : weekRange(mode === 'next' ? 1 : 0);
   }, [mode, view, monthAnchor, weekOffset]);
 
-  /* Danh sách trường cho bộ lọc + form (chỉ admin/manager cần gọi). */
+  /* Danh sách trường cho bộ lọc + form.
+   * GV/TG chỉ được TỰ THÊM tiết bị thiếu ⇒ lấy danh mục đầy đủ (?for=picker)
+   * để chọn đúng trường, kể cả trường chưa có trong phân công của họ. */
   const canSelfAdd = auth.can('schedule.selfCreate');
   useEffect(() => {
     if (!showSchoolFilter && !canManage && !canSelfAdd) return;
-    api.get('/api/schools', { limit: 200 })
+    api.get('/api/schools', { limit: 200, ...(canManage ? null : { for: 'picker' }) })
       .then((r) => setSchools(listOf(r)))
       .catch((e) => toast.fromError(e));
   }, [showSchoolFilter, canManage, canSelfAdd, toast]);

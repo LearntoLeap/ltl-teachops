@@ -15,7 +15,7 @@ import {
   assertSchoolAccess,
   assertScheduleAccess,
 } from '../lib/scope.js';
-import { badRequest, conflict, unprocessable } from '../lib/errors.js';
+import { badRequest, conflict, notFound, unprocessable } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { notify, notifySchoolManagers } from '../lib/notify.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
@@ -129,7 +129,14 @@ async function assertActiveStaff(userId, role, label) {
  * Ép kiểu + kiểm tra phần thân dùng chung cho POST đơn và POST /bulk
  * (trường, lớp, phòng, người dạy, khung giờ — chưa gồm ngày).
  */
-async function validateSessionCore(user, b) {
+/** Trường bất kỳ (không xét phạm vi) — dùng cho tiết GV/TG tự thêm. */
+async function anySchoolById(schoolId) {
+  const s = await one('select * from schools where id = $1', [schoolId]);
+  if (!s) throw notFound('Không tìm thấy trường.');
+  return s;
+}
+
+async function validateSessionCore(user, b, { anySchool = false } = {}) {
   const schoolId = uuid(b.school_id, 'school_id', { required: true });
   const classId = uuid(b.class_id, 'class_id', { required: true });
   const roomId = uuid(b.room_id, 'room_id');
@@ -159,7 +166,10 @@ async function validateSessionCore(user, b) {
     throw badRequest('Giáo viên và trợ giảng phải là hai người khác nhau.');
   }
 
-  const school = await assertSchoolAccess(user, schoolId);
+  // GV/TG tự thêm tiết bị thiếu được chọn MỌI trường đang dùng: tiết bị sót hay
+  // rơi vào trường họ chưa được phân công, chặn ở đây thì không khai được.
+  // Đổi lại, tiết luôn mang cờ self_added + lý do và báo ngay cho Phòng chuyên môn.
+  const school = anySchool ? await anySchoolById(schoolId) : await assertSchoolAccess(user, schoolId);
   if (!school.is_active) {
     throw unprocessable(`Trường "${school.name}" đã ngừng sử dụng — khôi phục lại trường trước khi xếp buổi mới.`);
   }
@@ -302,7 +312,7 @@ export default async function routes(app) {
       assertPerm(req.user, 'schedule.manage');
     }
 
-    const core = await validateSessionCore(req.user, b);
+    const core = await validateSessionCore(req.user, b, { anySchool: selfOnly });
     const sessionDate = dateStr(b.session_date, 'session_date', { required: true });
     Object.assign(core, await timesAt(core, sessionDate));
     const note = str(b.note, 'note');

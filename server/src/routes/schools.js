@@ -7,7 +7,7 @@
  */
 import { rows, one, scalar, tx } from '../db.js';
 import { requirePerm, requireRole, can } from '../lib/rbac.js';
-import { schoolFilter, combine, assertSchoolAccess } from '../lib/scope.js';
+import { schoolFilter, combine, assertSchoolAccess, isPicker } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, notFound, forbidden } from '../lib/errors.js';
 import { str, num, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
@@ -15,6 +15,9 @@ import { sendXlsx } from '../lib/xlsx.js';
 import { schoolDeleteImpact, listOf } from '../lib/orgDelete.js';
 
 const MAX_BATCH_ROWS = 300;
+
+/** Cột trả về ở chế độ danh mục để chọn — không lộ GPS, người liên hệ, cấu hình. */
+const PICKER_COLS = 's.id, s.code, s.name, s.province, s.is_active';
 
 // Khớp enum device_slot trong 001_init.sql
 const DEVICE_SLOTS = ['morning_start', 'morning_end', 'afternoon_start', 'afternoon_end'];
@@ -94,12 +97,19 @@ export default async function routes(app) {
     // vào các ô chọn (xếp lịch, chấm công, điểm danh…). Muốn thấy cả mục đã
     // ngừng thì gửi ?include_inactive=1 (chỉ màn hình quản trị dùng).
     const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
-    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
+    // ?for=picker — danh mục để chọn (xem lib/scope.js): đủ trường đang dùng,
+    // chỉ các cột để hiện trong ô chọn.
+    const picker = isPicker(req.query);
+    const isActive = picker
+      ? true
+      : (bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true));
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;
     const filters = [];
-    const scope = await schoolFilter(req.user, 's.id', next);
+    const scope = picker
+      ? { sql: 'true', params: [], next }
+      : await schoolFilter(req.user, 's.id', next);
     next = scope.next;
     filters.push(scope);
     if (q !== null) {
@@ -114,7 +124,7 @@ export default async function routes(app) {
 
     const total = await scalar(`select count(*) from schools s where ${where}`, params);
     const items = await rows(
-      `select s.*,
+      `select ${picker ? PICKER_COLS : 's.*'},
               (select count(*) from classes c    where c.school_id = s.id and c.is_active) as classes_count,
               (select count(*) from stem_rooms r where r.school_id = s.id and r.is_active) as rooms_count
          from schools s

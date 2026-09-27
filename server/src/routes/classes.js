@@ -4,7 +4,7 @@
  */
 import { rows, one, scalar, tx } from '../db.js';
 import { requirePerm, can } from '../lib/rbac.js';
-import { schoolFilter, combine, assertSchoolAccess, assertClassAccess, visibleSchoolIds } from '../lib/scope.js';
+import { schoolFilter, combine, assertSchoolAccess, assertClassAccess, visibleSchoolIds, isPicker } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { conflict, badRequest, unprocessable } from '../lib/errors.js';
 import { str, int, bool, uuid, enumOf, paging } from '../lib/validate.js';
@@ -15,6 +15,9 @@ import { classDeleteImpact, listOf } from '../lib/orgDelete.js';
 // Khớp enum edu_level trong 001_init.sql
 const LEVELS = ['primary', 'secondary', 'highschool'];
 const MAX_BATCH_ROWS = 300;
+
+/** Cột trả về ở chế độ danh mục để chọn — đủ để hiện "6A1 — Khối 6 (38 HS)". */
+const PICKER_COLS = 'c.id, c.school_id, c.name, c.grade, c.level, c.roster_size, c.is_active';
 
 /** Khối 1-5 → Tiểu học · 6-9 → THCS · 10-12 → THPT. */
 const levelOfGrade = (g) => (g <= 5 ? 'primary' : g <= 9 ? 'secondary' : 'highschool');
@@ -76,12 +79,18 @@ export default async function routes(app) {
     const q = str(req.query.q, 'q', { max: 100 });
     // Mặc định chỉ trả lớp ĐANG DÙNG — xem lib chú thích ở routes/schools.js.
     const includeInactive = bool(req.query.include_inactive, 'include_inactive', { def: false });
-    const isActive = bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true);
+    // ?for=picker — danh mục để chọn (xem lib/scope.js): MỌI lớp đang dùng của
+    // trường, kể cả lớp người dùng chưa được phân công. Cần cho GV/TG tự thêm
+    // tiết bị thiếu — tiết sót thường rơi đúng vào lớp chưa phân công.
+    const picker = isPicker(req.query);
+    const isActive = picker
+      ? true
+      : (bool(req.query.is_active, 'is_active') ?? (includeInactive ? null : true));
     const { page, limit, offset } = paging(req.query);
 
     let next = 1;
     const filters = [];
-    const scope = await classScope(req.user, next);
+    const scope = picker ? { sql: 'true', params: [], next } : await classScope(req.user, next);
     next = scope.next;
     filters.push(scope);
     if (schoolId) {
@@ -104,7 +113,7 @@ export default async function routes(app) {
 
     const total = await scalar(`select count(*) from classes c where ${where}`, params);
     const items = await rows(
-      `select c.*, s.name as school_name, ${TEACHERS_SQL}
+      `select ${picker ? PICKER_COLS : 'c.*'}, s.name as school_name${picker ? '' : `, ${TEACHERS_SQL}`}
          from classes c
          join schools s on s.id = c.school_id
         where ${where}

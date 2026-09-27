@@ -13,7 +13,7 @@
  */
 import { one, rows, tx } from '../db.js';
 import { requireRole, requirePerm } from '../lib/rbac.js';
-import { assertSchoolAccess } from '../lib/scope.js';
+import { assertSchoolAccess, isPicker } from '../lib/scope.js';
 import { audit } from '../lib/audit.js';
 import { badRequest, notFound } from '../lib/errors.js';
 import { str, uuid, bool, dateStr } from '../lib/validate.js';
@@ -65,7 +65,9 @@ export default async function routes(app) {
   app.get('/api/periods', async (req) => {
     const schoolId = uuid(req.query.school_id, 'school_id');
     const date = dateStr(req.query.date, 'date');
-    if (schoolId) await assertSchoolAccess(req.user, schoolId);
+    // Khung tiết cũng là danh mục: ?for=picker cho xem khung giờ của trường
+    // chưa nằm trong phạm vi, để GV/TG chọn đúng tiết khi tự thêm tiết bị thiếu.
+    if (schoolId && !isPicker(req.query)) await assertSchoolAccess(req.user, schoolId);
     const resolved = await listPeriods({ schoolId, date });
     return { ...resolved, min: MIN_PERIOD, max: MAX_PERIOD };
   });

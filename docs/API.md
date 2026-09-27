@@ -76,6 +76,18 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | GET | `/api/classes/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
 | POST | `/api/import/table?kind=classes` | admin, manager | Như trên, cho bảng lớp |
 
+**Danh mục để chọn — `?for=picker`.** `GET /api/schools`, `/api/classes`, `/api/rooms`,
+`/api/periods` nhận `?for=picker`: trả ĐẦY ĐỦ mục đang dùng cho mọi vai trò, nhưng chỉ kèm
+các cột để hiện trong ô chọn — trường (`id, code, name, province`), lớp (`id, school_id, name,
+grade, level, roster_size`), phòng (`id, school_id, name`); không kèm toạ độ GPS, người liên hệ,
+cấu hình chấm công hay `teachers[]`. Lý do: GV/TG chỉ nhìn thấy trường/lớp mình được phân công,
+mà tiết BỊ SÓT thường rơi đúng vào chỗ chưa phân công — không có chế độ này thì ô "Trường" và
+"Lớp" ở form *Thêm tiết bị thiếu* bị khuyết, giáo viên khai thiếu hoặc khai sai.
+Vì cùng lý do đó, `POST /api/schedules` khi GV/TG **tự thêm tiết bị thiếu** chấp nhận mọi trường
+đang dùng (không xét phạm vi); tiết vẫn bắt buộc có lý do, mang cờ `self_added` và báo ngay cho
+Phòng chuyên môn của trường đó. Dữ liệu NGHIỆP VỤ (lịch dạy, chấm công, điểm danh, báo cáo)
+không đổi — vẫn lọc theo phạm vi từng vai trò.
+
 **Mục đã NGỪNG SỬ DỤNG không lọt vào ô chọn.** `GET /api/schools`, `/api/classes`,
 `/api/rooms` mặc định chỉ trả mục `is_active = true`. Màn hình quản trị muốn xem lại để khôi
 phục thì gửi `?include_inactive=1`. Xếp buổi vào trường/lớp/phòng đã ngừng bị chặn (422).

@@ -12,6 +12,23 @@
 import { one, rows } from '../db.js';
 import { notFound } from './errors.js';
 
+/* ---------------------------------------------------------------------------
+ * DANH MỤC ĐỂ CHỌN — ?for=picker
+ *
+ * GV/TG chỉ nhìn thấy trường/lớp mình được phân công. Nhưng khi họ TỰ THÊM
+ * TIẾT BỊ THIẾU thì đúng cái đang thiếu lại nằm ngoài phạm vi đó — lịch bị sót
+ * nên chẳng có trường/lớp nào để chọn, dẫn tới khai thiếu hoặc khai sai.
+ *
+ * Vì vậy các endpoint DANH MỤC (trường · lớp · phòng · khung tiết) nhận
+ * ?for=picker: trả đủ mục ĐANG DÙNG như tài khoản quản trị, nhưng chỉ gồm các
+ * cột để hiện trong ô chọn (mã, tên, khối, sĩ số) — không kèm toạ độ GPS,
+ * người liên hệ hay danh sách người phụ trách.
+ *
+ * Dữ liệu NGHIỆP VỤ (lịch dạy, chấm công, điểm danh, báo cáo) vẫn giữ nguyên
+ * phạm vi cũ — mỗi người chỉ thấy phần việc của mình.
+ * ------------------------------------------------------------------------- */
+export const isPicker = (query) => String(query?.for || '').toLowerCase() === 'picker';
+
 /** Danh sách school_id mà người dùng được phép nhìn thấy. Trả null nghĩa là "tất cả". */
 export async function visibleSchoolIds(user) {
   if (!user) return [];
