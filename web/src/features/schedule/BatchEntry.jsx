@@ -2,34 +2,38 @@
  * BatchEntry.jsx — Nhập lịch dạy dạng BẢNG, cho Admin / Phòng chuyên môn.
  *
  * Mục đích: xếp lịch đầu kỳ thường là hàng chục buổi khác nhau (khác lớp, khác
- * giờ, khác giáo viên). Nhập từng buổi qua form quá chậm, nên màn hình này cho
+ * tiết, khác giáo viên). Nhập từng buổi qua form quá chậm, nên màn hình này cho
  * điền thẳng trên lưới giống Excel:
  *   - Chọn trường một lần ở đầu → mọi dòng dùng chung, chỉ điền phần khác nhau.
- *   - Nút "Nhân đôi dòng" để lặp nhanh buổi tương tự.
- *   - DÁN TỪ EXCEL: copy vùng ô rồi Ctrl+V ngay trên bảng.
- *   - Điện thoại (<768px): cùng dữ liệu đó hiện dưới dạng THẺ xếp dọc, mỗi dòng
- *     một thẻ, không phải vuốt ngang. Bảng và thẻ dùng chung state và hàm sửa ô.
+ *   - Xếp theo TIẾT (không phải giờ): giờ vào/ra suy từ khung tiết của trường.
+ *   - Giáo viên / trợ giảng: chọn trong danh sách HOẶC gõ tay tên người chưa có
+ *     tài khoản — máy chủ lưu tên gõ tay và vẫn tạo buổi.
+ *   - Ba lối nhập cùng đổ về một chỗ: gõ tay · dán từ Excel (Ctrl+V) · tải tệp
+ *     Excel đã điền theo mẫu.
+ *   - Điện thoại (<768px): mỗi dòng là một thẻ xếp dọc, không phải vuốt ngang.
  *
  * Gửi lên POST /api/schedules/batch — dòng lỗi bị bỏ qua và báo rõ số dòng,
- * các dòng còn lại vẫn được tạo.
+ * các dòng còn lại vẫn được tạo. Thiếu thông tin thì bị NHẮC, không bị chặn tải lên.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api.js';
 import { Field, Sheet, Spinner } from '../../components/ui.jsx';
+import { TemplateButton, ImportButton } from '../../components/TableIO.jsx';
 import { useToast } from '../../components/Toast.jsx';
 import { today } from '../../lib/format.js';
 import { findByName } from '../../lib/tablePaste.js';
 
 const listOf = (r) => (Array.isArray(r) ? r : r?.items || []);
 
-/** Một dòng trống. Giữ giờ của dòng trước để điền tiếp cho nhanh. */
+/** Một dòng trống. Giữ tiết/người của dòng trước để điền tiếp cho nhanh. */
 const emptyRow = (prev) => ({
   session_date: prev?.session_date || today(),
-  start_time: prev?.start_time || '',
-  end_time: prev?.end_time || '',
+  period: prev?.period || '',
   class_id: '',
   teacher_id: prev?.teacher_id || '',
+  teacher_text: prev?.teacher_text || '',
   assistant_id: prev?.assistant_id || '',
+  assistant_text: prev?.assistant_text || '',
   room_id: prev?.room_id || '',
   subject: prev?.subject || '',
 });
@@ -47,31 +51,28 @@ function parseDate(v) {
   return `${y}-${mo}-${d}`;
 }
 
-/** '8h', '8:00', '08.00', '0800' → '08:00'. */
-function parseTime(v) {
-  const s = String(v || '').trim().replace(/\s/g, '');
-  if (!s) return '';
-  let m = s.match(/^(\d{1,2})[:h.](\d{1,2})$/i);
-  if (m) return `${m[1].padStart(2, '0')}:${m[2].padStart(2, '0')}`;
-  m = s.match(/^(\d{1,2})h?$/i);
-  if (m) return `${m[1].padStart(2, '0')}:00`;
-  m = s.match(/^(\d{2})(\d{2})$/);
-  if (m) return `${m[1]}:${m[2]}`;
-  return s;
+/** 'Tiết 3', '3', '03' → '3'. Không phải số thì trả rỗng. */
+function parsePeriod(v) {
+  const n = String(v ?? '').match(/\d{1,2}/);
+  return n ? String(Number(n[0])) : '';
 }
+
+/** Ô nhìn như giờ (08:00, 8h, 0800) — dùng để nhận ra dữ liệu dán theo mẫu CŨ. */
+const looksLikeTime = (v) => /^\s*\d{1,2}\s*([:h.]\s*\d{1,2})?\s*$/i.test(String(v || '')) && /[:h.]/i.test(String(v || ''));
 
 export default function BatchEntry({ open, onClose, schools, onDone }) {
   const toast = useToast();
   const [schoolId, setSchoolId] = useState('');
   const [res, setRes] = useState({ classes: [], rooms: [], teachers: [], assistants: [] });
+  const [periods, setPeriods] = useState([]);
   const [loadingRes, setLoadingRes] = useState(false);
   const [rows, setRows] = useState([emptyRow()]);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);   // { created, skipped[] }
 
-  // Chọn trường → nạp lớp / phòng / giáo viên / trợ giảng của trường đó
+  // Chọn trường → nạp lớp / phòng / giáo viên / trợ giảng / khung tiết của trường đó
   useEffect(() => {
-    if (!schoolId) { setRes({ classes: [], rooms: [], teachers: [], assistants: [] }); return undefined; }
+    if (!schoolId) { setRes({ classes: [], rooms: [], teachers: [], assistants: [] }); setPeriods([]); return undefined; }
     let alive = true;
     setLoadingRes(true);
     Promise.all([
@@ -79,9 +80,24 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
       api.get('/api/rooms', { school_id: schoolId, limit: 200 }),
       api.get('/api/users', { role: 'teacher', school_id: schoolId, limit: 200 }),
       api.get('/api/users', { role: 'assistant', school_id: schoolId, limit: 200 }),
-    ]).then(([c, r, t, a]) => {
+      api.get('/api/periods', { school_id: schoolId }),
+      // Người ngoài phạm vi trường vẫn được chọn: trợ giảng hay chạy nhiều trường.
+      api.get('/api/users', { role: 'teacher', limit: 200 }).catch(() => []),
+      api.get('/api/users', { role: 'assistant', limit: 200 }).catch(() => []),
+    ]).then(([c, r, t, a, p, tAll, aAll]) => {
       if (!alive) return;
-      setRes({ classes: listOf(c), rooms: listOf(r), teachers: listOf(t), assistants: listOf(a) });
+      // Người của trường lên trước, người trường khác nối sau, bỏ trùng theo id.
+      const merge = (near, far) => {
+        const seen = new Set(listOf(near).map((u) => u.id));
+        return [...listOf(near), ...listOf(far).filter((u) => !seen.has(u.id))];
+      };
+      setRes({
+        classes: listOf(c),
+        rooms: listOf(r),
+        teachers: merge(t, tAll),
+        assistants: merge(a, aAll),
+      });
+      setPeriods(listOf(p));
     }).catch((e) => { if (alive) toast.fromError(e); })
       .finally(() => { if (alive) setLoadingRes(false); });
     return () => { alive = false; };
@@ -90,60 +106,88 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
   const setCell = (i, key, val) =>
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)));
 
+  /**
+   * Gõ tên người vào ô: khớp được với tài khoản thì gắn id, không khớp thì giữ
+   * nguyên chữ — máy chủ nhận tên gõ tay cho người chưa có tài khoản.
+   */
+  const setPerson = (i, kind, text) => {
+    const pool = kind === 'teacher' ? res.teachers : res.assistants;
+    const id = text ? findByName(pool, text, ['full_name', 'email']) : '';
+    setRows((rs) => rs.map((r, idx) => (idx === i
+      ? { ...r, [`${kind}_text`]: text, [`${kind}_id`]: id || '' }
+      : r)));
+  };
+
   const addRow = () => setRows((rs) => [...rs, emptyRow(rs[rs.length - 1])]);
   const dupRow = (i) => setRows((rs) => [...rs.slice(0, i + 1), { ...rs[i], class_id: '' }, ...rs.slice(i + 1)]);
   const delRow = (i) => setRows((rs) => (rs.length === 1 ? [emptyRow()] : rs.filter((_, idx) => idx !== i)));
 
   /**
-   * Dán từ Excel: mỗi dòng một buổi, các cột cách nhau bằng Tab theo thứ tự
-   * Ngày · Bắt đầu · Kết thúc · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung.
-   * Tên lớp/người được dò gần đúng sang id.
+   * Đổ các dòng chữ vào bảng — dùng chung cho dán (Ctrl+V) và tải tệp Excel.
+   * Thứ tự cột của mẫu: Ngày · Tiết · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung.
+   * Vẫn nhận mẫu cũ (Ngày · Bắt đầu · Kết thúc · Lớp · …) bằng cách nhận ra ô giờ.
    */
+  const applyRows = useCallback((data) => {
+    const parsed = data.map((raw) => {
+      const oldFormat = looksLikeTime(raw[1]) || looksLikeTime(raw[2]);
+      const c = oldFormat ? [raw[0], raw[3], raw[4], raw[5], raw[6], raw[7]] : raw.slice(1);
+      const teacherText = (c[2] || '').trim();
+      const assistantText = (c[3] || '').trim();
+      return {
+        ...emptyRow(),
+        session_date: parseDate(raw[0]),
+        period: oldFormat ? '' : parsePeriod(raw[1]),
+        class_id: findByName(res.classes, c[1]),
+        teacher_text: teacherText,
+        teacher_id: teacherText ? findByName(res.teachers, teacherText, ['full_name', 'email']) : '',
+        assistant_text: assistantText,
+        assistant_id: assistantText ? findByName(res.assistants, assistantText, ['full_name', 'email']) : '',
+        room_id: findByName(res.rooms, c[4]),
+        subject: (c[5] || '').trim(),
+      };
+    });
+    setRows((rs) => [...rs.filter((r) => r.class_id || r.subject), ...parsed]);
+    const thieu = parsed.filter((r) => !r.session_date || !r.period || !r.class_id).length;
+    return { count: parsed.length, thieu };
+  }, [res]);
+
   const onPaste = useCallback((e) => {
     const text = e.clipboardData?.getData('text/plain');
     if (!text || !text.includes('\t')) return;     // dán 1 ô thì để trình duyệt xử lý
     e.preventDefault();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim()).map((l) => l.split('\t'));
+    const { count, thieu } = applyRows(lines);
+    toast.ok(`Đã dán ${count} dòng.` + (thieu ? ` ${thieu} dòng còn thiếu Ngày / Tiết / Lớp — điền nốt giúp.` : ''));
+  }, [applyRows, toast]);
 
-    const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    const parsed = lines.map((line) => {
-      const c = line.split('\t');
-      return {
-        session_date: parseDate(c[0]),
-        start_time: parseTime(c[1]),
-        end_time: parseTime(c[2]),
-        class_id: findByName(res.classes, c[3]),
-        teacher_id: findByName(res.teachers, c[4]),
-        assistant_id: findByName(res.assistants, c[5]),
-        room_id: findByName(res.rooms, c[6]),
-        subject: (c[7] || '').trim(),
-      };
-    });
-    setRows(parsed);
-    const chuaKhop = parsed.filter((r) => !r.class_id).length;
-    toast.ok(`Đã dán ${parsed.length} dòng.` + (chuaKhop ? ` ${chuaKhop} dòng chưa khớp tên lớp — chọn tay giúp.` : ''));
-  }, [res, toast]);
+  const onImport = useCallback((data) => {
+    const { count, thieu } = applyRows(data);
+    if (thieu) toast.info(`${thieu}/${count} dòng còn thiếu Ngày / Tiết / Lớp — điền nốt trước khi tạo.`, 6000);
+  }, [applyRows, toast]);
 
   const validCount = useMemo(
-    () => rows.filter((r) => r.session_date && r.start_time && r.end_time && r.class_id).length,
+    () => rows.filter((r) => r.session_date && r.period && r.class_id).length,
     [rows]
   );
 
   const submit = async () => {
     if (!schoolId) { toast.err('Chọn trường trước đã.'); return; }
     const payload = rows
-      .filter((r) => r.session_date && r.start_time && r.end_time && r.class_id)
+      .filter((r) => r.session_date && r.period && r.class_id)
       .map((r) => ({
         school_id: schoolId,
         session_date: r.session_date,
-        start_time: r.start_time,
-        end_time: r.end_time,
+        period: Number(r.period),
         class_id: r.class_id,
         teacher_id: r.teacher_id || undefined,
         assistant_id: r.assistant_id || undefined,
+        // Người chưa có tài khoản: gửi tên gõ tay để vẫn ghi được vào buổi dạy.
+        teacher_manual_name: !r.teacher_id && r.teacher_text ? r.teacher_text : undefined,
+        assistant_manual_name: !r.assistant_id && r.assistant_text ? r.assistant_text : undefined,
         room_id: r.room_id || undefined,
         subject: r.subject?.trim() || undefined,
       }));
-    if (!payload.length) { toast.err('Chưa có dòng nào điền đủ Ngày, Giờ và Lớp.'); return; }
+    if (!payload.length) { toast.err('Chưa có dòng nào điền đủ Ngày, Tiết và Lớp.'); return; }
 
     setBusy(true);
     try {
@@ -163,15 +207,26 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
     }
   };
 
+  /** Nhãn tiết kèm giờ của trường: "Tiết 3 · 08:40–09:25". */
+  const periodLabel = (p) => `Tiết ${p.no}${p.start ? ` · ${p.start}–${p.end}` : ''}`;
+  const cell = 'input !py-1.5 !px-2 text-sm';
+
   return (
     <Sheet open={open} onClose={busy ? undefined : onClose} wide title="Nhập lịch dạy dạng bảng">
-      <div className="rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900">
-        💡 Chọn trường một lần, rồi điền từng dòng. Có sẵn lịch trong Excel thì bôi đen vùng ô,
-        copy và bấm <b>Ctrl+V</b> ngay trên bảng — thứ tự cột:
-        <b> Ngày · Bắt đầu · Kết thúc · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung</b>.
+      <div className="flex flex-wrap items-start gap-3 rounded-xl bg-brand-50 border border-brand-100 px-3.5 py-2.5 mb-3 text-sm text-brand-900">
+        <div className="flex-1 min-w-[260px]">
+          💡 Chọn trường một lần, rồi điền từng dòng. Có sẵn lịch trong Excel thì tải tệp mẫu về,
+          điền xong bấm <b>Tải tệp đã điền</b> — hoặc bôi đen vùng ô, copy và bấm <b>Ctrl+V</b> ngay trên bảng.
+          Thứ tự cột: <b>Ngày · Tiết · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung</b>.
+          Giáo viên / trợ giảng chưa có tài khoản thì cứ gõ tên.
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <TemplateButton path="/api/schedules/batch-template" name="mau-nhap-lich-day.xlsx" />
+          <ImportButton kind="schedules" onRows={onImport} disabled={!schoolId} />
+        </div>
       </div>
 
-      <Field label="Trường" required>
+      <Field label="Trường" required hint={!schoolId ? 'Chọn trường trước rồi mới tải tệp lên được.' : undefined}>
         <select className="input" value={schoolId} onChange={(e) => setSchoolId(e.target.value)}>
           <option value="">— Chọn trường —</option>
           {schools.map((s) => (
@@ -184,20 +239,27 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
 
       {schoolId && loadingRes && (
         <div className="flex items-center gap-2 text-sm text-ink-muted py-2">
-          <Spinner className="h-4 w-4" /> Đang tải lớp và nhân sự của trường…
+          <Spinner className="h-4 w-4" /> Đang tải lớp, nhân sự và khung tiết của trường…
         </div>
       )}
 
       {schoolId && !loadingRes && (
         <>
+          {/* Danh sách gợi ý tên người — gõ tay vẫn nhận nếu chưa có tài khoản */}
+          <datalist id="dl-teachers">
+            {res.teachers.map((u) => <option key={u.id} value={u.full_name} />)}
+          </datalist>
+          <datalist id="dl-assistants">
+            {res.assistants.map((u) => <option key={u.id} value={u.full_name} />)}
+          </datalist>
+
           <div className="hidden md:block overflow-x-auto -mx-1 px-1" onPaste={onPaste}>
             <table className="w-full min-w-[900px] border-collapse">
               <thead>
                 <tr>
                   <th className="th !w-8">#</th>
                   <th className="th !w-[130px]">Ngày *</th>
-                  <th className="th !w-[90px]">Bắt đầu *</th>
-                  <th className="th !w-[90px]">Kết thúc *</th>
+                  <th className="th !w-[150px]">Tiết *</th>
                   <th className="th">Lớp *</th>
                   <th className="th">Giáo viên</th>
                   <th className="th">Trợ giảng</th>
@@ -208,24 +270,25 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
               </thead>
               <tbody>
                 {rows.map((r, i) => {
-                  const thieu = !r.session_date || !r.start_time || !r.end_time || !r.class_id;
+                  const thieu = !r.session_date || !r.period || !r.class_id;
                   return (
                     <tr key={i} className={thieu ? 'bg-amber-50/40' : ''}>
                       <td className="td text-center text-ink-muted text-xs">{i + 1}</td>
                       <td className="td !p-1">
-                        <input type="date" className="input !py-1.5 !px-2 text-sm"
+                        <input type="date" className={cell}
                           value={r.session_date} onChange={(e) => setCell(i, 'session_date', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <input type="time" className="input !py-1.5 !px-2 text-sm"
-                          value={r.start_time} onChange={(e) => setCell(i, 'start_time', e.target.value)} />
+                        <select className={cell} value={r.period}
+                          onChange={(e) => setCell(i, 'period', e.target.value)}>
+                          <option value="">— Chọn tiết —</option>
+                          {periods.map((p) => (
+                            <option key={p.no} value={p.no}>{periodLabel(p)}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="td !p-1">
-                        <input type="time" className="input !py-1.5 !px-2 text-sm"
-                          value={r.end_time} onChange={(e) => setCell(i, 'end_time', e.target.value)} />
-                      </td>
-                      <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-sm"
+                        <select className={cell}
                           value={r.class_id} onChange={(e) => setCell(i, 'class_id', e.target.value)}>
                           <option value="">—</option>
                           {res.classes.map((c) => (
@@ -236,34 +299,30 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-sm"
-                          value={r.teacher_id} onChange={(e) => setCell(i, 'teacher_id', e.target.value)}>
-                          <option value="">—</option>
-                          {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                        </select>
+                        <input className={`${cell} ${r.teacher_text && !r.teacher_id ? '!border-amber-400 bg-amber-50/60' : ''}`}
+                          list="dl-teachers" placeholder="Chọn hoặc gõ tên"
+                          value={r.teacher_text} onChange={(e) => setPerson(i, 'teacher', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-sm"
-                          value={r.assistant_id} onChange={(e) => setCell(i, 'assistant_id', e.target.value)}>
-                          <option value="">—</option>
-                          {res.assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                        </select>
+                        <input className={`${cell} ${r.assistant_text && !r.assistant_id ? '!border-amber-400 bg-amber-50/60' : ''}`}
+                          list="dl-assistants" placeholder="Chọn hoặc gõ tên"
+                          value={r.assistant_text} onChange={(e) => setPerson(i, 'assistant', e.target.value)} />
                       </td>
                       <td className="td !p-1">
-                        <select className="input !py-1.5 !px-2 text-sm"
+                        <select className={cell}
                           value={r.room_id} onChange={(e) => setCell(i, 'room_id', e.target.value)}>
                           <option value="">—</option>
                           {res.rooms.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                         </select>
                       </td>
                       <td className="td !p-1">
-                        <input className="input !py-1.5 !px-2 text-sm" placeholder="Robotics — Bài 5"
+                        <input className={cell} placeholder="Robotics — Bài 5"
                           value={r.subject} onChange={(e) => setCell(i, 'subject', e.target.value)} />
                       </td>
                       <td className="td !p-1 whitespace-nowrap text-center">
-                        <button type="button" title="Nhân đôi dòng"
+                        <button type="button" title="Nhân đôi dòng" aria-label="Nhân đôi dòng"
                           className="px-1.5 text-brand-600 hover:text-brand-900" onClick={() => dupRow(i)}>⧉</button>
-                        <button type="button" title="Xoá dòng"
+                        <button type="button" title="Xoá dòng" aria-label="Xoá dòng"
                           className="px-1.5 text-rose-500 hover:text-rose-700" onClick={() => delRow(i)}>✕</button>
                       </td>
                     </tr>
@@ -276,7 +335,7 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
           {/* Điện thoại: mỗi dòng một thẻ, các ô xếp dọc — cùng state với bảng ở trên. */}
           <div className="md:hidden grid gap-3">
             {rows.map((r, i) => {
-              const thieu = !r.session_date || !r.start_time || !r.end_time || !r.class_id;
+              const thieu = !r.session_date || !r.period || !r.class_id;
               return (
                 <div key={i} className={`card p-3.5 ${thieu ? '!border-amber-300 bg-amber-50/40' : ''}`}>
                   <div className="flex items-center justify-between mb-2">
@@ -291,18 +350,16 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
                     </span>
                   </div>
 
-                  <Field label="Ngày" required>
-                    <input type="date" className="input" value={r.session_date}
-                      onChange={(e) => setCell(i, 'session_date', e.target.value)} />
-                  </Field>
                   <div className="grid grid-cols-2 gap-2">
-                    <Field label="Bắt đầu" required>
-                      <input type="time" className="input" value={r.start_time}
-                        onChange={(e) => setCell(i, 'start_time', e.target.value)} />
+                    <Field label="Ngày" required>
+                      <input type="date" className="input" value={r.session_date}
+                        onChange={(e) => setCell(i, 'session_date', e.target.value)} />
                     </Field>
-                    <Field label="Kết thúc" required>
-                      <input type="time" className="input" value={r.end_time}
-                        onChange={(e) => setCell(i, 'end_time', e.target.value)} />
+                    <Field label="Tiết" required>
+                      <select className="input" value={r.period} onChange={(e) => setCell(i, 'period', e.target.value)}>
+                        <option value="">— Chọn —</option>
+                        {periods.map((p) => <option key={p.no} value={p.no}>{periodLabel(p)}</option>)}
+                      </select>
                     </Field>
                   </div>
                   <Field label="Lớp" required>
@@ -310,25 +367,17 @@ export default function BatchEntry({ open, onClose, schools, onDone }) {
                       onChange={(e) => setCell(i, 'class_id', e.target.value)}>
                       <option value="">— Chọn lớp —</option>
                       {res.classes.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}{c.grade ? ` (K${c.grade})` : ''}
-                        </option>
+                        <option key={c.id} value={c.id}>{c.name}{c.grade ? ` (K${c.grade})` : ''}</option>
                       ))}
                     </select>
                   </Field>
-                  <Field label="Giáo viên">
-                    <select className="input" value={r.teacher_id}
-                      onChange={(e) => setCell(i, 'teacher_id', e.target.value)}>
-                      <option value="">— Chưa chọn —</option>
-                      {res.teachers.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                    </select>
+                  <Field label="Giáo viên" hint="Chưa có tài khoản thì cứ gõ tên.">
+                    <input className="input" list="dl-teachers" placeholder="Chọn hoặc gõ tên"
+                      value={r.teacher_text} onChange={(e) => setPerson(i, 'teacher', e.target.value)} />
                   </Field>
-                  <Field label="Trợ giảng">
-                    <select className="input" value={r.assistant_id}
-                      onChange={(e) => setCell(i, 'assistant_id', e.target.value)}>
-                      <option value="">— Chưa chọn —</option>
-                      {res.assistants.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}
-                    </select>
+                  <Field label="Trợ giảng" hint="Chưa có tài khoản thì cứ gõ tên.">
+                    <input className="input" list="dl-assistants" placeholder="Chọn hoặc gõ tên"
+                      value={r.assistant_text} onChange={(e) => setPerson(i, 'assistant', e.target.value)} />
                   </Field>
                   <Field label="Phòng">
                     <select className="input" value={r.room_id}

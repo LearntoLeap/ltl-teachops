@@ -128,7 +128,10 @@ export default async function routes(app) {
 
     await assertSchoolAccess(req.user, schoolId); // ngoài phạm vi ⇒ 404
 
-    const dup = await one('select id from classes where school_id = $1 and name = $2', [schoolId, name]);
+    // Lớp đã ngừng sử dụng không giữ tên nữa — nhập lại đúng tên cũ là được.
+    const dup = await one(
+      'select id from classes where school_id = $1 and name = $2 and is_active', [schoolId, name]
+    );
     if (dup) throw conflict(`Lớp "${name}" đã tồn tại trong trường này.`);
 
     const cls = await one(
@@ -271,7 +274,7 @@ export default async function routes(app) {
       const name = str(b.name, 'name', { required: true, max: 100 });
       if (name !== before.name) {
         const dup = await one(
-          'select id from classes where school_id = $1 and name = $2 and id <> $3',
+          'select id from classes where school_id = $1 and name = $2 and id <> $3 and is_active',
           [before.school_id, name, id]
         );
         if (dup) throw conflict(`Lớp "${name}" đã tồn tại trong trường này.`);

@@ -13,6 +13,7 @@ import {
   findByName, firstInt, isTablePaste, levelOfGrade, norm, parseLevel, parseTsv,
 } from '../../lib/tablePaste.js';
 import { Field, Sheet, Spinner } from '../../components/ui.jsx';
+import { ImportButton } from '../../components/TableIO.jsx';
 import { useToast } from '../../components/Toast.jsx';
 
 const listOf = (r) => (Array.isArray(r) ? r : r?.items || []);
@@ -99,21 +100,30 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
 
   const setCell = (k, f, v) => setRows((rs) => rs.map((r) => (r.key === k ? { ...r, [f]: v, error: '' } : r)));
 
-  /** Dán theo mẫu: Mã · Tên · Địa chỉ · Tỉnh · Toạ độ · Bán kính · Ân hạn · Người liên hệ · SĐT. */
+  /**
+   * Đổ các dòng chữ vào bảng theo đúng thứ tự cột của mẫu:
+   * Mã · Tên · Địa chỉ · Tỉnh · Toạ độ · Bán kính · Ân hạn · Người liên hệ · SĐT.
+   * Dùng chung cho cả dán (Ctrl+V) lẫn tải tệp Excel lên.
+   */
+  const applyRows = useCallback((data) => {
+    const parsed = data
+      .filter((c) => !norm(c[0]).startsWith('ma truong'))
+      .map((c) => ({
+        ...emptySchool(),
+        code: c[0] || '', name: c[1] || '', address: c[2] || '', province: c[3] || '', gps: c[4] || '',
+        gps_radius_m: c[5] ? String(firstInt(c[5])) : '', grace_minutes: c[6] ? String(firstInt(c[6])) : '',
+        contact_name: c[7] || '', contact_phone: c[8] || '',
+      }));
+    setRows((rs) => [...rs.filter((r) => r.code || r.name), ...parsed]);
+    return parsed.length;
+  }, []);
+
   const onPaste = useCallback((e) => {
     const text = e.clipboardData?.getData('text/plain');
     if (!isTablePaste(text)) return;
     e.preventDefault();
-    const data = parseTsv(text).filter((c) => !norm(c[0]).startsWith('ma truong'));
-    const parsed = data.map((c) => ({
-      ...emptySchool(),
-      code: c[0] || '', name: c[1] || '', address: c[2] || '', province: c[3] || '', gps: c[4] || '',
-      gps_radius_m: c[5] ? String(firstInt(c[5])) : '', grace_minutes: c[6] ? String(firstInt(c[6])) : '',
-      contact_name: c[7] || '', contact_phone: c[8] || '',
-    }));
-    setRows((rs) => [...rs.filter((r) => r.code || r.name), ...parsed]);
-    toast.ok(`Đã dán ${parsed.length} trường.`);
-  }, [toast]);
+    toast.ok(`Đã dán ${applyRows(parseTsv(text))} trường.`);
+  }, [applyRows, toast]);
 
   const filled = rows.filter((r) => r.code.trim() || r.name.trim());
   const ready = filled.filter((r) => r.code.trim() && r.name.trim());
@@ -162,6 +172,7 @@ export function SchoolBatchSheet({ open, onClose, onDone }) {
             Toạ độ dán nguyên dạng Google Maps <i>21.1861, 106.0763</i>. Bỏ trống bán kính / ân hạn = mặc định 1.000 m / 10 phút.
           </div>
           <TemplateButton path="/api/schools/batch-template" name="mau-nhap-truong.xlsx" />
+          <ImportButton kind="schools" onRows={applyRows} />
         </div>
           <div className="hidden md:block overflow-x-auto -mx-1 px-1">
           <table className="w-full min-w-[1360px] border-collapse">
@@ -333,11 +344,9 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
    * Dán theo mẫu 8 cột: Trường · Tên lớp · Khối · Cấp học · Sĩ số · Giáo viên · Trợ giảng · Ghi chú.
    * Chỉ 7 cột ⇒ hiểu là bỏ cột Trường, dùng trường đang chọn.
    */
-  const onPaste = useCallback((e) => {
-    const text = e.clipboardData?.getData('text/plain');
-    if (!isTablePaste(text)) return;
-    e.preventDefault();
-    const data = parseTsv(text).filter((c) => !c.some((x) => norm(x) === 'ten lop' || norm(x) === 'ten lop *'));
+  /** Đổ dòng chữ vào bảng lớp — dùng chung cho dán và tải tệp Excel. */
+  const applyRows = useCallback((raw) => {
+    const data = raw.filter((c) => !c.some((x) => norm(x) === 'ten lop' || norm(x) === 'ten lop *'));
     const withSchool = Math.max(...data.map((c) => c.length)) >= 8;
     const parsed = data.map((raw) => {
       const c = withSchool ? raw : ['', ...raw];
@@ -363,8 +372,16 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
     const miss = parsed.filter((r) => !r.school_id).length
       + parsed.filter((r) => r.teacher_text && !r.teacher_id).length
       + parsed.filter((r) => r.assistant_text && !r.assistant_id).length;
-    toast.ok(`Đã dán ${parsed.length} lớp.` + (miss ? ` ${miss} ô chưa khớp tên (tô vàng) — chọn tay giúp.` : ''));
-  }, [schools, teachers, assistants, fixedSchool, defaultSchool, toast]);
+    return { count: parsed.length, miss };
+  }, [schools, teachers, assistants, fixedSchool, defaultSchool]);
+
+  const onPaste = useCallback((e) => {
+    const text = e.clipboardData?.getData('text/plain');
+    if (!isTablePaste(text)) return;
+    e.preventDefault();
+    const { count, miss } = applyRows(parseTsv(text));
+    toast.ok(`Đã dán ${count} lớp.` + (miss ? ` ${miss} ô chưa khớp tên (tô vàng) — chọn tay giúp.` : ''));
+  }, [applyRows, toast]);
 
   const filled = rows.filter((r) => r.name.trim());
   const problem = (r) => {
@@ -418,6 +435,7 @@ export function ClassBatchSheet({ open, onClose, fixedSchool = null, onDone }) {
             Cấp học để trống sẽ tự suy từ Khối. Tên GV/TG được dò gần đúng theo họ tên hoặc email.
           </div>
           <TemplateButton path="/api/classes/batch-template" name="mau-nhap-lop.xlsx" />
+          <ImportButton kind="classes" onRows={applyRows} />
         </div>
 
         {!fixedSchool && (

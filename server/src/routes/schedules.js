@@ -20,6 +20,7 @@ import { audit } from '../lib/audit.js';
 import { notify, notifySchoolManagers } from '../lib/notify.js';
 import { str, uuid, int, enumOf, dateStr, timeStr, paging, dateRange } from '../lib/validate.js';
 import { periodTimes, MIN_PERIOD, MAX_PERIOD } from '../lib/periods.js';
+import { sendXlsx } from '../lib/xlsx.js';
 
 const SCHEDULE_STATUSES = ['scheduled', 'done', 'cancelled', 'skipped'];
 const MAX_BULK_SESSIONS = 120;
@@ -370,6 +371,31 @@ export default async function routes(app) {
    * Dòng lỗi KHÔNG làm hỏng cả lượt: bỏ qua và trả về trong `skipped` kèm số
    * dòng + lý do, để người nhập biết sửa đúng chỗ nào.
    * ---------------------------------------------------------------------- */
+  /* GET /api/schedules/batch-template — tệp Excel mẫu, đúng thứ tự cột của bảng
+   * nhập lịch. Xếp theo TIẾT: giờ vào/ra lấy từ khung tiết của trường. */
+  app.get('/api/schedules/batch-template', { preHandler: requirePerm('schedule.manage') }, async (req, reply) =>
+    sendXlsx(reply, {
+      fileName: 'mau-nhap-lich-day',
+      sheetName: 'Nhập lịch dạy',
+      title: 'MẪU NHẬP LỊCH DẠY — LtL TeachOps',
+      subtitle: 'Chọn trường ở màn nhập bảng, rồi điền từ dòng 5 (xoá 2 dòng ví dụ). '
+        + 'Giờ vào/ra tự suy từ TIẾT theo khung giờ của trường. '
+        + 'Giáo viên / trợ giảng chưa có tài khoản thì cứ gõ tên, hệ thống vẫn nhận.',
+      columns: [
+        { header: 'Ngày (YYYY-MM-DD)', key: 'date', width: 18 },
+        { header: 'Tiết', key: 'period', width: 8, align: 'center' },
+        { header: 'Lớp *', key: 'cls', width: 14 },
+        { header: 'Giáo viên', key: 'teacher', width: 22 },
+        { header: 'Trợ giảng', key: 'assistant', width: 22 },
+        { header: 'Phòng', key: 'room', width: 18 },
+        { header: 'Nội dung', key: 'subject', width: 28 },
+      ],
+      rows: [
+        { date: '2026-09-28', period: 1, cls: '6A1', teacher: 'Nguyễn Văn An', assistant: 'Lê Minh Châu', room: 'Phòng STEM 1', subject: 'Robotics — Bài 5 (ví dụ)' },
+        { date: '2026-09-28', period: 2, cls: '6A2', teacher: '', assistant: '', room: '', subject: '(ví dụ) để trống cũng được' },
+      ],
+    }));
+
   app.post('/api/schedules/batch', { preHandler: requirePerm('schedule.manage') }, async (req) => {
     const rowsIn = req.body?.rows;
     if (!Array.isArray(rowsIn) || !rowsIn.length) throw badRequest('Chưa có dòng nào để tạo.');

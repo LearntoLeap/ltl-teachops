@@ -201,6 +201,7 @@ export async function buildApp() {
     import('./routes/files.js'),
     import('./routes/audit.js'),
     import('./routes/search.js'),
+    import('./routes/imports.js'),
     import('./routes/drive.js'),
   ]);
   for (const m of modules) {

@@ -71,14 +71,18 @@ Mọi endpoint danh sách đều tự lọc theo phạm vi vai trò (xem `ARCHIT
 | GET/PATCH/DELETE | `/api/rooms/:id` | | |
 | POST | `/api/schools/batch` | admin, manager | Nhập bảng: `{rows:[{code, name, address?, province?, lat?, lng?, gps_radius_m?, grace_minutes?, contact_name?, contact_phone?}]}` (≤300 dòng) |
 | GET | `/api/schools/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
+| POST | `/api/import/table?kind=schools` | admin, manager | `multipart`: `file` (.xlsx) → `{rows: [[ô…]], headers, warnings}`. CHỈ đọc, không tạo dữ liệu — màn nhập bảng đổ vào bảng để soát. Tệp thiếu/rỗng vẫn nhận, chỉ cảnh báo |
 | POST | `/api/classes/batch` | admin, manager | Nhập bảng: `{rows:[{school_id, name, grade?, level?, roster_size?, note?, teacher_id?, assistant_id?}]}` (≤300 dòng) |
 | GET | `/api/classes/batch-template` | admin, manager | Tệp Excel mẫu đúng thứ tự cột |
+| POST | `/api/import/table?kind=classes` | admin, manager | Như trên, cho bảng lớp |
 
 **Mục đã NGỪNG SỬ DỤNG không lọt vào ô chọn.** `GET /api/schools`, `/api/classes`,
 `/api/rooms` mặc định chỉ trả mục `is_active = true`. Màn hình quản trị muốn xem lại để khôi
 phục thì gửi `?include_inactive=1`. Xếp buổi vào trường/lớp/phòng đã ngừng bị chặn (422).
-Mã trường của một trường đã ngừng vẫn chiếm chỗ — `POST /api/schools` trả 409 kèm câu nói rõ
-là trường đó đang ngừng, gợi ý khôi phục / xoá hẳn / đổi mã.
+**Mã trường / tên lớp chỉ duy nhất trong phần ĐANG DÙNG** (chỉ mục một phần `where is_active`,
+migration 015). Trường/lớp đã ngừng không giữ mã nữa, nên nhập lại đúng mã cũ là được — không
+phải bịa thêm ký tự. Đổi lại: khôi phục một bản ghi đã ngừng sẽ bị **409** nếu trong lúc đó mã
+đã có người dùng, kèm tên bản ghi đang giữ mã.
 
 Các endpoint nhập bảng trả `{created, items[], skipped:[{row, reason}]}` — dòng lỗi (trùng mã/tên,
 thiếu thông tin, ngoài phạm vi…) bị bỏ qua kèm lý do, các dòng khác vẫn được tạo.
@@ -100,7 +104,9 @@ Danh sách lọc bằng `?is_active=true` để ẩn phần đã ngừng.
 | POST | `/` | admin, manager · GV/TG (`schedule.selfCreate`) | Tạo một tiết. GV/TG tự thêm tiết BỊ THIẾU thì **bắt buộc** `reason` (≥10 ký tự) — lưu `self_added_reason`, đánh dấu `self_added`, ghi `self_added_at`, và báo ngay cho Phòng chuyên môn của trường |
 | | | | Buổi dạy nhận `period` (tiết 1–10) thay cho `start_time`/`end_time`; và `teacher_manual_name`/`assistant_manual_name` cho người chưa có tài khoản |
 | POST | `/bulk` | admin, manager | `{template, weekdays:[], from, to}` — sinh lịch lặp theo tuần |
-| POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}` |
+| POST | `/batch` | admin, manager | Nhập bảng nhiều buổi khác nhau `{rows:[…]}` → `{created, skipped[]}`. Mỗi dòng dùng `period` (giờ suy từ khung tiết); `teacher_manual_name` / `assistant_manual_name` cho người chưa có tài khoản |
+| GET | `/batch-template` | admin, manager | Tệp Excel mẫu: Ngày · Tiết · Lớp · Giáo viên · Trợ giảng · Phòng · Nội dung |
+| POST | `/api/import/table?kind=schedules` | admin, manager | Tải tệp Excel đã điền → trả các dòng chữ để màn nhập bảng soát lại |
 | GET/PATCH/DELETE | `/:id` | PATCH/DELETE: admin, manager | |
 
 **Khung tiết — `GET /api/periods` (mọi vai trò) · `PUT /api/periods` (admin).**

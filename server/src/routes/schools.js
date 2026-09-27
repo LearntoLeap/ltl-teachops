@@ -54,14 +54,9 @@ function schoolFields(b) {
  * Các giá trị coalesce khớp default schema (1000m / 10 phút / đủ 4 mốc).
  */
 async function insertSchool(user, f) {
-  const dup = await one('select id, name, is_active from schools where code = $1', [f.code]);
-  if (dup) {
-    throw conflict(dup.is_active
-      ? `Mã trường "${f.code}" đã được sử dụng cho "${dup.name}".`
-      : `Mã trường "${f.code}" đang thuộc trường "${dup.name}" đã ngừng sử dụng. `
-        + 'Hãy khôi phục trường đó (bật "Hiện cả trường đã ngừng sử dụng" ở màn Trường & Lớp), '
-        + 'xoá hẳn nó, hoặc dùng mã khác.');
-  }
+  // Chỉ trường ĐANG DÙNG mới giữ mã. Trường đã ngừng sử dụng không chặn mã nữa.
+  const dup = await one('select id, name from schools where code = $1 and is_active', [f.code]);
+  if (dup) throw conflict(`Mã trường "${f.code}" đang được dùng cho "${dup.name}".`);
 
   return tx(async (c) => {
     const r = await c.query(
@@ -235,8 +230,10 @@ export default async function routes(app) {
     if ('code' in b) {
       const code = str(b.code, 'code', { required: true, max: 30 });
       if (code !== before.code) {
-        const dup = await one('select id from schools where code = $1 and id <> $2', [code, id]);
-        if (dup) throw conflict(`Mã trường "${code}" đã được sử dụng.`);
+        const dup = await one(
+          'select name from schools where code = $1 and id <> $2 and is_active', [code, id]
+        );
+        if (dup) throw conflict(`Mã trường "${code}" đang được dùng cho "${dup.name}".`);
       }
       set('code', code);
     }
@@ -260,7 +257,21 @@ export default async function routes(app) {
     if ('is_active' in b) {
       // Ngừng/khôi phục hoạt động là quyết định vận hành ⇒ chỉ Quản trị viên.
       if (req.user.role !== 'admin') throw forbidden('Chỉ Quản trị viên được ngừng hoặc khôi phục trường.');
-      set('is_active', bool(b.is_active, 'is_active', { required: true }));
+      const active = bool(b.is_active, 'is_active', { required: true });
+      // Khôi phục: mã cũ có thể đã được trường khác dùng trong lúc ngừng.
+      if (active && !before.is_active) {
+        const taken = await one(
+          'select name from schools where code = $1 and id <> $2 and is_active',
+          [('code' in b ? str(b.code, 'code', { max: 30 }) : before.code), id]
+        );
+        if (taken) {
+          throw conflict(
+            `Không khôi phục được: mã "${before.code}" hiện đang dùng cho "${taken.name}". `
+            + 'Hãy đổi mã cho một trong hai trường rồi khôi phục lại.'
+          );
+        }
+      }
+      set('is_active', active);
     }
     if ('contact_name' in b) set('contact_name', str(b.contact_name, 'contact_name', { max: 200 }));
     if ('contact_phone' in b) set('contact_phone', str(b.contact_phone, 'contact_phone', { max: 30 }));

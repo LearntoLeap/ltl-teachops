@@ -735,7 +735,7 @@ function IssueStatusSheet({ issue, onClose, onDone }) {
 
 /* ================================ TAB DANH MỤC ============================== */
 
-function CatalogTab({ roomId, roomsLoading, hasRooms }) {
+function CatalogTab({ schoolId, roomId, roomsLoading, hasRooms }) {
   const toast = useToast();
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
@@ -848,6 +848,7 @@ function CatalogTab({ roomId, roomsLoading, hasRooms }) {
 
       <SuggestionSheet
         open={suggestOpen}
+        schoolId={schoolId}
         roomId={roomId}
         existing={items || []}
         onClose={() => setSuggestOpen(false)}
@@ -872,7 +873,7 @@ const CAT_LABEL = {
   other: '📦 Khác',
 };
 
-function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
+function SuggestionSheet({ open, schoolId, roomId, existing, onClose, onDone }) {
   const auth = useAuth();
   const toast = useToast();
   const [list, setList] = useState(null);
@@ -932,7 +933,8 @@ function SuggestionSheet({ open, roomId, existing, onClose, onDone }) {
     setBusy(true);
     try {
       const res = await api.post('/api/devices/catalog/bulk', {
-        school_id: (existing[0] || {}).school_id || undefined,
+        // Trường đang chọn ở đầu màn; danh mục rỗng thì existing không có gì để suy ra.
+        school_id: schoolId || (existing[0] || {}).school_id || undefined,
         room_id: roomId,
         items: chosen.map((sg, i) => ({
           name: sg.name,
@@ -1215,7 +1217,7 @@ export default function DevicesHome() {
           )}
 
           {tab === 'catalog' && auth.can('device.catalog') && schools.length > 0 && (
-            <CatalogTab roomId={roomId} roomsLoading={roomsLoading} hasRooms={rooms.length > 0} />
+            <CatalogTab schoolId={schoolId} roomId={roomId} roomsLoading={roomsLoading} hasRooms={rooms.length > 0} />
           )}
         </>
       )}
